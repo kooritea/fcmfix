@@ -1,5 +1,6 @@
 package com.kooritea.fcmfix.xposed;
 
+import android.content.ContextWrapper;
 import android.content.Intent;
 
 import java.lang.reflect.Method;
@@ -12,9 +13,13 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
-public class BroadcastFix extends XposeModule {
+public class BroadcastFix extends XposedModule {
 
-    public BroadcastFix(final XC_LoadPackage.LoadPackageParam loadPackageParam){
+    public BroadcastFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
+        super(loadPackageParam);
+    }
+
+    protected void startHook(){
         Class<?> clazz = XposedHelpers.findClass("com.android.server.am.ActivityManagerService",loadPackageParam.classLoader);
         final Method[] declareMethods = clazz.getDeclaredMethods();
         Method targetMethod = null;
@@ -26,7 +31,6 @@ public class BroadcastFix extends XposeModule {
             }
         }
         if(targetMethod != null){
-            XposedBridge.log("[fcmfix] BroadcastFix start hook");
             XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) throws Throwable {
@@ -44,14 +48,11 @@ public class BroadcastFix extends XposeModule {
                                 methodHookParam.args[9] = Integer.valueOf(11);
                             }
                             intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                        }else{
-                            XposedBridge.log("UnAllow Broadcast Stopped APP: " + target);
+                            printLog("Send Forced Start Broadcast: " + target);
                         }
                     }
                 }
             });
-        }else{
-            XposedBridge.log("Can not find TargetMethod: com.android.server.am.ActivityManagerService.broadcastIntentLocked");
         }
     }
 
