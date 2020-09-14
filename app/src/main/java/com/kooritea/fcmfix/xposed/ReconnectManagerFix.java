@@ -26,17 +26,29 @@ public class ReconnectManagerFix extends XposedModule{
         this.GcmChimeraService = XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService",loadPackageParam.classLoader);
         XposedHelpers.findAndHookMethod(XposedHelpers.findClass("abbo",loadPackageParam.classLoader),"a", long.class, new XC_MethodHook() {
             @Override
+            protected void beforeHookedMethod(final MethodHookParam param) throws Throwable {
+                // 修改心跳间隔
+                Intent intent = (Intent) XposedHelpers.getObjectField(param.thisObject,"e");
+                if("com.google.android.gms.gcm.HEARTBEAT_ALARM".equals(intent.getAction())){
+                    param.args[0] = 117000L;
+                }
+            }
+            @Override
             protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
-                new Timer("ReconnectManagerFix").schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        long nextConnectionTime = XposedHelpers.getLongField(param.thisObject,"g");
-                        if(nextConnectionTime !=0 && nextConnectionTime - SystemClock.elapsedRealtime() < 0){
-                            AndroidAppHelper.currentApplication().getApplicationContext().sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
-                            printLog("Send broadcast GCM_RECONNECT");
+                // 防止计时器出现负数计时,分别是心跳计时和重连计时
+                Intent intent = (Intent) XposedHelpers.getObjectField(param.thisObject,"e");
+                if("com.google.android.intent.action.GCM_RECONNECT".equals(intent.getAction()) || "com.google.android.gms.gcm.HEARTBEAT_ALARM".equals(intent.getAction())){
+                    new Timer("ReconnectManagerFix").schedule(new TimerTask() {
+                        @Override
+                        public void run() {
+                            long nextConnectionTime = XposedHelpers.getLongField(param.thisObject,"g");
+                            if(nextConnectionTime !=0 && nextConnectionTime - SystemClock.elapsedRealtime() < 0){
+                                AndroidAppHelper.currentApplication().getApplicationContext().sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
+                                printLog("Send broadcast GCM_RECONNECT");
+                            }
                         }
-                    }
-                }, (long)param.args[0]+5000);
+                    }, (long)param.args[0]+5000);
+                }
             }
         });
         XposedHelpers.findAndHookMethod(XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService",loadPackageParam.classLoader),"onCreate", new XC_MethodHook() {

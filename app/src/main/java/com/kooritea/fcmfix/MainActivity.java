@@ -51,7 +51,6 @@ public class MainActivity extends AppCompatActivity {
             this.name = packageInfo.applicationInfo.loadLabel(getPackageManager()).toString();
             this.packageName = packageInfo.packageName;
             this.icon = packageInfo.applicationInfo.loadIcon(getPackageManager());
-
         }
     }
 
