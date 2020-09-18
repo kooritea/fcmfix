@@ -11,7 +11,7 @@ public class XposedMain implements IXposedHookLoadPackage {
 
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam loadPackageParam) throws Throwable {
         if(loadPackageParam.packageName.equals("android")){
-            XposedBridge.log("[fcmfix] com.android.server.am.ActivityManagerService");
+            XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
             new BroadcastFix(loadPackageParam);
         }
         if(loadPackageParam.packageName.equals("com.google.android.gms")){

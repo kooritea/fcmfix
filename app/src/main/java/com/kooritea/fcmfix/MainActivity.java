@@ -161,7 +161,15 @@ public class MainActivity extends AppCompatActivity {
                 appListAdapter.notifyDataSetChanged();
             }
         });
+        this.initHeartbeatInterval();
+    }
 
+    private void initHeartbeatInterval(){
+        if(this.sharedPreferences.getString("heartbeatInterval","").equals("")){
+            this.sharedPreferencesEditor.putString("heartbeatInterval","117000");
+            this.sharedPreferencesEditor.commit();
+            this.setWorldReadable();
+        }
     }
 
     private void addAppInAllowList(String packageName){

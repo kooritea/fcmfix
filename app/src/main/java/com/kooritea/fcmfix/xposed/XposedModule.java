@@ -29,6 +29,11 @@ public class XposedModule {
     protected void printLog(String text){
         Intent log = new Intent("com.kooritea.fcmfix.log");
         log.putExtra("text",text);
-        AndroidAppHelper.currentApplication().getApplicationContext().sendBroadcast(log);
+        try{
+            AndroidAppHelper.currentApplication().getApplicationContext().sendBroadcast(log);
+        }catch (Exception e){
+            e.printStackTrace();;
+        }
+
     }
 }

@@ -60,6 +60,8 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:focusable="false"
+        android:clickable="false"
+        android:focusableInTouchMode="false"
         android:layoutDirection="rtl" />
 
 </LinearLayout>
