@@ -31,14 +31,7 @@ public class ReconnectManagerFix extends XposedModule{
                 // 修改心跳间隔
                 Intent intent = (Intent) XposedHelpers.getObjectField(param.thisObject,"e");
                 if("com.google.android.gms.gcm.HEARTBEAT_ALARM".equals(intent.getAction())){
-                    String heartbeatIntervalString = getXSharedPreferences().getString("heartbeatInterval","");
-                    if(heartbeatIntervalString.equals("")){
-                        heartbeatIntervalString = "117000";
-                    }
-                    long heartbeatInterval = new Long(heartbeatIntervalString).longValue();
-                    if(heartbeatInterval>5000L){
-                        param.args[0] = heartbeatInterval;
-                    }
+                    param.args[0] = 117000L;
                 }
             }
             @Override
