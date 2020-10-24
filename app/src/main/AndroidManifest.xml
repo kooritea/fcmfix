@@ -25,6 +25,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <provider
+            android:name=".XposedProvider"
+            android:authorities="com.kooritea.fcmfix.provider"
+            android:enabled="true"
+            android:exported="true"
+            >
+        </provider>
     </application>
 
 </manifest>

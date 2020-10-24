@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -11,10 +12,12 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.database.ContentObserver;
 import android.database.Cursor;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -26,14 +29,18 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import com.kooritea.fcmfix.util.ContentProviderHelper;
+
 import java.io.File;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Observer;
 import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
@@ -161,39 +168,16 @@ public class MainActivity extends AppCompatActivity {
                 appListAdapter.notifyDataSetChanged();
             }
         });
-        this.initHeartbeatInterval();
-    }
-
-    private void initHeartbeatInterval(){
-        if(this.sharedPreferences.getString("heartbeatInterval","").equals("")){
-            this.sharedPreferencesEditor.putString("heartbeatInterval","117000");
-            this.sharedPreferencesEditor.commit();
-            this.setWorldReadable();
-        }
     }
 
     private void addAppInAllowList(String packageName){
         this.allowList.add(packageName);
         this.sharedPreferencesEditor.putStringSet("allowList",this.allowList);
         this.sharedPreferencesEditor.commit();
-        this.setWorldReadable();
     }
     private void deleteAppInAllowList(String packageName){
         this.allowList.remove(packageName);
         this.sharedPreferencesEditor.putStringSet("allowList",this.allowList);
         this.sharedPreferencesEditor.commit();
-        this.setWorldReadable();
-    }
-
-    private void setWorldReadable() {
-        File dataDir = new File(getApplicationInfo().dataDir);
-        File prefsDir = new File(dataDir, "shared_prefs");
-        File prefsFile = new File(prefsDir, "config.xml");
-        if (prefsFile.exists()) {
-            for (File file : new File[]{dataDir, prefsDir, prefsFile}) {
-                file.setReadable(true, false);
-                file.setExecutable(true, false);
-            }
-        }
     }
 }

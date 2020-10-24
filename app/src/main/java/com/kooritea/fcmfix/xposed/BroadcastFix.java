@@ -1,7 +1,10 @@
 package com.kooritea.fcmfix.xposed;
 
+import android.app.AndroidAppHelper;
 import android.content.ContextWrapper;
 import android.content.Intent;
+
+import com.kooritea.fcmfix.util.ContentProviderHelper;
 
 import java.lang.reflect.Method;
 import java.util.HashSet;
@@ -15,8 +18,12 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class BroadcastFix extends XposedModule {
 
+    protected ContentProviderHelper contentProviderHelper;
+
     public BroadcastFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
+        contentProviderHelper = new ContentProviderHelper(AndroidAppHelper.currentApplication().getApplicationContext(),"content://com.kooritea.fcmfix.provider/config");
+        this.startHook();
     }
 
     protected void startHook(){
@@ -58,7 +65,7 @@ public class BroadcastFix extends XposedModule {
 
     private boolean targetIsAllow(String packageName){
         if (!packageName.equals("com.tencent.mm")) {
-            Set<String> allowList = this.getXSharedPreferences().getStringSet("allowList", new HashSet<String>());
+            Set<String> allowList = this.contentProviderHelper.getStringSet("allowList");
             for (String item : allowList) {
                 if (item.equals(packageName)) {
                     return true;

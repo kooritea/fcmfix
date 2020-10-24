@@ -1,7 +1,16 @@
 package com.kooritea.fcmfix;
 
+import android.app.AndroidAppHelper;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+
 import com.kooritea.fcmfix.xposed.BroadcastFix;
 import com.kooritea.fcmfix.xposed.ReconnectManagerFix;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XposedBridge;
@@ -17,6 +26,8 @@ public class XposedMain implements IXposedHookLoadPackage {
         if(loadPackageParam.packageName.equals("com.google.android.gms")){
             XposedBridge.log("[fcmfix] start hook com.google.android.gms");
             new ReconnectManagerFix(loadPackageParam);
+
         }
+
     }
 }

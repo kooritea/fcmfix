@@ -2,11 +2,10 @@ package com.kooritea.fcmfix.xposed;
 
 import android.app.AndroidAppHelper;
 import android.content.Intent;
+import android.util.Log;
 
-import java.lang.reflect.Method;
+import com.kooritea.fcmfix.util.ContentProviderHelper;
 
-import de.robv.android.xposed.XSharedPreferences;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class XposedModule {
@@ -15,15 +14,6 @@ public class XposedModule {
 
     protected XposedModule(final XC_LoadPackage.LoadPackageParam loadPackageParam){
         this.loadPackageParam = loadPackageParam;
-        this.startHook();
-    }
-
-    protected void startHook(){};
-
-    protected XSharedPreferences getXSharedPreferences(){
-        XSharedPreferences xSharedPreferences = new XSharedPreferences("com.kooritea.fcmfix","config");
-        xSharedPreferences.makeWorldReadable();
-        return xSharedPreferences;
     }
 
     protected void printLog(String text){
