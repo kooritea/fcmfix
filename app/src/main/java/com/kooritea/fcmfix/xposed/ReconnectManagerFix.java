@@ -34,6 +34,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -50,6 +51,7 @@ import static android.content.Context.NOTIFICATION_SERVICE;
 public class ReconnectManagerFix extends XposedModule {
 
     private Class<?> GcmChimeraService;
+    private String GcmChimeraServiceLogMethodName;
 
 
     public ReconnectManagerFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
@@ -59,33 +61,44 @@ public class ReconnectManagerFix extends XposedModule {
 
     private void startHookGcmServiceStart() {
         this.GcmChimeraService = XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService", loadPackageParam.classLoader);
-        XposedHelpers.findAndHookMethod(XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService", loadPackageParam.classLoader), "onCreate", new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
-                IntentFilter intentFilter = new IntentFilter();
-                intentFilter.addAction("com.kooritea.fcmfix.log");
-                AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(logBroadcastReceive, intentFilter);
-                if (AndroidAppHelper.currentApplication().getApplicationContext().getSystemService(UserManager.class).isUserUnlocked()) {
-                    try {
-                        startHook();
-                        printLog("ReconnectManagerFixStartHook 完成");
-                    } catch (Exception e) {
-                        printLog("ReconnectManagerFixStartHook 初始化失败: " + e.getMessage());
+        try{
+            for(Method method : this.GcmChimeraService.getMethods()){
+                if(method.getParameterTypes().length == 2){
+                    if(method.getParameterTypes()[0] == String.class && method.getParameterTypes()[1] == Object[].class){
+                        this.GcmChimeraServiceLogMethodName = method.getName();
+                        break;
                     }
-                } else {
-                    IntentFilter userUnlockIntentFilter = new IntentFilter();
-                    userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
-                    AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
                 }
             }
-        });
-        XposedHelpers.findAndHookMethod(XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService", loadPackageParam.classLoader), "onDestroy", new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(final MethodHookParam param) throws Throwable {
-                AndroidAppHelper.currentApplication().getApplicationContext().unregisterReceiver(logBroadcastReceive);
-            }
-        });
-
+            XposedHelpers.findAndHookMethod(this.GcmChimeraService, "onCreate", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
+                    IntentFilter intentFilter = new IntentFilter();
+                    intentFilter.addAction("com.kooritea.fcmfix.log");
+                    AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(logBroadcastReceive, intentFilter);
+                    if (AndroidAppHelper.currentApplication().getApplicationContext().getSystemService(UserManager.class).isUserUnlocked()) {
+                        try {
+                            startHook();
+                            printLog("ReconnectManagerFixStartHook 完成");
+                        } catch (Exception e) {
+                            printLog("ReconnectManagerFixStartHook 初始化失败: " + e.getMessage());
+                        }
+                    } else {
+                        IntentFilter userUnlockIntentFilter = new IntentFilter();
+                        userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
+                        AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
+                    }
+                }
+            });
+            XposedHelpers.findAndHookMethod(this.GcmChimeraService, "onDestroy", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(final MethodHookParam param) throws Throwable {
+                    AndroidAppHelper.currentApplication().getApplicationContext().unregisterReceiver(logBroadcastReceive);
+                }
+            });
+        }catch (Exception e){
+            XposedBridge.log("GcmChimeraService hook 失败");
+        }
     }
 
     private void startHook() throws Exception {
@@ -184,7 +197,11 @@ public class ReconnectManagerFix extends XposedModule {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if ("com.kooritea.fcmfix.log".equals(action)) {
-                XposedHelpers.callStaticMethod(GcmChimeraService, "a", new Class<?>[]{String.class, Object[].class}, "[fcmfix] " + intent.getStringExtra("text"), null);
+                try{
+                    XposedHelpers.callStaticMethod(GcmChimeraService,GcmChimeraServiceLogMethodName , new Class<?>[]{String.class, Object[].class}, "[fcmfix] " + intent.getStringExtra("text"), null);
+                }catch (Exception e){
+                    XposedBridge.log("输出日志到fcm失败： "+"[fcmfix] " + intent.getStringExtra("text"));
+                }
             }
         }
     };
@@ -193,7 +210,7 @@ public class ReconnectManagerFix extends XposedModule {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
-                printLog("UserUnlock Broadcast");
+                printLog("User Device Unlock Broadcast");
                 try {
                     startHook();
                     printLog("ReconnectManagerFixStartHook 完成");
