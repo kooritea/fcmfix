@@ -1,4 +1,4 @@
-# fcmfix
+# fcmfix(Android 10)
 
 使用xposed让被完全停止的应用响应fcm，让fcm送达率达到100%，不错过任何通知  
 
