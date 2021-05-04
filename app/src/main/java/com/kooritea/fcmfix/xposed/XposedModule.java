@@ -6,6 +6,7 @@ import android.util.Log;
 
 import com.kooritea.fcmfix.util.ContentProviderHelper;
 
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class XposedModule {
@@ -17,6 +18,7 @@ public class XposedModule {
     }
 
     protected void printLog(String text){
+        XposedBridge.log("[fcmfix] "+ text);
         Intent log = new Intent("com.kooritea.fcmfix.log");
         log.putExtra("text",text);
         try{
