@@ -1,6 +1,4 @@
-# fcmfix(Android 10)
-
-## fcm唤醒功能适配安卓10和11，修复fcm重连问题仅适配安卓10
+# fcmfix(Android 10 & 11)
 
 使用xposed让被完全停止的应用响应fcm，让fcm送达率达到100%，不错过任何通知  
 
