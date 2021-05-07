@@ -140,7 +140,10 @@ public class ReconnectManagerFix extends XposedModule {
                 // 修改心跳间隔
                 Intent intent = (Intent) XposedHelpers.getObjectField(param.thisObject, sharedPreferences.getString("timer_intent_property", ""));
                 if ("com.google.android.gms.gcm.HEARTBEAT_ALARM".equals(intent.getAction())) {
-                    param.args[0] = sharedPreferences.getLong("heartbeatInterval", 117000L);
+                    long interval = sharedPreferences.getLong("heartbeatInterval", 0L);
+                    if(interval != 0L){
+                        param.args[0] = interval;
+                    }
                 }
             }
 
