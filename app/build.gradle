@@ -6,9 +6,9 @@ android {
     defaultConfig {
         applicationId "com.kooritea.fcmfix"
         minSdkVersion 29
-        targetSdkVersion 30
-        versionCode 8
-        versionName "0.1.1"
+        targetSdkVersion 29
+        versionCode 9
+        versionName "0.1.2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
