@@ -1,12 +1,17 @@
 package com.kooritea.fcmfix.xposed;
 
 import android.app.AndroidAppHelper;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Build;
+import android.util.ArraySet;
 
 import com.kooritea.fcmfix.util.ContentProviderHelper;
 
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.Set;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -16,12 +21,17 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class MiuiLocalNotificationFix extends XposedModule  {
 
-    protected ContentProviderHelper contentProviderHelper;
+    private Set<String> allowList = null;
 
     public MiuiLocalNotificationFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
-        contentProviderHelper = new ContentProviderHelper(AndroidAppHelper.currentApplication().getApplicationContext(),"content://com.kooritea.fcmfix.provider/config");
         this.startHook();
+    }
+
+    @Override
+    protected void onCanReadConfig() throws Exception {
+        this.onUpdateConfig();
+        this.initUpdateConfigReceiver();
     }
 
     protected void startHook(){
@@ -50,12 +60,34 @@ public class MiuiLocalNotificationFix extends XposedModule  {
     }
 
     private boolean targetIsAllow(String packageName){
-        Set<String> allowList = this.contentProviderHelper.getStringSet("allowList");
-        for (String item : allowList) {
-            if (item.equals(packageName)) {
-                return true;
+        if(this.allowList == null){
+            this.checkUserDeviceUnlock(AndroidAppHelper.currentApplication().getApplicationContext());
+        }
+        if(this.allowList != null){
+            for (String item : this.allowList) {
+                if (item.equals(packageName)) {
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    private void onUpdateConfig(){
+        ContentProviderHelper contentProviderHelper = new ContentProviderHelper(AndroidAppHelper.currentApplication().getApplicationContext(),"content://com.kooritea.fcmfix.provider/config");
+        this.allowList = contentProviderHelper.getStringSet("allowList");
+    }
+
+    private  void initUpdateConfigReceiver(){
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction("com.kooritea.fcmfix.update.config");
+        AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if ("com.kooritea.fcmfix.update.config".equals(action)) {
+                    onUpdateConfig();
+                }
+            }
+        }, intentFilter);
     }
 }

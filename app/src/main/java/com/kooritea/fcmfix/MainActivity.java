@@ -7,6 +7,7 @@ import android.app.Activity;
 import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
@@ -172,12 +173,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void addAppInAllowList(String packageName){
         this.allowList.add(packageName);
-        this.sharedPreferencesEditor.putStringSet("allowList",this.allowList);
-        this.sharedPreferencesEditor.commit();
+        this.updateAllowList();
     }
     private void deleteAppInAllowList(String packageName){
         this.allowList.remove(packageName);
+        this.updateAllowList();
+    }
+
+    private void updateAllowList(){
         this.sharedPreferencesEditor.putStringSet("allowList",this.allowList);
         this.sharedPreferencesEditor.commit();
+        this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
     }
 }

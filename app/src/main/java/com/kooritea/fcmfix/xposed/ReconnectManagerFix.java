@@ -59,6 +59,11 @@ public class ReconnectManagerFix extends XposedModule {
         this.startHookGcmServiceStart();
     }
 
+    @Override
+    protected void onCanReadConfig() throws Exception {
+        this.startHook();
+    }
+
     private void startHookGcmServiceStart() {
         this.GcmChimeraService = XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService", loadPackageParam.classLoader);
         try{
@@ -76,18 +81,7 @@ public class ReconnectManagerFix extends XposedModule {
                     IntentFilter intentFilter = new IntentFilter();
                     intentFilter.addAction("com.kooritea.fcmfix.log");
                     AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(logBroadcastReceive, intentFilter);
-                    if (AndroidAppHelper.currentApplication().getApplicationContext().getSystemService(UserManager.class).isUserUnlocked()) {
-                        try {
-                            startHook();
-                            printLog("ReconnectManagerFixStartHook 完成");
-                        } catch (Exception e) {
-                            printLog("ReconnectManagerFixStartHook 初始化失败: " + e.getMessage());
-                        }
-                    } else {
-                        IntentFilter userUnlockIntentFilter = new IntentFilter();
-                        userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
-                        AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
-                    }
+                    checkUserDeviceUnlock(AndroidAppHelper.currentApplication().getApplicationContext());
                 }
             });
             XposedHelpers.findAndHookMethod(this.GcmChimeraService, "onDestroy", new XC_MethodHook() {
@@ -101,7 +95,7 @@ public class ReconnectManagerFix extends XposedModule {
         }
     }
 
-    private void startHook() throws Exception {
+    protected void startHook() throws Exception {
         Context context = AndroidAppHelper.currentApplication().getApplicationContext();
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
@@ -121,7 +115,7 @@ public class ReconnectManagerFix extends XposedModule {
             return;
         }
         if (!sharedPreferences.getBoolean("enable", false)) {
-            this.printLog("ReconnectManagerFix配置已关闭");
+            this.printLog("ReconnectManagerFix配置文件enable标识为false，退出");
             return;
         }
         if (!sharedPreferences.getString("gms_version", "").equals(versionName)) {
@@ -209,19 +203,4 @@ public class ReconnectManagerFix extends XposedModule {
         }
     };
 
-    private BroadcastReceiver unlockBroadcastReceive = new BroadcastReceiver() {
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
-                printLog("User Device Unlock Broadcast");
-                try {
-                    startHook();
-                    printLog("ReconnectManagerFixStartHook 完成");
-                    AndroidAppHelper.currentApplication().getApplicationContext().unregisterReceiver(unlockBroadcastReceive);
-                } catch (Exception e) {
-                    printLog("ReconnectManagerFixStartHook 初始化失败: " + e.getMessage());
-                }
-            }
-        }
-    };
 }

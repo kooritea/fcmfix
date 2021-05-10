@@ -1,8 +1,11 @@
 package com.kooritea.fcmfix.xposed;
 
 import android.app.AndroidAppHelper;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Build;
 
 import com.kooritea.fcmfix.util.ContentProviderHelper;
@@ -19,12 +22,17 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class BroadcastFix extends XposedModule {
 
-    protected ContentProviderHelper contentProviderHelper;
+    private Set<String> allowList = null;
 
     public BroadcastFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
-        contentProviderHelper = new ContentProviderHelper(AndroidAppHelper.currentApplication().getApplicationContext(),"content://com.kooritea.fcmfix.provider/config");
         this.startHook();
+    }
+
+    @Override
+    protected void onCanReadConfig() throws Exception {
+        this.onUpdateConfig();
+        this.initUpdateConfigReceiver();
     }
 
     protected void startHook(){
@@ -74,14 +82,34 @@ public class BroadcastFix extends XposedModule {
     }
 
     private boolean targetIsAllow(String packageName){
-        if (!packageName.equals("com.tencent.mm")) {
-            Set<String> allowList = this.contentProviderHelper.getStringSet("allowList");
-            for (String item : allowList) {
+        if(this.allowList == null){
+            this.checkUserDeviceUnlock(AndroidAppHelper.currentApplication().getApplicationContext());
+        }
+        if(this.allowList != null){
+            for (String item : this.allowList) {
                 if (item.equals(packageName)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    private void onUpdateConfig(){
+        ContentProviderHelper contentProviderHelper = new ContentProviderHelper(AndroidAppHelper.currentApplication().getApplicationContext(),"content://com.kooritea.fcmfix.provider/config");
+        this.allowList = contentProviderHelper.getStringSet("allowList");
+    }
+
+    private void initUpdateConfigReceiver(){
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction("com.kooritea.fcmfix.update.config");
+        AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if ("com.kooritea.fcmfix.update.config".equals(action)) {
+                    onUpdateConfig();
+                }
+            }
+        }, intentFilter);
     }
 }
