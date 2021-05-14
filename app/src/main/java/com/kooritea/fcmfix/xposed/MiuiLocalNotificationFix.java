@@ -50,12 +50,12 @@ public class MiuiLocalNotificationFix extends XposedModule  {
                 protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
                     if(targetIsAllow((String)methodHookParam.args[3])){
                         methodHookParam.setResult(true);
-                        printLog("Allow LocalNotification " + methodHookParam.args[3]);
+                        printLog("Allow LocalNotification " + methodHookParam.args[3],false);
                     }
                 }
             });
         }else{
-            printLog("Not found isAllowLocalNotification in com.android.server.notification.NotificationManagerServiceInjector");
+            printLog("Not found isAllowLocalNotification in com.android.server.notification.NotificationManagerServiceInjector",true);
         }
     }
 

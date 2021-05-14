@@ -24,8 +24,10 @@ public abstract class XposedModule {
     protected abstract void onCanReadConfig() throws Exception;
     private boolean isRegisterUnlockBroadcastReceive = false;
 
-    protected void printLog(String text){
-        XposedBridge.log("[fcmfix] "+ text);
+    protected void printLog(String text, boolean isInitLog){
+        if(isInitLog){
+            XposedBridge.log("[fcmfix] "+ text);
+        }
         Intent log = new Intent("com.kooritea.fcmfix.log");
         log.putExtra("text",text);
         try{
@@ -45,9 +47,8 @@ public abstract class XposedModule {
             if (context.getSystemService(UserManager.class).isUserUnlocked()) {
                 try {
                     this.onCanReadConfig();
-                    printLog("startHook");
                 } catch (Exception e) {
-                    printLog("读取配置文件初始化失败: " + e.getMessage());
+                    printLog("读取配置文件初始化失败: " + e.getMessage(),true);
                 }
             } else {
                 isRegisterUnlockBroadcastReceive = true;
@@ -63,13 +64,13 @@ public abstract class XposedModule {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
-                printLog("User Device Unlock Broadcast");
+                printLog("User Device Unlock Broadcast",true);
                 try {
                     onCanReadConfig();
                     AndroidAppHelper.currentApplication().getApplicationContext().unregisterReceiver(unlockBroadcastReceive);
                     isRegisterUnlockBroadcastReceive = false;
                 } catch (Exception e) {
-                    printLog("读取配置文件初始化失败: " + e.getMessage());
+                    printLog("读取配置文件初始化失败: " + e.getMessage(),true);
                 }
             }
         }

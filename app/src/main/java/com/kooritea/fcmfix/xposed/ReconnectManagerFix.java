@@ -100,7 +100,7 @@ public class ReconnectManagerFix extends XposedModule {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
         if (!sharedPreferences.getBoolean("isInit", false)) {
-            this.printLog("fcmfix_config init");
+            this.printLog("fcmfix_config init",true);
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putBoolean("isInit", true);
             editor.putBoolean("enable", false);
@@ -115,11 +115,11 @@ public class ReconnectManagerFix extends XposedModule {
             return;
         }
         if (!sharedPreferences.getBoolean("enable", false)) {
-            this.printLog("ReconnectManagerFix配置文件enable标识为false，退出");
+            this.printLog("ReconnectManagerFix配置文件enable标识为false，退出",true);
             return;
         }
         if (!sharedPreferences.getString("gms_version", "").equals(versionName)) {
-            this.printLog("gms已更新，请重新编辑fcmfix_config.xml");
+            this.printLog("gms已更新，请重新编辑fcmfix_config.xml",true);
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putBoolean("enable", false);
             editor.putString("gms_version", versionName);
@@ -127,7 +127,7 @@ public class ReconnectManagerFix extends XposedModule {
             this.sendUpdateNotification("[xposed-fcmfix]gms已更新");
             return;
         }
-        this.printLog("ReconnectManagerFix读取配置已成功,timer_class: " + sharedPreferences.getString("timer_class", ""));
+        this.printLog("ReconnectManagerFix读取配置已成功,timer_class: " + sharedPreferences.getString("timer_class", ""),true);
         XposedHelpers.findAndHookMethod(XposedHelpers.findClass(sharedPreferences.getString("timer_class", ""), loadPackageParam.classLoader), sharedPreferences.getString("timer_settimeout_method", ""), long.class, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(final MethodHookParam param) throws Throwable {
@@ -152,7 +152,7 @@ public class ReconnectManagerFix extends XposedModule {
                             long nextConnectionTime = XposedHelpers.getLongField(param.thisObject, sharedPreferences.getString("timer_next_time_property", ""));
                             if (nextConnectionTime != 0 && nextConnectionTime - SystemClock.elapsedRealtime() < 0) {
                                 AndroidAppHelper.currentApplication().getApplicationContext().sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
-                                printLog("Send broadcast GCM_RECONNECT");
+                                printLog("Send broadcast GCM_RECONNECT",false);
                             }
                         }
                     }, (long) param.args[0] + 5000);
