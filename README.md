@@ -42,3 +42,28 @@
 - 9. 最后将配置文件的enable修改true，保存，重启手机
 
 - 10. 一般来说gms更新改变的只有类名也就是timer_class
+
+
+## 可能出现的问题
+
+### 1、重启之后配置文件被复原
+> 一般是你用了mt管理器那个编辑器的问题,可以尝试修改完后删除那个.bak后缀的文件，或者在设置中关闭生成bak文件，或者换一个编辑器 https://play.google.com/store/apps/details?id=in.mfile
+
+
+## 一些版本的配置文件
+
+如果你不想自己找hook点的话可以看看下面那个版本和你使用的版本一直，需要保证gms_version项和你手机上的配置文件一致，其他可以直接复制
+
+```xml
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <long name="heartbeatInterval" value="0" />
+    <string name="timer_intent_property">d</string>
+    <string name="timer_next_time_property">f</string>
+    <boolean name="enable" value="true" />
+    <string name="timer_settimeout_method">c</string>
+    <string name="timer_class">acrp</string>
+    <string name="gms_version">21.18.16 (150400-374723149)</string>
+    <boolean name="isInit" value="true" />
+</map>
+```
