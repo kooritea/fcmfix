@@ -15,7 +15,7 @@
 - fcm心跳修复和负数重连问题功能需要勾选com.google.android.gms
 
 ## 由于gms更新较快，代码遭到混淆，hook点几乎每个版本都会变动，所以需要手动修改配置文件 (此项非必须，仅后两个功能需要用到) 
-- 1. 确保xposed模块已经运行，如果存在/data/data/com.google.andorid.gms/shared_prefs/fcmfix_config.xml则证明模块已经成功运行，这是配置文件，之后都是编辑这个文件的内容。
+- 1. 确保xposed模块已经运行，如果存在/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml则证明模块已经成功运行，这是配置文件，之后都是编辑这个文件的内容。
 - 2. 下载MT管理器等可以进行反编译的工具
 - 3. 对/data/app/com.google.android.gms-/base.apk进行反编译(在MT管理器对apk文件选择查看，点击classes.dex使用Dex编辑器++打开，全选 -> 确认)
 - 4. 搜索 "Previous alarms will stay active" ,路径: / ,搜索类型: 代码，按道理应该只有一个搜索结果，将搜到类名(一般是4个字母)填入配置文件的timer_class项中
