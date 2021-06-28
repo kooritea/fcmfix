@@ -66,4 +66,16 @@
     <string name="gms_version">21.18.16 (150400-374723149)</string>
     <boolean name="isInit" value="true" />
 </map>
+
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <long name="heartbeatInterval" value="0" />
+    <string name="timer_intent_property">d</string>
+    <string name="timer_next_time_property">f</string>
+    <boolean name="enable" value="true" />
+    <string name="timer_settimeout_method">c</string>
+    <string name="timer_class">adbc</string>
+    <string name="gms_version">21.21.16 (150400-378233385)</string>
+    <boolean name="isInit" value="true" />
+</map>
 ```
