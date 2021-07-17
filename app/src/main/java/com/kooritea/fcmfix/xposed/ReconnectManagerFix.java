@@ -124,7 +124,7 @@ public class ReconnectManagerFix extends XposedModule {
             editor.putBoolean("enable", false);
             editor.putString("gms_version", versionName);
             editor.commit();
-            this.sendUpdateNotification("[xposed-fcmfix]gms已更新");
+            this.sendUpdateNotification("[xposed-fcmfix]gms已更新,请更新fcmfix.xml");
             return;
         }
         this.printLog("ReconnectManagerFix读取配置已成功,timer_class: " + sharedPreferences.getString("timer_class", ""),true);
@@ -168,8 +168,13 @@ public class ReconnectManagerFix extends XposedModule {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, "fcmfix");
         builder.setSmallIcon(R.mipmap.ic_launcher);
         builder.setContentTitle(text);
-        // builder.setContentText("点击编辑fcmfix.xml");
         builder.setAutoCancel(true);
+        Intent intent = new Intent(Intent.ACTION_EDIT);
+        intent.addCategory("android.intent.category.DEFAULT");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        intent.setDataAndType(Uri.fromFile(new File(context.getFilesDir().getParent() + "/shared_prefs/fcmfix_config.xml")),"text/*");
+        builder.setContentIntent(PendingIntent.getActivity(context,0,intent,PendingIntent.FLAG_UPDATE_CURRENT));
         notificationManager.notify((int) System.currentTimeMillis(), builder.build());
     }
 
