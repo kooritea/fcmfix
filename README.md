@@ -5,7 +5,7 @@
 - 允许fcm唤醒选中的应用来发送通知
 - 解除miui12对后台应用的通知限制(非miui系统没影响)(仅作用于在fcmfix中选中的应用)
 - 修复在国内网络下出现重连服务出现负数问题(貌似是miui优化的问题)(可选)(需要查看自己手机上gms的版本编辑配置文件)
-- 固定心跳间隔为117s(可选)(需要查看自己手机上gms的版本编辑配置文件)
+- 固定心跳间隔(可选)(需要查看自己手机上gms的版本编辑配置文件)
 
 ## 注意
 在国内版miui上，除了在本应用中勾选目标应用之外，还要给予目标应用自启动权限中的允许系统唤醒权限(eu版和国际版则不需要给自启动权限)  
@@ -14,8 +14,8 @@
 - 唤醒应用和解除miui通知限制需要勾选安卓系统作用(不需要勾选目标应用)
 - fcm心跳修复和负数重连问题功能需要勾选com.google.android.gms
 
-## 由于gms更新较快，代码遭到混淆，hook点几乎每个版本都会变动，所以需要手动修改配置文件  
-- 1. 确保xposed模块已经运行，如果存在/data/data/com.google.andorid.gms/shared_prefs/fcmfix_config.xml则证明模块已经成功运行，这是配置文件，之后都是编辑这个文件的内容。
+## 由于gms更新较快，代码遭到混淆，hook点几乎每个版本都会变动，所以需要手动修改配置文件 (此项非必须，仅后两个功能需要用到) 
+- 1. 确保xposed模块已经运行，如果存在/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml则证明模块已经成功运行，这是配置文件，之后都是编辑这个文件的内容。
 - 2. 下载MT管理器等可以进行反编译的工具
 - 3. 对/data/app/com.google.android.gms-/base.apk进行反编译(在MT管理器对apk文件选择查看，点击classes.dex使用Dex编辑器++打开，全选 -> 确认)
 - 4. 搜索 "Previous alarms will stay active" ,路径: / ,搜索类型: 代码，按道理应该只有一个搜索结果，将搜到类名(一般是4个字母)填入配置文件的timer_class项中
@@ -42,3 +42,52 @@
 - 9. 最后将配置文件的enable修改true，保存，重启手机
 
 - 10. 一般来说gms更新改变的只有类名也就是timer_class
+
+
+## 可能出现的问题
+
+### 1、重启之后配置文件被复原
+> 一般是你用了mt管理器那个编辑器的问题,可以尝试修改完后删除那个.bak后缀的文件，或者在设置中关闭生成bak文件，或者换一个编辑器 https://play.google.com/store/apps/details?id=in.mfile
+
+
+## 一些版本的配置文件
+
+如果你不想自己找hook点的话可以看看下面哪个版本和你使用的版本一致，需要保证gms_version项和你手机上的配置文件一致，其他可以直接复制
+
+```xml
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <long name="heartbeatInterval" value="0" />
+    <string name="timer_intent_property">d</string>
+    <string name="timer_next_time_property">f</string>
+    <boolean name="enable" value="true" />
+    <string name="timer_settimeout_method">c</string>
+    <string name="timer_class">acrp</string>
+    <string name="gms_version">21.18.16 (150400-374723149)</string>
+    <boolean name="isInit" value="true" />
+</map>
+
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <long name="heartbeatInterval" value="0" />
+    <string name="timer_intent_property">d</string>
+    <string name="timer_next_time_property">f</string>
+    <boolean name="enable" value="true" />
+    <string name="timer_settimeout_method">c</string>
+    <string name="timer_class">adbc</string>
+    <string name="gms_version">21.21.16 (150400-378233385)</string>
+    <boolean name="isInit" value="true" />
+</map>
+
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <long name="heartbeatInterval" value="0" />
+    <string name="timer_intent_property">d</string>
+    <string name="timer_next_time_property">f</string>
+    <boolean name="enable" value="true" />
+    <string name="timer_settimeout_method">c</string>
+    <string name="timer_class">adpi</string>
+    <string name="gms_version">21.24.18 (150400-383468479)</string>
+    <boolean name="isInit" value="true" />
+</map>
+```
