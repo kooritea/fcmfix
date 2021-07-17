@@ -19,6 +19,9 @@
         <meta-data
             android:name="xposedminversion"
             android:value="53" />
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposed_scope" />
         <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

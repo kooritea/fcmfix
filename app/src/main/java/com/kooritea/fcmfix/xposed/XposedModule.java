@@ -33,6 +33,7 @@ public abstract class XposedModule {
         try{
             AndroidAppHelper.currentApplication().getApplicationContext().sendBroadcast(log);
         }catch (Exception e){
+            XposedBridge.log("[fcmfix] "+ text);
             // 没有作用域
 //            e.printStackTrace();;
         }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="xposed_scope">
+        <item>android</item>
+        <item>com.google.android.gms</item>
+    </string-array>
+</resources>
