@@ -73,7 +73,7 @@ public class BroadcastFix extends XposedModule {
                                 methodHookParam.args[appOp_args_index] = Integer.valueOf(11);
                             }
                             intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                            printLog("Send Forced Start Broadcast: " + target,false);
+                            printLog("Send Forced Start Broadcast: " + target);
                         }
                     }
                 }
