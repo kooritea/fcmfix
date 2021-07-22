@@ -69,32 +69,32 @@ public class MainActivity extends AppCompatActivity {
             mInflater = LayoutInflater.from(context);
             List<AppInfo> _allowList = new ArrayList<>();
             List<AppInfo> _notAllowList = new ArrayList<>();
+            List<AppInfo> _notFoundFcm = new ArrayList<>();
             PackageManager packageManager = getPackageManager();
             for(PackageInfo packageInfo : packageManager.getInstalledPackages(PackageManager.GET_RECEIVERS)){
                 Boolean flag = false;
+                AppInfo appInfo = new AppInfo(packageInfo);
                 if (packageInfo.receivers != null) {
                     for (ActivityInfo  receiverInfo : packageInfo.receivers ){
-                        if(receiverInfo.name.equals("com.google.firebase.iid.FirebaseInstanceIdReceiver")){
+                        if(receiverInfo.name.equals("com.google.firebase.iid.FirebaseInstanceIdReceiver") || receiverInfo.name.equals("com.google.android.gms.measurement.AppMeasurementReceiver")){
                             flag = true;
                             break;
                         }
                     }
-                }else{
-                    continue;
                 }
                 if(!flag){
-                    continue;
-                }
-                AppInfo appInfo = new AppInfo(packageInfo);
-                for(String item : allowList){
-                    if(item.equals(appInfo.packageName)){
-                        appInfo.isAllow = true;
-                        _allowList.add(appInfo);
-                        break;
+                    _notFoundFcm.add(appInfo);
+                }else{
+                    for(String item : allowList){
+                        if(item.equals(appInfo.packageName)){
+                            appInfo.isAllow = true;
+                            _allowList.add(appInfo);
+                            break;
+                        }
                     }
-                }
-                if(!appInfo.isAllow){
-                    _notAllowList.add(appInfo);
+                    if(!appInfo.isAllow){
+                        _notAllowList.add(appInfo);
+                    }
                 }
             }
             Collections.sort(_allowList, new Comparator<AppInfo>() {
@@ -109,7 +109,14 @@ public class MainActivity extends AppCompatActivity {
                     return Collator.getInstance(Locale.CHINESE).compare(o1.name,o2.name);
                 }
             });
+            Collections.sort(_notFoundFcm, new Comparator<AppInfo>() {
+                @Override
+                public int compare(AppInfo o1, AppInfo o2) {
+                    return Collator.getInstance(Locale.CHINESE).compare(o1.name,o2.name);
+                }
+            });
             _allowList.addAll(_notAllowList);
+            _allowList.addAll(_notFoundFcm);
             this.appList = _allowList;
         }
         @Override
