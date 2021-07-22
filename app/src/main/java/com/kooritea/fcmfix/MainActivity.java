@@ -81,6 +81,8 @@ public class MainActivity extends AppCompatActivity {
                             break;
                         }
                     }
+                }else{
+                    continue;
                 }
                 if(!flag){
                     _notFoundFcm.add(appInfo);

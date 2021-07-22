@@ -1,14 +1,14 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 29
+    compileSdkVersion 30
 
     defaultConfig {
         applicationId "com.kooritea.fcmfix"
         minSdkVersion 29
         targetSdkVersion 30
-        versionCode 14
-        versionName "0.3.1"
+        versionCode 15
+        versionName "0.3.2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
