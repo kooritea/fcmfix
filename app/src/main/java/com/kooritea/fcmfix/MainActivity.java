@@ -3,23 +3,18 @@ package com.kooritea.fcmfix;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
-import android.content.ContentProvider;
-import android.content.ContentResolver;
+
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.ServiceInfo;
-import android.database.ContentObserver;
-import android.database.Cursor;
+
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
+
 import android.os.Bundle;
-import android.os.Handler;
-import android.util.Log;
+
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -30,18 +25,16 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import com.kooritea.fcmfix.util.ContentProviderHelper;
-
-import java.io.File;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Observer;
+
+import java.util.Objects;
 import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
@@ -67,12 +60,14 @@ public class MainActivity extends AppCompatActivity {
         private LayoutInflater mInflater;
         AppListAdapter(Context context){
             mInflater = LayoutInflater.from(context);
+            Set<String> allowListSet = new HashSet<>(allowList);
+            allowListSet.containsAll(allowList);
             List<AppInfo> _allowList = new ArrayList<>();
             List<AppInfo> _notAllowList = new ArrayList<>();
             List<AppInfo> _notFoundFcm = new ArrayList<>();
             PackageManager packageManager = getPackageManager();
             for(PackageInfo packageInfo : packageManager.getInstalledPackages(PackageManager.GET_RECEIVERS)){
-                Boolean flag = false;
+                boolean flag = false;
                 AppInfo appInfo = new AppInfo(packageInfo);
                 if (packageInfo.receivers != null) {
                     for (ActivityInfo  receiverInfo : packageInfo.receivers ){
@@ -84,18 +79,14 @@ public class MainActivity extends AppCompatActivity {
                 }else{
                     continue;
                 }
-                if(!flag){
-                    _notFoundFcm.add(appInfo);
+                if(allowListSet.contains(appInfo.packageName)){
+                    appInfo.isAllow = true;
+                    _allowList.add(appInfo);
                 }else{
-                    for(String item : allowList){
-                        if(item.equals(appInfo.packageName)){
-                            appInfo.isAllow = true;
-                            _allowList.add(appInfo);
-                            break;
-                        }
-                    }
-                    if(!appInfo.isAllow){
+                    if(flag){
                         _notAllowList.add(appInfo);
+                    }else{
+                        _notFoundFcm.add(appInfo);
                     }
                 }
             }
@@ -139,7 +130,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
             AppInfo appInfo = getItem(position);
-            View view = mInflater.inflate(R.layout.app_item,null);
+            @SuppressLint({"InflateParams", "ViewHolder"}) View view = mInflater.inflate(R.layout.app_item,null);
             TextView name = view.findViewById(R.id.name);
             name.setText(appInfo.name);
             TextView packageName = view.findViewById(R.id.packageName);
@@ -152,14 +143,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @SuppressLint("WrongConstant")
+    @SuppressLint({"WrongConstant", "CommitPrefEdits"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         this.sharedPreferences = this.getSharedPreferences("config",Context.MODE_PRIVATE);
         this.sharedPreferencesEditor = this.sharedPreferences.edit();
-        this.allowList = new HashSet<String>(this.sharedPreferences.getStringSet("allowList",new HashSet<String>()));
+        this.allowList = new HashSet<>(Objects.requireNonNull(this.sharedPreferences.getStringSet("allowList", new HashSet<String>())));
         final ListView listView = findViewById(R.id.listView);
         this.appListAdapter = new AppListAdapter(this);
         listView.setAdapter(this.appListAdapter);
