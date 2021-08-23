@@ -1,74 +1,115 @@
 package com.kooritea.fcmfix.xposed;
 
-import android.app.AndroidAppHelper;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.UserManager;
-import android.util.Log;
 
 import com.kooritea.fcmfix.util.ContentProviderHelper;
 
+import java.util.Set;
+
+import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public abstract class XposedModule {
 
     protected XC_LoadPackage.LoadPackageParam loadPackageParam;
+    private Set<String> allowList = null;
+
+    protected Context context = null;
 
     protected XposedModule(final XC_LoadPackage.LoadPackageParam loadPackageParam){
         this.loadPackageParam = loadPackageParam;
+        XposedHelpers.findAndHookMethod("android.content.ContextWrapper", loadPackageParam.classLoader,"attachBaseContext", Context.class, new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+                if(context == null){
+                    context = (Context)methodHookParam.thisObject;
+                    initUpdateConfigReceiver();
+                    if (context.getSystemService(UserManager.class).isUserUnlocked()) {
+                        onCanReadConfig();
+                    }else{
+                        IntentFilter userUnlockIntentFilter = new IntentFilter();
+                        userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
+                        context.registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
+                    }
+                }
+            }
+        });
     }
 
-    protected abstract void onCanReadConfig() throws Exception;
-    private boolean isRegisterUnlockBroadcastReceive = false;
+    protected void onCanReadConfig() throws Exception{};
 
     protected void printLog(String text){
         Intent log = new Intent("com.kooritea.fcmfix.log");
         log.putExtra("text",text);
         try{
-            AndroidAppHelper.currentApplication().getApplicationContext().sendBroadcast(log);
+            context.sendBroadcast(log);
         }catch (Exception e){
             XposedBridge.log("[fcmfix] "+ text);
         }
     }
 
     /**
-     * 多次调用也仅调用一次onCanReadConfig
-     * @param context
+     * 尝试读取允许的应用列表但列表未初始化时调用
      */
-    protected void checkUserDeviceUnlock(Context context){
-        if(!isRegisterUnlockBroadcastReceive){
-            if (context.getSystemService(UserManager.class).isUserUnlocked()) {
-                try {
-                    this.onCanReadConfig();
-                } catch (Exception e) {
-                    printLog("读取配置文件初始化失败: " + e.getMessage());
-                }
-            } else {
-                isRegisterUnlockBroadcastReceive = true;
-                IntentFilter userUnlockIntentFilter = new IntentFilter();
-                userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
-                AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
+    protected void checkUserDeviceUnlockAndUpdateConfig(){
+        if (context.getSystemService(UserManager.class).isUserUnlocked()) {
+            try {
+                this.onUpdateConfig();
+            } catch (Exception e) {
+                printLog("读取配置文件初始化失败: " + e.getMessage());
             }
         }
-
     }
 
     private BroadcastReceiver unlockBroadcastReceive = new BroadcastReceiver() {
-        public void onReceive(Context context, Intent intent) {
+        public void onReceive(Context _context, Intent intent) {
             String action = intent.getAction();
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
-                printLog("User Device Unlock Broadcast");
                 try {
                     onCanReadConfig();
-                    AndroidAppHelper.currentApplication().getApplicationContext().unregisterReceiver(unlockBroadcastReceive);
-                    isRegisterUnlockBroadcastReceive = false;
+                    context.unregisterReceiver(unlockBroadcastReceive);
                 } catch (Exception e) {
                     printLog("读取配置文件初始化失败: " + e.getMessage());
                 }
             }
         }
     };
+
+    protected boolean targetIsAllow(String packageName){
+        if(this.allowList == null){
+            this.checkUserDeviceUnlockAndUpdateConfig();
+        }
+        if(this.allowList != null){
+            for (String item : this.allowList) {
+                if (item.equals(packageName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void onUpdateConfig(){
+        ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
+        this.allowList = contentProviderHelper.getStringSet("allowList");
+    }
+
+    private  void initUpdateConfigReceiver(){
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction("com.kooritea.fcmfix.update.config");
+        context.registerReceiver(new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if ("com.kooritea.fcmfix.update.config".equals(action)) {
+                    onUpdateConfig();
+                }
+            }
+        }, intentFilter);
+    }
 }

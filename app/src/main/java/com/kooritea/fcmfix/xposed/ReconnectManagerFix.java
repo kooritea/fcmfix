@@ -1,49 +1,26 @@
 package com.kooritea.fcmfix.xposed;
 
-import android.app.AndroidAppHelper;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.TaskStackBuilder;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.drawable.AdaptiveIconDrawable;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
-import android.os.UserManager;
-
 import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
-
 import com.kooritea.fcmfix.R;
-import com.kooritea.fcmfix.util.ContentProviderHelper;
-
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
-
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
@@ -55,6 +32,7 @@ public class ReconnectManagerFix extends XposedModule {
 
     private Class<?> GcmChimeraService;
     private String GcmChimeraServiceLogMethodName;
+     private Boolean  startHookFlag = false;
 
 
     public ReconnectManagerFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
@@ -64,7 +42,12 @@ public class ReconnectManagerFix extends XposedModule {
 
     @Override
     protected void onCanReadConfig() throws Exception {
-        this.startHook();
+        if(startHookFlag){
+            this.startHook();
+        }else {
+            startHookFlag = true;
+        }
+
     }
 
     private void startHookGcmServiceStart() {
@@ -83,14 +66,18 @@ public class ReconnectManagerFix extends XposedModule {
                 protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
                     IntentFilter intentFilter = new IntentFilter();
                     intentFilter.addAction("com.kooritea.fcmfix.log");
-                    AndroidAppHelper.currentApplication().getApplicationContext().registerReceiver(logBroadcastReceive, intentFilter);
-                    checkUserDeviceUnlock(AndroidAppHelper.currentApplication().getApplicationContext());
+                    context.registerReceiver(logBroadcastReceive, intentFilter);
+                    if(startHookFlag){
+                        startHook();
+                    }else {
+                        startHookFlag = true;
+                    }
                 }
             });
             XposedHelpers.findAndHookMethod(this.GcmChimeraService, "onDestroy", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(final MethodHookParam param) throws Throwable {
-                    AndroidAppHelper.currentApplication().getApplicationContext().unregisterReceiver(logBroadcastReceive);
+                    context.unregisterReceiver(logBroadcastReceive);
                 }
             });
         }catch (Exception e){
@@ -99,7 +86,6 @@ public class ReconnectManagerFix extends XposedModule {
     }
 
     protected void startHook() throws Exception {
-        Context context = AndroidAppHelper.currentApplication().getApplicationContext();
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
         if (!sharedPreferences.getBoolean("isInit", false)) {
@@ -144,14 +130,16 @@ public class ReconnectManagerFix extends XposedModule {
                 // 防止计时器出现负数计时,分别是心跳计时和重连计时
                 Intent intent = (Intent) XposedHelpers.getObjectField(param.thisObject, sharedPreferences.getString("timer_intent_property", ""));
                 if ("com.google.android.intent.action.GCM_RECONNECT".equals(intent.getAction()) || "com.google.android.gms.gcm.HEARTBEAT_ALARM".equals(intent.getAction())) {
-                    new Timer("ReconnectManagerFix").schedule(new TimerTask() {
+                    final Timer timer = new Timer("ReconnectManagerFix");
+                    timer.schedule(new TimerTask() {
                         @Override
                         public void run() {
                             long nextConnectionTime = XposedHelpers.getLongField(param.thisObject, sharedPreferences.getString("timer_next_time_property", ""));
                             if (nextConnectionTime != 0 && nextConnectionTime - SystemClock.elapsedRealtime() < 0) {
-                                AndroidAppHelper.currentApplication().getApplicationContext().sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
+                                context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
                                 printLog("Send broadcast GCM_RECONNECT");
                             }
+                            timer.cancel();
                         }
                     }, (long) param.args[0] + 5000);
                 }
@@ -162,7 +150,6 @@ public class ReconnectManagerFix extends XposedModule {
     private void sendUpdateNotification(String text) {
         printLog(text);
         text = "[fcmfix]" + text;
-        Context context = AndroidAppHelper.currentApplication().getApplicationContext();
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
         this.createFcmfixChannel(notificationManager);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, "fcmfix");
