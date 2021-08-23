@@ -62,7 +62,7 @@ public abstract class XposedModule {
             try {
                 this.onUpdateConfig();
             } catch (Exception e) {
-                printLog("读取配置文件初始化失败: " + e.getMessage());
+                printLog("更新配置文件失败: " + e.getMessage());
             }
         }
     }
@@ -73,9 +73,9 @@ public abstract class XposedModule {
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
                 try {
                     onCanReadConfig();
-                    context.unregisterReceiver(unlockBroadcastReceive);
+                    _context.unregisterReceiver(unlockBroadcastReceive);
                 } catch (Exception e) {
-                    printLog("读取配置文件初始化失败: " + e.getMessage());
+                    printLog("解锁广播回调出错: " + e.getMessage());
                 }
             }
         }
