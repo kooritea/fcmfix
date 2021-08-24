@@ -73,9 +73,7 @@ public abstract class XposedModule {
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
                 try {
                     context.unregisterReceiver(unlockBroadcastReceive);
-                } catch (Exception e) {
-                    printLog("注销解锁广播出错: " + e.getMessage());
-                }
+                } catch (Exception e) { }
                 try {
                     onCanReadConfig();
                 } catch (Exception e) {

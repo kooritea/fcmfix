@@ -7,17 +7,31 @@
 - 修复在国内网络下出现重连服务出现负数问题(貌似是miui优化的问题)
 - 固定心跳间隔(默认117s,更改需要编辑配置文件)
 
+---
+
 ## 注意
-在国内版miui上，除了在本应用中勾选目标应用之外，还要给予目标应用自启动权限中的允许系统唤醒权限(eu版和国际版则不需要给自启动权限)  
+
+~~在国内版miui上，除了在本应用中勾选目标应用之外，还要给予目标应用自启动权限中的允许系统唤醒权限(eu版和国际版则不需要给自启动权限)~~
+
+从0.4.0开始已经不再需要，感谢来自 @MinaMichita 的方法 [https://blog.minamigo.moe/archives/747](https://blog.minamigo.moe/archives/747)
+
+---
 
 ## Lsposed
 - 唤醒应用和解除miui通知限制需要勾选安卓系统作用(不需要勾选目标应用)
 - fcm心跳修复和负数重连问题功能需要勾选com.google.android.gms
 
+---
+
 ## 可能出现的问题
 
 ### 1、重启之后配置文件被复原
 > 一般是你用了mt管理器那个编辑器的问题,可以尝试修改完后删除那个.bak后缀的文件，或者在设置中关闭生成bak文件，或者换一个编辑器 https://play.google.com/store/apps/details?id=in.mfile
+
+### 2、遇到国内版锁屏后连接自动断开的问题请尝试使用针对国内版开发的版本
+[https://blog.minamigo.moe/archives/747](https://blog.minamigo.moe/archives/747)
+
+---
 
 ## 下面是手动找hook点的方法，从0.3.0版本开始不再需要手动反编译查找hook点了，但不排除会自动查找失败的情况，如果gms频繁崩溃或者gms状态中一直显示无服务，可以先手动找hook点检查或者请带上gms.apk发issues
 - 1. 确保xposed模块已经运行，如果存在/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml则证明模块已经成功运行，这是配置文件，之后都是编辑这个文件的内容。
