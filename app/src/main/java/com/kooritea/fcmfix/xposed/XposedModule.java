@@ -72,8 +72,12 @@ public abstract class XposedModule {
             String action = intent.getAction();
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
                 try {
+                    context.unregisterReceiver(unlockBroadcastReceive);
+                } catch (Exception e) {
+                    printLog("注销解锁广播出错: " + e.getMessage());
+                }
+                try {
                     onCanReadConfig();
-                    _context.unregisterReceiver(unlockBroadcastReceive);
                 } catch (Exception e) {
                     printLog("解锁广播回调出错: " + e.getMessage());
                 }
@@ -91,6 +95,8 @@ public abstract class XposedModule {
                     return true;
                 }
             }
+        }else{
+            printLog("Allow list is not ready");
         }
         return false;
     }
@@ -98,6 +104,9 @@ public abstract class XposedModule {
     private void onUpdateConfig(){
         ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
         this.allowList = contentProviderHelper.getStringSet("allowList");
+        if(this.allowList != null){
+            printLog("onUpdateConfig allowList size: " + this.allowList.size());
+        }
     }
 
     private  void initUpdateConfigReceiver(){

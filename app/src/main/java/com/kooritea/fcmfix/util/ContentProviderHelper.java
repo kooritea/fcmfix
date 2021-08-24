@@ -67,7 +67,7 @@ public class ContentProviderHelper {
         }
         Cursor cursor = contentResolver.query(uri, null, selection, null,null);
         if(cursor == null){
-            return new HashSet<String>();
+            return null;
         }
         cursor.getCount();
         Set<String> result = new HashSet<String>();
