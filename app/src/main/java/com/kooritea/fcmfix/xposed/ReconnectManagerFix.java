@@ -32,7 +32,7 @@ public class ReconnectManagerFix extends XposedModule {
 
     private Class<?> GcmChimeraService;
     private String GcmChimeraServiceLogMethodName;
-     private Boolean  startHookFlag = false;
+    private Boolean startHookFlag = false;
 
 
     public ReconnectManagerFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {

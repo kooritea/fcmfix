@@ -18,7 +18,7 @@
             android:value="fcmfix" />
         <meta-data
             android:name="xposedminversion"
-            android:value="53" />
+            android:value="93" />
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />

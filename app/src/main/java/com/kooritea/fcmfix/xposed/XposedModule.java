@@ -8,6 +8,7 @@ import android.os.UserManager;
 
 import com.kooritea.fcmfix.util.ContentProviderHelper;
 
+import java.util.ArrayList;
 import java.util.Set;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -18,20 +19,37 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public abstract class XposedModule {
 
     protected XC_LoadPackage.LoadPackageParam loadPackageParam;
-    private Set<String> allowList = null;
+    private static Set<String> allowList = null;
 
-    protected Context context = null;
+    protected static Context context = null;
+    private static ArrayList<XposedModule> instances = new ArrayList();
+    private static Boolean isInitUpdateConfigReceiver = false;
 
-    protected XposedModule(final XC_LoadPackage.LoadPackageParam loadPackageParam){
+    protected XposedModule(final XC_LoadPackage.LoadPackageParam loadPackageParam) {
         this.loadPackageParam = loadPackageParam;
+        instances.add(this);
+        if(instances.size() == 1){
+            initContext(loadPackageParam);
+        }else{
+            if(context != null && context.getSystemService(UserManager.class).isUserUnlocked()){
+                try{
+                    onCanReadConfig();
+                }catch (Exception e){
+                    printLog(e.getMessage());
+                }
+            }
+        }
+
+    }
+
+    private static void initContext(final XC_LoadPackage.LoadPackageParam loadPackageParam){
         XposedHelpers.findAndHookMethod("android.content.ContextWrapper", loadPackageParam.classLoader,"attachBaseContext", Context.class, new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
                 if(context == null){
                     context = (Context)methodHookParam.thisObject;
-                    initUpdateConfigReceiver();
                     if (context.getSystemService(UserManager.class).isUserUnlocked()) {
-                        onCanReadConfig();
+                        callAllOnCanReadConfig();
                     }else{
                         IntentFilter userUnlockIntentFilter = new IntentFilter();
                         userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
@@ -42,9 +60,19 @@ public abstract class XposedModule {
         });
     }
 
+    private static void callAllOnCanReadConfig(){
+        for(XposedModule instance : instances){
+            try{
+                instance.onCanReadConfig();
+            }catch (Exception e){
+                printLog(e.getMessage());
+            }
+        }
+    }
+
     protected void onCanReadConfig() throws Exception{};
 
-    protected void printLog(String text){
+    protected static void printLog(String text){
         Intent log = new Intent("com.kooritea.fcmfix.log");
         log.putExtra("text",text);
         try{
@@ -67,28 +95,25 @@ public abstract class XposedModule {
         }
     }
 
-    private BroadcastReceiver unlockBroadcastReceive = new BroadcastReceiver() {
+    private static BroadcastReceiver unlockBroadcastReceive = new BroadcastReceiver() {
         public void onReceive(Context _context, Intent intent) {
             String action = intent.getAction();
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
                 try {
                     context.unregisterReceiver(unlockBroadcastReceive);
                 } catch (Exception e) { }
-                try {
-                    onCanReadConfig();
-                } catch (Exception e) {
-                    printLog("解锁广播回调出错: " + e.getMessage());
-                }
+                callAllOnCanReadConfig();
             }
         }
     };
 
     protected boolean targetIsAllow(String packageName){
-        if(this.allowList == null){
+        if(allowList == null){
             this.checkUserDeviceUnlockAndUpdateConfig();
+            initUpdateConfigReceiver();
         }
-        if(this.allowList != null){
-            for (String item : this.allowList) {
+        if(allowList != null){
+            for (String item : allowList) {
                 if (item.equals(packageName)) {
                     return true;
                 }
@@ -99,24 +124,28 @@ public abstract class XposedModule {
         return false;
     }
 
-    private void onUpdateConfig(){
+    private static void onUpdateConfig(){
         ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
-        this.allowList = contentProviderHelper.getStringSet("allowList");
-        if(this.allowList != null){
-            printLog("onUpdateConfig allowList size: " + this.allowList.size());
+        allowList = contentProviderHelper.getStringSet("allowList");
+        if(allowList != null){
+            printLog( "onUpdateConfig allowList size: " + allowList.size());
         }
     }
 
-    private  void initUpdateConfigReceiver(){
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction("com.kooritea.fcmfix.update.config");
-        context.registerReceiver(new BroadcastReceiver() {
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                if ("com.kooritea.fcmfix.update.config".equals(action)) {
-                    onUpdateConfig();
+    private static synchronized void initUpdateConfigReceiver(){
+        if(!isInitUpdateConfigReceiver && context != null){
+            isInitUpdateConfigReceiver = true;
+            IntentFilter intentFilter = new IntentFilter();
+            intentFilter.addAction("com.kooritea.fcmfix.update.config");
+            context.registerReceiver(new BroadcastReceiver() {
+                public void onReceive(Context context, Intent intent) {
+                    String action = intent.getAction();
+                    if ("com.kooritea.fcmfix.update.config".equals(action)) {
+                        onUpdateConfig();
+                    }
                 }
-            }
-        }, intentFilter);
+            }, intentFilter);
+        }
+
     }
 }
