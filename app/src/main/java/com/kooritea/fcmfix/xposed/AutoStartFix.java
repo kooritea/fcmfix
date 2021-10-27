@@ -16,7 +16,8 @@ public class AutoStartFix extends XposedModule {
     }
 
     protected void startHook(){
-        XposedUtils.findAndHookMethodAnyParam("com.android.server.am.BroadcastQueueInjector",loadPackageParam.classLoader,"checkApplicationAutoStart",new XC_MethodHook() {
+        final Class<?> BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueInjector",loadPackageParam.classLoader);
+        XposedUtils.findAndHookMethodAnyParam(BroadcastQueueInjector,"checkApplicationAutoStart",new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam methodHookParam) throws Throwable {
                 Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[2],"intent");
