@@ -97,7 +97,9 @@ public class ReconnectManagerFix extends XposedModule {
             printLog("fcmfix_config init");
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putBoolean("isInit", true);
+            editor.putBoolean("enable", false);
             editor.putLong("heartbeatInterval", 0L);
+            editor.putLong("reconnInterval", 0L);
             editor.putString("gms_version", versionName);
             editor.putLong("gms_version_code", versionCode);
             editor.putString("config_version", "v2");
@@ -123,6 +125,19 @@ public class ReconnectManagerFix extends XposedModule {
         printLog("timer_alarm_type_property: "+ sharedPreferences.getString("timer_alarm_type_property", ""));
         printLog("timer_settimeout_method: "+ sharedPreferences.getString("timer_settimeout_method", ""));
         final Class<?> timerClazz = XposedHelpers.findClass(sharedPreferences.getString("timer_class", ""), loadPackageParam.classLoader);
+        XposedHelpers.findAndHookMethod(timerClazz, "toString", new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
+                String alarmType = (String) XposedUtils.getObjectFieldByPath(param.thisObject,  sharedPreferences.getString("timer_alarm_type_property", ""));
+                if("GCM_HB_ALARM".equals(alarmType) || "GCM_CONN_ALARM".equals(alarmType)){
+                    long hinterval = sharedPreferences.getLong("heartbeatInterval", 0L);
+                    long cinterval = sharedPreferences.getLong("reconnInterval", 0L);
+                    if((hinterval != 0L && hinterval > 1000) || (cinterval != 0L && cinterval > 1000)){
+                        param.setResult(param.getResult() + "[fcmfix locked]");
+                    }
+                }
+            }
+        });
         XposedHelpers.findAndHookMethod(timerClazz, sharedPreferences.getString("timer_settimeout_method", ""), long.class, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(final MethodHookParam param) throws Throwable {
@@ -134,15 +149,19 @@ public class ReconnectManagerFix extends XposedModule {
                         param.args[0] = interval;
                     }
                 }
+                if ("GCM_CONN_ALARM".equals(alarmType)) {
+                    long interval = sharedPreferences.getLong("reconnInterval", 0L);
+                    if(interval != 0L && interval > 1000){
+                        param.args[0] = interval;
+                    }
+                }
             }
 
             @Override
             protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
                 // 防止计时器出现负数计时,分别是心跳计时和重连计时
                 String alarmType = (String) XposedUtils.getObjectFieldByPath(param.thisObject,  sharedPreferences.getString("timer_alarm_type_property", ""));
-                printLog(alarmType);
                 if ("GCM_HB_ALARM".equals(alarmType) || "GCM_CONN_ALARM".equals(alarmType)) {
-                    final String nextTimeProperty = "";
                     Field maxField = null;
                     long maxFieldValue = 0L;
                     for(Field field : timerClazz.getDeclaredFields()){
@@ -224,7 +243,7 @@ public class ReconnectManagerFix extends XposedModule {
     };
 
     private void findAndUpdateHookTarget(SharedPreferences sharedPreferences){
-        printLog("自动寻找hook点功能未适配");
+        this.sendUpdateNotification("自动寻找hook点功能未适配");
         return;
 //        SharedPreferences.Editor editor = sharedPreferences.edit();
 //        editor.putBoolean("enable", false);
