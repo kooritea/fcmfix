@@ -114,6 +114,7 @@ public class ReconnectManagerFix extends XposedModule {
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putString("gms_version", versionName);;
             editor.putLong("gms_version_code", versionCode);
+            editor.putBoolean("enable", false);
             editor.apply();
             findAndUpdateHookTarget(sharedPreferences);
         }
@@ -246,7 +247,6 @@ public class ReconnectManagerFix extends XposedModule {
         this.sendUpdateNotification("自动寻找hook点功能未适配");
         return;
 //        SharedPreferences.Editor editor = sharedPreferences.edit();
-//        editor.putBoolean("enable", false);
 //        printLog("开始自动寻找hook点");
 //        try{
 //            Class<?> heartbeatChimeraAlarm =  XposedHelpers.findClass("com.google.android.gms.gcm.connection.HeartbeatChimeraAlarm",loadPackageParam.classLoader);
