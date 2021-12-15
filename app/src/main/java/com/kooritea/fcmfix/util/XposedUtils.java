@@ -8,8 +8,14 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 public class XposedUtils {
+
+
     public static XC_MethodHook.Unhook findAndHookConstructorAnyParam(String className, ClassLoader classLoader, XC_MethodHook callbacks, Class<?> ...parameterTypes){
         Class<?> clazz = XposedHelpers.findClass(className,classLoader);
+        return findAndHookConstructorAnyParam(clazz, callbacks, parameterTypes );
+    }
+
+    public static XC_MethodHook.Unhook findAndHookConstructorAnyParam(Class<?> clazz, XC_MethodHook callbacks, Class<?> ...parameterTypes){
         Constructor bestMatch = null;
         int matchCount = 0;
         for(Constructor<?> constructor : clazz.getDeclaredConstructors()){

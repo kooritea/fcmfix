@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.SystemClock;
 import androidx.core.app.NotificationCompat;
@@ -43,7 +44,7 @@ public class ReconnectManagerFix extends XposedModule {
     @Override
     protected void onCanReadConfig() throws Exception {
         if(startHookFlag){
-            this.startHook();
+            this.checkVersion();
         }else {
             startHookFlag = true;
         }
@@ -68,7 +69,7 @@ public class ReconnectManagerFix extends XposedModule {
                     intentFilter.addAction("com.kooritea.fcmfix.log");
                     context.registerReceiver(logBroadcastReceive, intentFilter);
                     if(startHookFlag){
-                        startHook();
+                        checkVersion();
                     }else {
                         startHookFlag = true;
                     }
@@ -85,7 +86,7 @@ public class ReconnectManagerFix extends XposedModule {
         }
     }
 
-    protected void startHook() throws Exception {
+    private void checkVersion() throws Exception {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
         long versionCode = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).getLongVersionCode();
@@ -107,7 +108,9 @@ public class ReconnectManagerFix extends XposedModule {
             editor.putString("timer_settimeout_method", "");
             editor.putString("timer_alarm_type_property", "");
             editor.apply();
+            printLog("正在更新hook位置");
             findAndUpdateHookTarget(sharedPreferences);
+            return;
         }
         if (!sharedPreferences.getString("gms_version", "").equals(versionName) ) {
             printLog("gms已更新: " + sharedPreferences.getString("gms_version", "") + "(" + sharedPreferences.getLong("gms_version_code", 0) + ")" + "->" + versionName + "(" +versionCode + ")");
@@ -116,12 +119,19 @@ public class ReconnectManagerFix extends XposedModule {
             editor.putLong("gms_version_code", versionCode);
             editor.putBoolean("enable", false);
             editor.apply();
+            printLog("正在更新hook位置");
             findAndUpdateHookTarget(sharedPreferences);
+            return;
         }
         if (!sharedPreferences.getBoolean("enable", false)) {
             printLog("当前配置文件enable标识为false，FCMFIX退出");
             return;
         }
+        startHook();
+    }
+
+    protected void startHook() throws Exception {
+        final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         printLog("timer_class: "+ sharedPreferences.getString("timer_class", ""));
         printLog("timer_alarm_type_property: "+ sharedPreferences.getString("timer_alarm_type_property", ""));
         printLog("timer_settimeout_method: "+ sharedPreferences.getString("timer_settimeout_method", ""));
@@ -236,73 +246,60 @@ public class ReconnectManagerFix extends XposedModule {
             if ("com.kooritea.fcmfix.log".equals(action)) {
                 try{
                     XposedHelpers.callStaticMethod(GcmChimeraService,GcmChimeraServiceLogMethodName , new Class<?>[]{String.class, Object[].class}, "[fcmfix] " + intent.getStringExtra("text"), null);
-                }catch (Exception e){
+                }catch (Throwable e){
                     XposedBridge.log("输出日志到fcm失败： "+"[fcmfix] " + intent.getStringExtra("text"));
                 }
             }
         }
     };
 
-    private void findAndUpdateHookTarget(SharedPreferences sharedPreferences){
-        this.sendUpdateNotification("自动寻找hook点功能未适配");
-        return;
-//        SharedPreferences.Editor editor = sharedPreferences.edit();
-//        printLog("开始自动寻找hook点");
-//        try{
-//            Class<?> heartbeatChimeraAlarm =  XposedHelpers.findClass("com.google.android.gms.gcm.connection.HeartbeatChimeraAlarm",loadPackageParam.classLoader);
-//            for(Constructor<?> heartbeatChimeraAlarmConstructor : heartbeatChimeraAlarm.getConstructors()){
-//                String timerClass = "";
-//                String timerNextTimeProperty = "";
-//                String timerAlarmTypeProperty = "";
-//                String timerSettimeoutMethod = "";
-//                for(Class<?> paramClazz : heartbeatChimeraAlarmConstructor.getParameterTypes()){
-//                    timerClass = "";
-//                    timerNextTimeProperty = "";
-//                    timerAlarmTypeProperty = "";
-//                    timerSettimeoutMethod = "";
-//                    for(Field field : paramClazz.getDeclaredFields()){
-//                        if(field.getType() == Intent.class&& Modifier.isPrivate(field.getModifiers())){
-//                            timerAlarmTypeProperty = field.getName();
-//                        }
-//                        if(field.getType() == long.class && Modifier.isPrivate(field.getModifiers())){
-//                            timerNextTimeProperty = field.getName();
-//                        }
-//                        if(!"".equals(timerNextTimeProperty) && !"".equals(timerAlarmTypeProperty)){
-//                            break;
-//                        }
-//                    }
-//                    for(Method method : paramClazz.getMethods()){
-//                        if(method.getParameterTypes().length == 1 && method.getParameterTypes()[0] == long.class && Modifier.isFinal(method.getModifiers()) && Modifier.isPublic(method.getModifiers())){
-//                            timerSettimeoutMethod = method.getName();
-//                            break;
-//                        }
-//                    }
-//                    if(!"".equals(timerNextTimeProperty) && !"".equals(timerAlarmTypeProperty) && !"".equals(timerSettimeoutMethod)){
-//                        timerClass = paramClazz.getName();
-//                        break;
-//                    }
-//                }
-//                if(!"".equals(timerNextTimeProperty) && !"".equals(timerAlarmTypeProperty) && !"".equals(timerSettimeoutMethod) && !"".equals(timerClass)){
-//                    editor.putBoolean("enable", true);
-//                    editor.putString("timer_class", timerClass);
-//                    editor.putString("timer_settimeout_method", timerSettimeoutMethod);
-//                    editor.putString("timer_next_time_property", timerNextTimeProperty);
-//                    editor.putString("timer_alarm_type_property", timerAlarmTypeProperty);
-//                    this.sendUpdateNotification("自动更新配置文件成功");
-//                    break;
-//                }
-//            }
-//            editor.apply();
-//            if(!sharedPreferences.getBoolean("enable", false)){
-//                printLog("自动寻找hook点失败");
-//                this.sendUpdateNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
-//            }
-//        }catch (Exception e){
-//            editor.putBoolean("enable", false);
-//            printLog("自动寻找hook点失败"+e.getMessage());
-//            this.sendUpdateNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
-//            e.printStackTrace();
-//            editor.apply();
-//        }
+    private void findAndUpdateHookTarget(final SharedPreferences sharedPreferences){
+        final SharedPreferences.Editor editor = sharedPreferences.edit();
+        try{
+            Class<?> heartbeatChimeraAlarm =  XposedHelpers.findClass("com.google.android.gms.gcm.connection.HeartbeatChimeraAlarm",loadPackageParam.classLoader);
+            final Class<?> timerClass = heartbeatChimeraAlarm.getConstructors()[0].getParameterTypes()[3];
+            editor.putString("timer_class", timerClass.getName());
+            for(Method method : timerClass.getDeclaredMethods()){
+                if(method.getParameterTypes().length == 1 && method.getParameterTypes()[0] == long.class && Modifier.isFinal(method.getModifiers()) && Modifier.isPublic(method.getModifiers())){
+                    editor.putString("timer_settimeout_method", method.getName());
+                    break;
+                }
+            }
+            for(final Field timerClassField : timerClass.getDeclaredFields()){
+                if(Modifier.isFinal(timerClassField.getModifiers()) && Modifier.isPublic(timerClassField.getModifiers())){
+                    final Class<?> alarmClass = timerClassField.getType();
+                    final Boolean[] isFinish = {false};
+                    XposedHelpers.findAndHookConstructor(alarmClass, Context.class, int.class, String.class, String.class, String.class, String.class, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
+                            if(isFinish[0] != true){
+                                for(Field field : alarmClass.getDeclaredFields()){
+                                    if(field.getType() == String.class && Modifier.isFinal(field.getModifiers()) && Modifier.isPrivate(field.getModifiers())){
+                                        if(param.args[2] != null && XposedHelpers.getObjectField(param.thisObject, field.getName()) == param.args[2]){
+                                            SharedPreferences.Editor editor = sharedPreferences.edit();
+                                            editor.putString("timer_alarm_type_property", timerClassField.getName() + "." + field.getName());
+                                            editor.apply();
+                                            isFinish[0] = true;
+                                            printLog("更新hook位置成功");
+                                            sendUpdateNotification("自动更新配置文件成功");
+                                            startHook();
+                                            return;
+                                        }
+                                    }
+                                }
+                                printLog("自动寻找hook点失败: 未找到目标方法");
+                            }
+                        }
+                    });
+                    break;
+                }
+            }
+        }catch (Throwable e){
+            editor.putBoolean("enable", false);
+            printLog("自动寻找hook点失败"+e.getMessage());
+            this.sendUpdateNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
+            e.printStackTrace();
+        }
+        editor.apply();
     }
 }
