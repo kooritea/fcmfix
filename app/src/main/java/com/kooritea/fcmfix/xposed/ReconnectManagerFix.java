@@ -278,6 +278,7 @@ public class ReconnectManagerFix extends XposedModule {
                                         if(param.args[2] != null && XposedHelpers.getObjectField(param.thisObject, field.getName()) == param.args[2]){
                                             SharedPreferences.Editor editor = sharedPreferences.edit();
                                             editor.putString("timer_alarm_type_property", timerClassField.getName() + "." + field.getName());
+                                            editor.putBoolean("enable", true);
                                             editor.apply();
                                             isFinish[0] = true;
                                             printLog("更新hook位置成功");
