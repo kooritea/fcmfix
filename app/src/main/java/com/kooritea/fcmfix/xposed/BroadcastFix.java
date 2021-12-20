@@ -35,9 +35,12 @@ public class BroadcastFix extends XposedModule {
                     if(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q){
                         intent_args_index = 2;
                         appOp_args_index = 9;
-                    }else if(Build.VERSION.SDK_INT > Build.VERSION_CODES.Q){
+                    }else if(Build.VERSION.SDK_INT == Build.VERSION_CODES.R){
                         intent_args_index = 3;
                         appOp_args_index = 10;
+                    }else if(Build.VERSION.SDK_INT == 31){
+                        intent_args_index = 3;
+                        appOp_args_index = 11;
                     }
                     Intent intent = (Intent) methodHookParam.args[intent_args_index];
                     if(intent != null && intent.getPackage() != null && intent.getFlags() != Intent.FLAG_INCLUDE_STOPPED_PACKAGES && "com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
