@@ -14,27 +14,32 @@ public class MiuiLocalNotificationFix extends XposedModule  {
     }
 
     protected void startHook(){
-        Class<?> clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceInjector",loadPackageParam.classLoader);
-        final Method[] declareMethods = clazz.getDeclaredMethods();
-        Method targetMethod = null;
-        for(Method method : declareMethods){
-            if(method.getName().equals("isAllowLocalNotification")){
-                targetMethod = method;
-                break;
-            }
-        }
-        if(targetMethod != null){
-            XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
-                    if(targetIsAllow((String)methodHookParam.args[3])){
-                        methodHookParam.setResult(true);
-                        printLog("Allow LocalNotification " + methodHookParam.args[3]);
-                    }
+        try{
+            Class<?> clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceInjector",loadPackageParam.classLoader);
+            final Method[] declareMethods = clazz.getDeclaredMethods();
+            Method targetMethod = null;
+            for(Method method : declareMethods){
+                if(method.getName().equals("isAllowLocalNotification")){
+                    targetMethod = method;
+                    break;
                 }
-            });
-        }else{
+            }
+            if(targetMethod != null){
+                XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+                        if(targetIsAllow((String)methodHookParam.args[3])){
+                            methodHookParam.setResult(true);
+                            printLog("Allow LocalNotification " + methodHookParam.args[3]);
+                        }
+                    }
+                });
+            }else{
+                printLog("Not found isAllowLocalNotification in com.android.server.notification.NotificationManagerServiceInjector");
+            }
+        }catch (XposedHelpers.ClassNotFoundError e){
             printLog("Not found isAllowLocalNotification in com.android.server.notification.NotificationManagerServiceInjector");
         }
+
     }
 }

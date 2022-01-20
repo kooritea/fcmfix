@@ -221,7 +221,7 @@ public class ReconnectManagerFix extends XposedModule {
         Intent intent = new Intent(Intent.ACTION_VIEW);
         intent.setClassName("com.google.android.gms","com.google.android.gms.gcm.GcmDiagnostics");
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        builder.setContentIntent(PendingIntent.getActivity(context,0,intent,PendingIntent.FLAG_UPDATE_CURRENT));
+        builder.setContentIntent(PendingIntent.getActivity(context,0,intent,PendingIntent.FLAG_IMMUTABLE));
         notificationManager.notify((int) System.currentTimeMillis(), builder.build());
     }
 
