@@ -28,6 +28,8 @@ fcmfix的主要目的就是为了让即使不在后台的app也能顺利接收�
 
 从0.4.0开始已经不再需要，感谢来自 @MinaMichita 的方法 [https://blog.minamigo.moe/archives/747](https://blog.minamigo.moe/archives/747)
 
+miui13国内版 还是需要打开目标应用自启动权限中的允许系统唤醒权限
+
 ---
 
 ## Lsposed
