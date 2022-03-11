@@ -24,6 +24,7 @@ public abstract class XposedModule {
     protected static Context context = null;
     private static ArrayList<XposedModule> instances = new ArrayList();
     private static Boolean isInitUpdateConfigReceiver = false;
+    private static Thread loadConfigThread = null;
 
     protected XposedModule(final XC_LoadPackage.LoadPackageParam loadPackageParam) {
         this.loadPackageParam = loadPackageParam;
@@ -125,10 +126,20 @@ public abstract class XposedModule {
     }
 
     private static void onUpdateConfig(){
-        ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
-        allowList = contentProviderHelper.getStringSet("allowList");
-        if(allowList != null){
-            printLog( "onUpdateConfig allowList size: " + allowList.size());
+        if(loadConfigThread == null){
+            loadConfigThread = new Thread(){
+                @Override
+                public void run() {
+                    super.run();
+                    ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
+                    allowList = contentProviderHelper.getStringSet("allowList");
+                    if(allowList != null){
+                        printLog( "onUpdateConfig allowList size: " + allowList.size());
+                    }
+                    loadConfigThread = null;
+                }
+            };
+            loadConfigThread.start();
         }
     }
 
