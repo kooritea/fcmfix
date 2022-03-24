@@ -5,7 +5,7 @@
 - 允许fcm唤醒选中的应用来发送通知
 - 解除miui12对后台应用的通知限制(非miui系统没影响)(仅作用于在fcmfix中选中的应用)
 - 修复在国内网络下出现重连服务出现负数问题(貌似是miui优化的问题)
-- 固定心跳间隔(默认117s,更改需要编辑配置文件/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml)
+- 固定心跳间隔(默认不开启,更改需要编辑配置文件/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml，最小值为1000L)
 
 ---
 
@@ -24,11 +24,7 @@ fcmfix的主要目的就是为了让即使不在后台的app也能顺利接收�
 
 ## 注意
 
-~~在国内版miui上，除了在本应用中勾选目标应用之外，还要给予目标应用自启动权限中的允许系统唤醒权限(eu版和国际版则不需要给自启动权限)~~
-
-从0.4.0开始已经不再需要，感谢来自 @MinaMichita 的方法 [https://blog.minamigo.moe/archives/747](https://blog.minamigo.moe/archives/747)
-
-miui13国内版 还是需要打开目标应用自启动权限中的允许系统唤醒权限
+miui13 需要给目标应用自启动权限(因为我没有miui13的机器所以没适配)
 
 ---
 
@@ -39,7 +35,7 @@ miui13国内版 还是需要打开目标应用自启动权限中的允许系统�
 ---
 
 ## SafetyNet 和 Widevine DRM等级
-这个模块一般不会影响这两个检测，我的安卓11、miui12、magisk hide勾选gms、lsposed    
+这个模块一般不会影响这两个检测，我的安卓11、miui12.5、magisk hide勾选gms、lsposed    
 安装了fcmfix之后能够通过SafetyNet检测且Widevine DRM等级为L1。  
 SafetyNet不通过请检查有没有科学上网
 

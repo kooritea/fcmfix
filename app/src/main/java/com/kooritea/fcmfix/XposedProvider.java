@@ -2,20 +2,23 @@ package com.kooritea.fcmfix;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 
 public class XposedProvider extends ContentProvider {
 
@@ -48,18 +51,37 @@ public class XposedProvider extends ContentProvider {
     @Override
     public Cursor query(@NonNull Uri uri, @Nullable String[] projection, @Nullable String selection, @Nullable String[] selectionArgs, @Nullable String sortOrder) {
         //这里填写查询逻辑
-        SharedPreferences sharedPreferences = getContext().getSharedPreferences("config", Context.MODE_PRIVATE);
+        JSONObject config = new JSONObject();
+        try {
+            FileInputStream fis = getContext().openFileInput("config.json");
+            InputStreamReader inputStreamReader = new InputStreamReader(fis, StandardCharsets.UTF_8);
+            StringBuilder stringBuilder = new StringBuilder();
+            BufferedReader reader = new BufferedReader(inputStreamReader);
+            String line = reader.readLine();
+            while (line != null) {
+                stringBuilder.append(line).append('\n');
+                line = reader.readLine();
+            }
+            config = new JSONObject(stringBuilder.toString());
+        } catch (IOException | JSONException e) {
+            e.printStackTrace();
+        }
         String[] COLUMN_NAME = { "key", "value" };
         MatrixCursor data = new MatrixCursor(COLUMN_NAME);
-        switch (selection){
-            case "heartbeatInterval":
-                data.addRow(new Object[]{"heartbeatInterval",sharedPreferences.getLong("heartbeatInterval",117000L)});
-                break;
-            case "allowList":
-                for(String item : sharedPreferences.getStringSet("allowList",new HashSet<String>())){
-                    data.addRow(new Object[]{"allowList",item});
-                }
-                break;
+        try{
+            switch (selection){
+                case "heartbeatInterval":
+                    data.addRow(new Object[]{"heartbeatInterval", config.isNull("heartbeatInterval") ? config.getLong("heartbeatInterval") : 0L});
+                    break;
+                case "allowList":
+                    JSONArray jsonAllowList = config.getJSONArray("allowList");
+                    for(int i = 0; i < jsonAllowList.length(); i++){
+                        data.addRow(new Object[]{"allowList",jsonAllowList.getString(i)});
+                    }
+                    break;
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
         }
         return data;
     }

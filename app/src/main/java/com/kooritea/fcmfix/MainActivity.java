@@ -6,7 +6,6 @@ import android.annotation.SuppressLint;
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -25,6 +24,17 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,14 +44,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 
-import java.util.Objects;
 import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
     private AppListAdapter appListAdapter;
-    SharedPreferences sharedPreferences;
-    SharedPreferences.Editor sharedPreferencesEditor;
-    Set<String> allowList;
+    Set<String> allowList = new HashSet<String>();
+    JSONObject config = new JSONObject();
 
     private class AppInfo {
         public String name;
@@ -143,14 +151,31 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @SuppressLint({"WrongConstant", "CommitPrefEdits"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        this.sharedPreferences = this.getSharedPreferences("config",Context.MODE_PRIVATE);
-        this.sharedPreferencesEditor = this.sharedPreferences.edit();
-        this.allowList = new HashSet<>(Objects.requireNonNull(this.sharedPreferences.getStringSet("allowList", new HashSet<String>())));
+        try {
+            FileInputStream fis = this.openFileInput("config.json");
+            InputStreamReader inputStreamReader = new InputStreamReader(fis, StandardCharsets.UTF_8);
+            StringBuilder stringBuilder = new StringBuilder();
+            BufferedReader reader = new BufferedReader(inputStreamReader);
+            String line = reader.readLine();
+            while (line != null) {
+                stringBuilder.append(line).append('\n');
+                line = reader.readLine();
+            }
+            this.config = new JSONObject(stringBuilder.toString());
+            JSONArray jsonAllowList = this.config.getJSONArray("allowList");
+            for(int i = 0; i < jsonAllowList.length(); i++){
+                this.allowList.add(jsonAllowList.getString(i));
+            }
+            if(this.config.isNull("heartbeatInterval")){
+                this.config.put("heartbeatInterval", "0L");
+            }
+        } catch (IOException | JSONException e) {
+            e.printStackTrace();
+        }
         final ListView listView = findViewById(R.id.listView);
         this.appListAdapter = new AppListAdapter(this);
         listView.setAdapter(this.appListAdapter);
@@ -181,8 +206,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateAllowList(){
-        this.sharedPreferencesEditor.putStringSet("allowList",this.allowList);
-        this.sharedPreferencesEditor.commit();
+        try {
+            FileOutputStream fos = this.openFileOutput("config.json", Context.MODE_PRIVATE);
+            this.config.put("allowList", new JSONArray(this.allowList));
+            fos.write(this.config.toString(2).getBytes());
+        } catch (IOException | JSONException e) {
+            e.printStackTrace();
+        }
         this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
     }
 }
