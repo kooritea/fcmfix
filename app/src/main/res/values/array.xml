@@ -3,5 +3,6 @@
     <string-array name="xposed_scope">
         <item>android</item>
         <item>com.google.android.gms</item>
+        <item>com.miui.powerkeeper</item>
     </string-array>
 </resources>

@@ -3,6 +3,7 @@ package com.kooritea.fcmfix;
 import com.kooritea.fcmfix.xposed.AutoStartFix;
 import com.kooritea.fcmfix.xposed.BroadcastFix;
 import com.kooritea.fcmfix.xposed.MiuiLocalNotificationFix;
+import com.kooritea.fcmfix.xposed.PowerkeeperFix;
 import com.kooritea.fcmfix.xposed.ReconnectManagerFix;
 
 import java.io.File;
@@ -32,7 +33,10 @@ public class XposedMain implements IXposedHookLoadPackage {
             XposedBridge.log("[fcmfix] start hook com.google.android.gms");
             new ReconnectManagerFix(loadPackageParam);
         }
-
+        if(loadPackageParam.packageName.equals("com.miui.powerkeeper") && loadPackageParam.isFirstApplication){
+            XposedBridge.log("[fcmfix] start hook com.miui.powerkeeper");
+            new PowerkeeperFix(loadPackageParam);
+        }
     }
     private boolean fileIsExists(String strFile) {
         try {
