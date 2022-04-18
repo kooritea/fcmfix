@@ -1,4 +1,4 @@
-# fcmfix(Android 10 & 11 & 12？)
+# fcmfix(Android 10 & 11 & 12 & 12L )
 
 使用xposed让被完全停止的应用响应fcm，让fcm送达率达到100%，不错过任何通知  
 
@@ -45,6 +45,7 @@ SafetyNet不通过请检查有没有科学上网
 > 一般是你用了mt管理器那个编辑器的问题,可以尝试修改完后删除那个.bak后缀的文件，或者在设置中关闭生成bak文件，或者换一个编辑器 https://play.google.com/store/apps/details?id=in.mfile
 
 ### 2、遇到国内版锁屏后连接自动断开的问题请尝试使用针对国内版开发的版本
-[https://blog.minamigo.moe/archives/747](https://blog.minamigo.moe/archives/747)
+
+> 请用0.4.7或以上版本
 
 

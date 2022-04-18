@@ -1,25 +1,15 @@
 package com.kooritea.fcmfix.xposed;
 
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.SystemClock;
-import androidx.core.app.NotificationCompat;
-import com.kooritea.fcmfix.R;
 import com.kooritea.fcmfix.util.XposedUtils;
-
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import de.robv.android.xposed.XC_MethodHook;
@@ -27,7 +17,6 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
-import static android.content.Context.NOTIFICATION_SERVICE;
 
 public class ReconnectManagerFix extends XposedModule {
 
@@ -200,44 +189,6 @@ public class ReconnectManagerFix extends XposedModule {
                 }
             }
         });
-    }
-
-    private void sendUpdateNotification(String title) {
-        sendUpdateNotification(title,null);
-    }
-
-    private void sendUpdateNotification(String title, String content) {
-        printLog(title);
-        title = "[fcmfix]" + title;
-        NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
-        this.createFcmfixChannel(notificationManager);
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, "fcmfix");
-        builder.setSmallIcon(R.mipmap.ic_launcher);
-        builder.setAutoCancel(true);
-        builder.setContentTitle(title);
-        if(content != null){
-            builder.setStyle(new NotificationCompat.BigTextStyle().bigText(content));
-        }
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setClassName("com.google.android.gms","com.google.android.gms.gcm.GcmDiagnostics");
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        builder.setContentIntent(PendingIntent.getActivity(context,0,intent,PendingIntent.FLAG_IMMUTABLE));
-        notificationManager.notify((int) System.currentTimeMillis(), builder.build());
-    }
-
-    private void createFcmfixChannel(NotificationManager notificationManager) {
-        List<NotificationChannel> channelList = notificationManager.getNotificationChannels();
-        for (NotificationChannel item : channelList) {
-            if (item.getId() == "fcmfix") {
-                item.setName("fcmfix");
-                item.setImportance(NotificationManager.IMPORTANCE_HIGH);
-                item.setDescription("fcmfix");
-                return;
-            }
-        }
-        NotificationChannel channel = new NotificationChannel("fcmfix", "fcmfix", NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("[xposed] fcmfix更新通知");
-        notificationManager.createNotificationChannel(channel);
     }
 
     private BroadcastReceiver logBroadcastReceive = new BroadcastReceiver() {

@@ -12,6 +12,10 @@ public class BroadcastFix extends XposedModule {
 
     public BroadcastFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
+    }
+
+    @Override
+    protected void onCanReadConfig() {
         this.startHook();
     }
 
@@ -41,6 +45,12 @@ public class BroadcastFix extends XposedModule {
                     }else if(Build.VERSION.SDK_INT == 31){
                         intent_args_index = 3;
                         appOp_args_index = 11;
+                    }else if(Build.VERSION.SDK_INT == 32){
+                        intent_args_index = 3;
+                        appOp_args_index = 11;
+                    }else{
+                        sendUpdateNotification("未适配的安卓版本: " + Build.VERSION.SDK_INT, "fcmfix将不会工作");
+                        return;
                     }
                     Intent intent = (Intent) methodHookParam.args[intent_args_index];
                     if(intent != null && intent.getPackage() != null && intent.getFlags() != Intent.FLAG_INCLUDE_STOPPED_PACKAGES && "com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
