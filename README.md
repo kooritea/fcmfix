@@ -5,9 +5,8 @@
 - 允许fcm唤醒选中的应用来发送通知
 - 解除miui12对后台应用的通知限制(非miui系统没影响)(仅作用于在fcmfix中选中的应用)
 - 修复在国内网络下出现重连服务出现负数问题(貌似是miui优化的问题)
-- 固定心跳间隔(默认不开启,更改需要编辑配置文件/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml，最小值为1000L)
+- 固定心跳间隔(默认不开启,更改需要编辑配置文件/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml，最小值为1000)
 - 国内版miui电量和性能伪装为国际版，防止锁屏fcm断线
-
 ---
 
 这个模块并不是为了让不能使用fcm的机器使用fcm，而是在能正常使用fcm的机器上进行改造。  
