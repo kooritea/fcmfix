@@ -84,6 +84,7 @@ public abstract class XposedModule {
     protected static void printLog(String text){
         Intent log = new Intent("com.kooritea.fcmfix.log");
         log.putExtra("text",text);
+        XposedBridge.log("[fcmfix] "+ text);
         try{
             context.sendBroadcast(log);
         }catch (Exception e){
