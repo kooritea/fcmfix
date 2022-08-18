@@ -32,6 +32,10 @@ public class BroadcastFix extends XposedModule {
             }
         }
         if(targetMethod != null){
+            if(Build.VERSION.SDK_INT < Build.VERSION_CODES.P){
+                printLog("不支持的安卓版本(<9)，fcmfix将不会工作。");
+                return;
+            }
             int intent_args_index = 0;
             int appOp_args_index = 0;
             Parameter[] parameters = targetMethod.getParameters();
@@ -60,8 +64,14 @@ public class BroadcastFix extends XposedModule {
                 if(parameters[12].getType() == int.class){
                     appOp_args_index = 12;
                 }
+            }else if(Build.VERSION.SDK_INT == 33){
+                intent_args_index = 3;
+                appOp_args_index = 12;
             }
             if(intent_args_index == 0 || appOp_args_index == 0){
+                intent_args_index = 0;
+                appOp_args_index = 0;
+                // 根据参数名称查找，部分经过混淆的系统无效
                 for(int i = 0; i < parameters.length; i++){
                     if(parameters[i].getName() == "appOp" && parameters[i].getType() == int.class){
                         appOp_args_index = i;
@@ -69,6 +79,38 @@ public class BroadcastFix extends XposedModule {
                     if(parameters[i].getName() == "intent" && parameters[i].getType() == Intent.class){
                         intent_args_index = i;
                     }
+                }
+            }
+            if(intent_args_index == 0 || appOp_args_index == 0){
+                intent_args_index = 0;
+                appOp_args_index = 0;
+                // 尝试用最后一个版本
+                if(parameters[3].getType() == Intent.class && parameters[12].getType() == int.class){
+                    intent_args_index = 3;
+                    appOp_args_index = 12;
+                    printLog("未适配的安卓版本，正在使用最后一个适配的安卓版本的配置，可能会出现工作异常。");
+                }
+            }
+            if(intent_args_index == 0 || appOp_args_index == 0){
+                intent_args_index = 0;
+                appOp_args_index = 0;
+                for(int i = 0; i < parameters.length; i++){
+                    // 从最后一个适配的版本的位置左右查找appOp的位置
+                    if(Math.abs(12-i) < 2 && parameters[i].getType() == int.class){
+                        appOp_args_index = i;
+                    }
+                    // 唯一一个Intent参数的位置
+                    if(parameters[i].getType() == Intent.class){
+                        if(intent_args_index != 0){
+                            printLog("查找到多个Intent，停止查找hook位置。");
+                            intent_args_index = 0;
+                            break;
+                        }
+                        intent_args_index = i;
+                    }
+                }
+                if(intent_args_index != 0 && appOp_args_index != 0){
+                    printLog("当前hook位置通过模糊查找得出，fcmfix可能不会正常工作。");
                 }
             }
             printLog("Android API: " + Build.VERSION.SDK_INT);

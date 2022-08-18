@@ -7,8 +7,8 @@ android {
         applicationId "com.kooritea.fcmfix"
         minSdkVersion 28
         targetSdkVersion 30
-        versionCode 30
-        versionName "0.4.10"
+        versionCode 31
+        versionName "0.4.11"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
