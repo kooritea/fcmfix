@@ -15,30 +15,36 @@ public class MiuiLocalNotificationFix extends XposedModule  {
 
     protected void startHook(){
         try{
-            Class<?> clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceInjector",loadPackageParam.classLoader);
+            Class<?> clazz;
+            try{
+                clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceInjector",loadPackageParam.classLoader);
+            } catch (XposedHelpers.ClassNotFoundError e) {
+                clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceImpl",loadPackageParam.classLoader);
+            }
             final Method[] declareMethods = clazz.getDeclaredMethods();
             Method targetMethod = null;
             for(Method method : declareMethods){
-                if(method.getName().equals("isAllowLocalNotification")){
+                if(method.getName().equals("isAllowLocalNotification") || method.getName().equals("isDeniedLocalNotification")){
                     targetMethod = method;
                     break;
                 }
             }
             if(targetMethod != null){
+                Method finalTargetMethod = targetMethod;
                 XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
                         if(targetIsAllow((String)methodHookParam.args[3])){
-                            methodHookParam.setResult(true);
+                            methodHookParam.setResult(finalTargetMethod.getName().equals("isAllowLocalNotification"));
                             printLog("Allow LocalNotification " + methodHookParam.args[3]);
                         }
                     }
                 });
             }else{
-                printLog("Not found isAllowLocalNotification in com.android.server.notification.NotificationManagerServiceInjector");
+                printLog("Not found [isAllowLocalNotification/isDeniedLocalNotification] in com.android.server.notification.[NotificationManagerServiceInjector/NotificationManagerServiceImpl]");
             }
         }catch (XposedHelpers.ClassNotFoundError e){
-            printLog("Not found isAllowLocalNotification in com.android.server.notification.NotificationManagerServiceInjector");
+            printLog("Not found [isAllowLocalNotification/isDeniedLocalNotification] in com.android.server.notification.[NotificationManagerServiceInjector/NotificationManagerServiceImpl]");
         }
 
     }
