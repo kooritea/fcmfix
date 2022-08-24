@@ -17,11 +17,21 @@ public class AutoStartFix extends XposedModule {
 
     protected void startHook(){
         try{
-            final Class<?> BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueInjector",loadPackageParam.classLoader);
+            Class<?> BroadcastQueueInjector;
+            try {
+                BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueInjector",loadPackageParam.classLoader);
+            } catch (XposedHelpers.ClassNotFoundError e) {
+                BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueImpl",loadPackageParam.classLoader);
+            }
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueInjector,"checkApplicationAutoStart",new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) throws Throwable {
-                    Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[2],"intent");
+                    Intent intent;
+                    try {
+                        intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[2], "intent");
+                    } catch (NoSuchFieldError e) {
+                        intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
+                    }
                     if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
                         String target;
                         if (intent.getComponent() != null) {
@@ -37,7 +47,7 @@ public class AutoStartFix extends XposedModule {
                 }
             });
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
+            printLog("No Such Method com.android.server.am.[BroadcastQueueInjector/BroadcastQueueImpl].checkApplicationAutoStart");
         }
     }
 }
