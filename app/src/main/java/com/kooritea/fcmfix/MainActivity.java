@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.annotation.SuppressLint;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -15,6 +16,8 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -214,5 +217,33 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
         this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu (Menu menu){
+        MenuItem isShowLauncherIconMenuItem = menu.add("隐藏启动器图标");
+        isShowLauncherIconMenuItem.setCheckable(true);
+        return true;
+    }
+
+    @Override
+    public final boolean onPrepareOptionsMenu(Menu menu) {
+        MenuItem isShowLauncherIconMenuItem = menu.getItem(0);
+        PackageManager packageManager = getPackageManager();
+        isShowLauncherIconMenuItem.setChecked(packageManager.getComponentEnabledSetting(new ComponentName("com.kooritea.fcmfix", "com.kooritea.fcmfix.Home")) == packageManager.COMPONENT_ENABLED_STATE_DISABLED);
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+    @Override
+    public final boolean onOptionsItemSelected(MenuItem menuItem) {
+        if(menuItem.getTitle().equals("隐藏启动器图标")){
+            PackageManager packageManager = getPackageManager();
+            packageManager.setComponentEnabledSetting(
+                    new ComponentName("com.kooritea.fcmfix", "com.kooritea.fcmfix.Home"),
+                    menuItem.isChecked() ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+            );
+        }
+        return true;
     }
 }
