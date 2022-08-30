@@ -37,6 +37,21 @@ public class XposedUtils {
         return XposedBridge.hookMethod(XposedHelpers.findConstructorExact(clazz,bestMatch.getParameterTypes()), callbacks);
     }
 
+    public static XC_MethodHook.Unhook findAndHookMethodMostParam(Class<?> clazz, String methodName, XC_MethodHook callbacks){
+        Method bestMatch = null;
+        for(Method method : clazz.getDeclaredMethods()){
+            if(methodName.equals(method.getName())){
+                if(bestMatch == null || method.getParameterTypes().length > bestMatch.getParameterTypes().length){
+                    bestMatch = method;
+                }
+            }
+        }
+        if(bestMatch == null){
+            throw new NoSuchMethodError(clazz.getName() + '#' + methodName);
+        }
+        return XposedBridge.hookMethod(XposedHelpers.findMethodExact(clazz,methodName,bestMatch.getParameterTypes()), callbacks);
+    }
+
     public static XC_MethodHook.Unhook findAndHookMethodAnyParam(Class<?> clazz, String methodName, XC_MethodHook callbacks, Object ...parameterTypes){
         Method bestMatch = null;
         int matchCount = 0;
