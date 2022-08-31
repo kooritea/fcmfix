@@ -64,7 +64,7 @@ public class AutoStartFix extends XposedModule {
                             target = intent.getPackage();
                         }
                         if(targetIsAllow(target)){
-                            XposedHelpers.callStaticMethod(BroadcastQueueImpl,"checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
+                            XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
                             methodHookParam.setResult(true);
                             printLog("Allow Auto Start: " + target);
                         }
