@@ -24,7 +24,8 @@
             android:id="@+id/icon"
             android:layout_width="50dp"
             android:layout_height="50dp"
-            android:paddingRight="10dp" />
+            android:paddingRight="10dp"
+            tools:src="@tools:sample/avatars" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -37,9 +38,19 @@
 
                 <TextView
                     android:id="@+id/name"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="18sp" />
+                    android:textSize="18sp"
+                    tools:text="fcmfix" />
+
+                <TextView
+                    android:id="@+id/includeFcm"
+                    android:layout_marginStart="5dp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="@android:color/darker_gray"
+                    android:text="包含 FCM" />
             </LinearLayout>
 
             <LinearLayout
@@ -50,7 +61,8 @@
                     android:id="@+id/packageName"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="14sp" />
+                    android:textSize="14sp"
+                    tools:text="com.kooritea.fcmfix"/>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

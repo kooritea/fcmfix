@@ -1,31 +1,29 @@
 package com.kooritea.fcmfix;
 
-import androidx.appcompat.app.AppCompatActivity;
-
-import android.annotation.SuppressLint;
-
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-
 import android.graphics.drawable.Drawable;
-
 import android.os.Bundle;
-
+import android.os.Handler;
+import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.BaseAdapter;
 import android.widget.CheckBox;
 import android.widget.ImageView;
-import android.widget.ListView;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -33,20 +31,16 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.Collator;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-
 import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
@@ -59,6 +53,7 @@ public class MainActivity extends AppCompatActivity {
         public String packageName;
         public Drawable icon;
         public Boolean isAllow = false;
+        public Boolean includeFcm = false;
         public AppInfo(PackageInfo packageInfo){
             this.name = packageInfo.applicationInfo.loadLabel(getPackageManager()).toString();
             this.packageName = packageInfo.packageName;
@@ -66,11 +61,29 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private class AppListAdapter  extends BaseAdapter {
-        private List<AppInfo> appList;
-        private LayoutInflater mInflater;
-        AppListAdapter(Context context){
-            mInflater = LayoutInflater.from(context);
+    private class AppListAdapter  extends RecyclerView.Adapter<AppListAdapter.ViewHolder> {
+
+        private final List<AppInfo> mAppList;
+        class ViewHolder extends RecyclerView.ViewHolder {
+            View appView;
+            ImageView icon;
+            TextView name;
+            TextView packageName;
+            TextView includeFcm;
+            CheckBox isAllow;
+
+            public ViewHolder(View view) {
+                super(view);
+                appView = view;
+                icon = (ImageView) view.findViewById(R.id.icon);
+                name = (TextView) view.findViewById(R.id.name);
+                packageName = (TextView) view.findViewById(R.id.packageName);
+                includeFcm = (TextView) view.findViewById(R.id.includeFcm);
+                isAllow = (CheckBox) view.findViewById(R.id.isAllow);
+            }
+        }
+
+        public AppListAdapter(){
             Set<String> allowListSet = new HashSet<>(allowList);
             allowListSet.containsAll(allowList);
             List<AppInfo> _allowList = new ArrayList<>();
@@ -84,6 +97,7 @@ public class MainActivity extends AppCompatActivity {
                     for (ActivityInfo  receiverInfo : packageInfo.receivers ){
                         if(receiverInfo.name.equals("com.google.firebase.iid.FirebaseInstanceIdReceiver") || receiverInfo.name.equals("com.google.android.gms.measurement.AppMeasurementReceiver")){
                             flag = true;
+                            appInfo.includeFcm = true;
                             break;
                         }
                     }
@@ -101,63 +115,75 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             }
-            Collections.sort(_allowList, new Comparator<AppInfo>() {
+            class SortName implements Comparator<AppInfo> {
+                Collator localCompare = Collator.getInstance(Locale.getDefault());
                 @Override
-                public int compare(AppInfo o1, AppInfo o2) {
-                    return Collator.getInstance(Locale.CHINESE).compare(o1.name,o2.name);
+                public int compare(AppInfo a1, AppInfo a2) {
+                    if(localCompare.compare(a1.name,a2.name)>0){
+                        return 1;
+                    }else if (localCompare.compare(a1.name, a2.name) < 0) {
+                        return -1;
+                    }
+                    return 0;
                 }
-            });
-            Collections.sort(_notAllowList, new Comparator<AppInfo>() {
-                @Override
-                public int compare(AppInfo o1, AppInfo o2) {
-                    return Collator.getInstance(Locale.CHINESE).compare(o1.name,o2.name);
-                }
-            });
-            Collections.sort(_notFoundFcm, new Comparator<AppInfo>() {
-                @Override
-                public int compare(AppInfo o1, AppInfo o2) {
-                    return Collator.getInstance(Locale.CHINESE).compare(o1.name,o2.name);
-                }
-            });
+            }
+            final SortName sortName = new SortName();
+            _allowList.sort(sortName);
+            _notAllowList.sort(sortName);
+            _notFoundFcm.sort(sortName);
             _allowList.addAll(_notAllowList);
             _allowList.addAll(_notFoundFcm);
-            this.appList = _allowList;
+            this.mAppList = _allowList;
         }
+
+
+        @NonNull
         @Override
-        public int getCount() {
-            return appList.size();
+        public AppListAdapter.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.app_item, parent, false);
+            final ViewHolder holder = new ViewHolder(view);
+            holder.appView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    int position = holder.getBindingAdapterPosition();
+                    AppInfo appInfo = mAppList.get(position);
+                    if(appInfo.isAllow){
+                        deleteAppInAllowList(appInfo.packageName);
+                    }else{
+                        addAppInAllowList(appInfo.packageName);
+                    }
+                    appInfo.isAllow = !appInfo.isAllow;
+                    appListAdapter.notifyDataSetChanged();
+                }
+            });
+            return holder;
         }
 
         @Override
-        public AppInfo getItem(int position) {
-            return appList.get(position);
+        public void onBindViewHolder(@NonNull AppListAdapter.ViewHolder holder, int position) {
+            AppInfo appInfo = mAppList.get(position);
+            holder.icon.setImageDrawable(appInfo.icon);
+            holder.name.setText(appInfo.name);
+            holder.packageName.setText(appInfo.packageName);
+            holder.includeFcm.setVisibility(appInfo.includeFcm ? View.VISIBLE : View.GONE);
+            holder.isAllow.setChecked(appInfo.isAllow);
         }
 
         @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            AppInfo appInfo = getItem(position);
-            @SuppressLint({"InflateParams", "ViewHolder"}) View view = mInflater.inflate(R.layout.app_item,null);
-            TextView name = view.findViewById(R.id.name);
-            name.setText(appInfo.name);
-            TextView packageName = view.findViewById(R.id.packageName);
-            packageName.setText(appInfo.packageName);
-            ImageView icon = view.findViewById(R.id.icon);
-            icon.setImageDrawable(appInfo.icon);
-            CheckBox checkBox = view.findViewById(R.id.isAllow);
-            checkBox.setChecked(appInfo.isAllow);
-            return view;
+        public int getItemCount() {
+            return mAppList.size();
         }
     }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        RecyclerView recyclerView = findViewById(R.id.recycler_view);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+
         try {
             FileInputStream fis = this.openFileInput("config.json");
             InputStreamReader inputStreamReader = new InputStreamReader(fis, StandardCharsets.UTF_8);
@@ -179,24 +205,21 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException | JSONException e) {
             e.printStackTrace();
         }
-        final ListView listView = findViewById(R.id.listView);
-        this.appListAdapter = new AppListAdapter(this);
-        listView.setAdapter(this.appListAdapter);
-
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener(){
+        new Handler().postDelayed(new Runnable() {
             @Override
-            public void onItemClick(AdapterView<?> arg0, View arg1, int position, long arg3) {
-
-                AppInfo appInfo = appListAdapter.getItem(position);
-                if(appInfo.isAllow){
-                    deleteAppInAllowList(appInfo.packageName);
-                }else{
-                    addAppInAllowList(appInfo.packageName);
-                }
-                appInfo.isAllow = !appInfo.isAllow;
-                appListAdapter.notifyDataSetChanged();
+            public void run() {
+                appListAdapter = new AppListAdapter();
+                recyclerView.setAdapter(appListAdapter);
+                findViewById(R.id.progress_bar).setVisibility(View.GONE);
+                recyclerView.setVisibility(View.VISIBLE);
             }
-        });
+        }, 1000);
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(@Nullable View parent, @NonNull String name, @NonNull Context context, @NonNull AttributeSet attrs) {
+        return super.onCreateView(parent, name, context, attrs);
     }
 
     private void addAppInAllowList(String packageName){
@@ -222,6 +245,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onCreateOptionsMenu (Menu menu){
         MenuItem isShowLauncherIconMenuItem = menu.add("隐藏启动器图标");
+        menu.add("全选包含 FCM 的应用");
         isShowLauncherIconMenuItem.setCheckable(true);
         return true;
     }
@@ -231,6 +255,21 @@ public class MainActivity extends AppCompatActivity {
         MenuItem isShowLauncherIconMenuItem = menu.getItem(0);
         PackageManager packageManager = getPackageManager();
         isShowLauncherIconMenuItem.setChecked(packageManager.getComponentEnabledSetting(new ComponentName("com.kooritea.fcmfix", "com.kooritea.fcmfix.Home")) == packageManager.COMPONENT_ENABLED_STATE_DISABLED);
+
+        MenuItem selectAllAppIncludeFcmMenuItem = menu.getItem(1);
+        selectAllAppIncludeFcmMenuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem menuItem) {
+                for(AppInfo appInfo : appListAdapter.mAppList){
+                    if(appInfo.includeFcm){
+                        addAppInAllowList(appInfo.packageName);
+                        appInfo.isAllow = true;
+                    }
+                }
+                appListAdapter.notifyDataSetChanged();
+                return false;
+            }
+        });
         return super.onPrepareOptionsMenu(menu);
     }
 
