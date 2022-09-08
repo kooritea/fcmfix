@@ -2,10 +2,17 @@ package com.kooritea.fcmfix.xposed;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.os.Bundle;
 import android.os.SystemClock;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import com.kooritea.fcmfix.util.XposedUtils;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -27,6 +34,7 @@ public class ReconnectManagerFix extends XposedModule {
 
     public ReconnectManagerFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
+        this.addReConnectButton();
         this.startHookGcmServiceStart();
     }
 
@@ -253,5 +261,26 @@ public class ReconnectManagerFix extends XposedModule {
             e.printStackTrace();
         }
         editor.apply();
+    }
+
+    private void addReConnectButton(){
+        XposedHelpers.findAndHookMethod("com.google.android.gms.gcm.GcmChimeraDiagnostics", loadPackageParam.classLoader, "onCreate", Bundle.class, new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
+                ViewGroup viewGroup = ((Window)XposedHelpers.callMethod(param.thisObject, "getWindow")).getDecorView().findViewById(android.R.id.content);
+                LinearLayout linearLayout = (LinearLayout)viewGroup.getChildAt(0);
+                LinearLayout linearLayout2 = (LinearLayout)linearLayout.getChildAt(0);
+                Button button = new Button((ContextWrapper)param.thisObject);
+                button.setText("RECONNECT");
+                linearLayout2.addView(button);
+                button.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
+                        printLog("Send broadcast GCM_RECONNECT");
+                    }
+                });
+            }
+        });
     }
 }
