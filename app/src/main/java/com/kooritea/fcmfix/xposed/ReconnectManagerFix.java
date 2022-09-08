@@ -208,8 +208,11 @@ public class ReconnectManagerFix extends XposedModule {
         final SharedPreferences.Editor editor = sharedPreferences.edit();
         try{
             Class<?> heartbeatChimeraAlarm =  XposedHelpers.findClass("com.google.android.gms.gcm.connection.HeartbeatChimeraAlarm",loadPackageParam.classLoader);
-            final Class<?> timerClass = heartbeatChimeraAlarm.getConstructors()[0].getParameterTypes()[3];
+            Class<?> timerClass = heartbeatChimeraAlarm.getConstructors()[0].getParameterTypes()[3];
             editor.putString("timer_class", timerClass.getName());
+            if(timerClass.getDeclaredMethods().length == 0){
+                timerClass = timerClass.getSuperclass();
+            }
             for(Method method : timerClass.getDeclaredMethods()){
                 if(method.getParameterTypes().length == 1 && method.getParameterTypes()[0] == long.class && Modifier.isFinal(method.getModifiers()) && Modifier.isPublic(method.getModifiers())){
                     editor.putString("timer_settimeout_method", method.getName());
