@@ -88,11 +88,11 @@ public class ReconnectManagerFix extends XposedModule {
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
         long versionCode = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).getLongVersionCode();
         if(versionCode < 213916046){
-            printLog("当前为旧版GMS，请使用0.4.1版本FCMFIX，禁用重连修复功能");
+            printLog("当前为旧版GMS，请使用0.4.1版本FCMFIX，禁用重连修复功能", false);
             return;
         }
         if (!sharedPreferences.getBoolean("isInit", false) || !sharedPreferences.getString("config_version", "").equals("v2")) {
-            printLog("fcmfix_config init");
+            printLog("fcmfix_config init", false);
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putBoolean("isInit", true);
             editor.putBoolean("enable", false);
@@ -105,23 +105,23 @@ public class ReconnectManagerFix extends XposedModule {
             editor.putString("timer_settimeout_method", "");
             editor.putString("timer_alarm_type_property", "");
             editor.apply();
-            printLog("正在更新hook位置");
+            printLog("正在更新hook位置", false);
             findAndUpdateHookTarget(sharedPreferences);
             return;
         }
         if (!sharedPreferences.getString("gms_version", "").equals(versionName) ) {
-            printLog("gms已更新: " + sharedPreferences.getString("gms_version", "") + "(" + sharedPreferences.getLong("gms_version_code", 0) + ")" + "->" + versionName + "(" +versionCode + ")");
+            printLog("gms已更新: " + sharedPreferences.getString("gms_version", "") + "(" + sharedPreferences.getLong("gms_version_code", 0) + ")" + "->" + versionName + "(" +versionCode + ")", false);
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putString("gms_version", versionName);;
             editor.putLong("gms_version_code", versionCode);
             editor.putBoolean("enable", false);
             editor.apply();
-            printLog("正在更新hook位置");
+            printLog("正在更新hook位置", false);
             findAndUpdateHookTarget(sharedPreferences);
             return;
         }
         if (!sharedPreferences.getBoolean("enable", false)) {
-            printLog("当前配置文件enable标识为false，FCMFIX退出");
+            printLog("当前配置文件enable标识为false，FCMFIX退出", false);
             return;
         }
         startHook();
@@ -243,14 +243,14 @@ public class ReconnectManagerFix extends XposedModule {
                                             editor.putBoolean("enable", true);
                                             editor.apply();
                                             isFinish[0] = true;
-                                            printLog("更新hook位置成功");
+                                            printLog("更新hook位置成功", false);
                                             sendUpdateNotification("自动更新配置文件成功");
                                             startHook();
                                             return;
                                         }
                                     }
                                 }
-                                printLog("自动寻找hook点失败: 未找到目标方法");
+                                printLog("自动寻找hook点失败: 未找到目标方法", false);
                             }
                         }
                     });
@@ -259,7 +259,7 @@ public class ReconnectManagerFix extends XposedModule {
             }
         }catch (Throwable e){
             editor.putBoolean("enable", false);
-            printLog("自动寻找hook点失败"+e.getMessage());
+            printLog("自动寻找hook点失败"+e.getMessage(), false);
             this.sendUpdateNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
             e.printStackTrace();
         }

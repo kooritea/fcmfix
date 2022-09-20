@@ -24,7 +24,7 @@ public class PowerkeeperFix extends XposedModule {
                         String device = (String)XposedHelpers.callStaticMethod(XposedHelpers.findClass("android.os.SystemProperties", loadPackageParam.classLoader),"get", "ro.product.name");
                         String modDevice = (String)param.getResult();
                         if(!modDevice.endsWith("_global") && !"".equals(device) && device != null){
-                            printLog("[powerkeeper]" + device + "_global");
+                            printLog("[powerkeeper]" + device + "_global", false);
                             param.setResult(device + "_global");
                         }
                     }
@@ -33,7 +33,7 @@ public class PowerkeeperFix extends XposedModule {
             XposedHelpers.setStaticBooleanField(XposedHelpers.findClass("miui.os.Build",loadPackageParam.classLoader), "IS_INTERNATIONAL_BUILD", true);
             XposedHelpers.setStaticBooleanField(XposedHelpers.findClass("miui.os.Build",loadPackageParam.classLoader), "IS_GLOBAL_BUILD", true);
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
+            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart", false);
         }
     }
 }

@@ -47,7 +47,7 @@ public class AutoStartFix extends XposedModule {
                 }
             });
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
+            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart", false);
         }
         try{
             // miui13
@@ -72,7 +72,7 @@ public class AutoStartFix extends XposedModule {
                 }
             });
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.BroadcastQueueImpl.checkApplicationAutoStart");
+            printLog("No Such Method com.android.server.am.BroadcastQueueImpl.checkApplicationAutoStart", false);
         }
     }
 }

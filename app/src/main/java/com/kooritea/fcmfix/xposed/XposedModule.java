@@ -44,7 +44,7 @@ public abstract class XposedModule {
                 try{
                     onCanReadConfig();
                 }catch (Exception e){
-                    printLog(e.getMessage());
+                    printLog(e.getMessage(), false);
                 }
             }
         }
@@ -74,7 +74,7 @@ public abstract class XposedModule {
             try{
                 instance.onCanReadConfig();
             }catch (Exception e){
-                printLog(e.getMessage());
+                printLog(e.getMessage(), false);
             }
         }
     }
@@ -82,13 +82,21 @@ public abstract class XposedModule {
     protected void onCanReadConfig() throws Exception{};
 
     protected static void printLog(String text){
-        Intent log = new Intent("com.kooritea.fcmfix.log");
-        log.putExtra("text",text);
-        XposedBridge.log("[fcmfix] "+ text);
-        try{
-            context.sendBroadcast(log);
-        }catch (Exception e){
-            XposedBridge.log("[fcmfix] "+ text);
+        printLog(text, true);
+    }
+
+    protected static void printLog(String text, Boolean isDiagnosticsLog) {
+        if (!isDiagnosticsLog) {
+            XposedBridge.log("[fcmfix] " + text);
+        } else {
+            Intent log = new Intent("com.kooritea.fcmfix.log");
+            log.putExtra("text", text);
+
+            try {
+                context.sendBroadcast(log);
+            } catch (Exception e) {
+                XposedBridge.log("[fcmfix] " + text);
+            }
         }
     }
 
@@ -100,7 +108,7 @@ public abstract class XposedModule {
             try {
                 this.onUpdateConfig();
             } catch (Exception e) {
-                printLog("更新配置文件失败: " + e.getMessage());
+                printLog("更新配置文件失败: " + e.getMessage(), false);
             }
         }
     }
@@ -129,7 +137,7 @@ public abstract class XposedModule {
                 }
             }
         }else{
-            printLog("Allow list is not ready");
+            printLog("Allow list is not ready", false);
         }
         return false;
     }
@@ -143,7 +151,7 @@ public abstract class XposedModule {
                     ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
                     allowList = contentProviderHelper.getStringSet("allowList");
                     if(allowList != null){
-                        printLog( "onUpdateConfig allowList size: " + allowList.size());
+                        printLog( "onUpdateConfig allowList size: " + allowList.size(), false);
                     }
                     loadConfigThread = null;
                 }
@@ -174,7 +182,7 @@ public abstract class XposedModule {
     }
 
     protected void sendUpdateNotification(String title, String content) {
-        printLog(title);
+        printLog(title, false);
         title = "[fcmfix]" + title;
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
         this.createFcmfixChannel(notificationManager);
