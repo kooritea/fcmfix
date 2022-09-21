@@ -78,18 +78,23 @@ public class AutoStartFix extends XposedModule {
     }
 
     protected void startHookRemovePowerPolicy(){
-        Class<?> AutoStartManagerService = XposedHelpers.findClass("com.miui.server.smartpower.SmartPowerPolicyManager",loadPackageParam.classLoader);;
-        XposedUtils.findAndHookMethodAnyParam(AutoStartManagerService,"shouldInterceptService",new XC_MethodHook() {
+        try {
+            // MIUI13
+            Class<?> AutoStartManagerService = XposedHelpers.findClass("com.miui.server.smartpower.SmartPowerPolicyManager",loadPackageParam.classLoader);
+            XposedUtils.findAndHookMethodAnyParam(AutoStartManagerService,"shouldInterceptService",new XC_MethodHook() {
 
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                Intent service = (Intent) param.args[0];
-                if("com.google.firebase.MESSAGING_EVENT".equals(service.getAction())){
-                    printLog("Disable MIUI Intercept: " +
-                            (service.getComponent() == null ? service.getPackage() : service.getComponent().getPackageName()));
-                    param.setResult(false);
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    Intent service = (Intent) param.args[0];
+                    if("com.google.firebase.MESSAGING_EVENT".equals(service.getAction())){
+                        printLog("Disable MIUI Intercept: " +
+                                (service.getComponent() == null ? service.getPackage() : service.getComponent().getPackageName()));
+                        param.setResult(false);
+                    }
                 }
-            }
-        });
+            });
+        } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e) {
+            printLog("No Such Method com.miui.server.smartpower.SmartPowerPolicyManager.shouldInterceptService");
+        }
     }
 }
