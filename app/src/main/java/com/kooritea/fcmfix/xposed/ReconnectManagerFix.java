@@ -88,7 +88,7 @@ public class ReconnectManagerFix extends XposedModule {
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
         long versionCode = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).getLongVersionCode();
         if(versionCode < 213916046){
-            printLog("当前为旧版GMS，请使用0.4.1以上版本FCMFIX，禁用重连修复功能");
+            printLog("当前为旧版GMS，请使用0.4.1版本FCMFIX，禁用重连修复功能");
             return;
         }
         if (!sharedPreferences.getBoolean("isInit", false) || !sharedPreferences.getString("config_version", "").equals("v2")) {
