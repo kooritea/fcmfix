@@ -33,7 +33,7 @@ public class PowerkeeperFix extends XposedModule {
             XposedHelpers.setStaticBooleanField(XposedHelpers.findClass("miui.os.Build",loadPackageParam.classLoader), "IS_INTERNATIONAL_BUILD", true);
             XposedHelpers.setStaticBooleanField(XposedHelpers.findClass("miui.os.Build",loadPackageParam.classLoader), "IS_GLOBAL_BUILD", true);
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
+            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart", false);
         }
     }
 }

@@ -36,15 +36,14 @@ public class MiuiLocalNotificationFix extends XposedModule  {
                     protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
                         if(targetIsAllow((String)methodHookParam.args[3])){
                             methodHookParam.setResult(finalTargetMethod.getName().equals("isAllowLocalNotification"));
-                            printLog("Allow LocalNotification " + methodHookParam.args[3]);
                         }
                     }
                 });
             }else{
-                printLog("Not found [isAllowLocalNotification/isDeniedLocalNotification] in com.android.server.notification.[NotificationManagerServiceInjector/NotificationManagerServiceImpl]");
+                printLog("Not found [isAllowLocalNotification/isDeniedLocalNotification] in com.android.server.notification.[NotificationManagerServiceInjector/NotificationManagerServiceImpl]", false);
             }
         }catch (XposedHelpers.ClassNotFoundError e){
-            printLog("Not found [isAllowLocalNotification/isDeniedLocalNotification] in com.android.server.notification.[NotificationManagerServiceInjector/NotificationManagerServiceImpl]");
+            printLog("Not found [isAllowLocalNotification/isDeniedLocalNotification] in com.android.server.notification.[NotificationManagerServiceInjector/NotificationManagerServiceImpl]", false);
         }
 
     }

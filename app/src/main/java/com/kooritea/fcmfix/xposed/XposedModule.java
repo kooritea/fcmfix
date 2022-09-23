@@ -44,7 +44,7 @@ public abstract class XposedModule {
                 try{
                     onCanReadConfig();
                 }catch (Exception e){
-                    printLog(e.getMessage());
+                    printLog(e.getMessage(), false);
                 }
             }
         }
@@ -74,7 +74,7 @@ public abstract class XposedModule {
             try{
                 instance.onCanReadConfig();
             }catch (Exception e){
-                printLog(e.getMessage());
+                printLog(e.getMessage(), false);
             }
         }
     }
@@ -82,13 +82,21 @@ public abstract class XposedModule {
     protected void onCanReadConfig() throws Exception{};
 
     protected static void printLog(String text){
-        Intent log = new Intent("com.kooritea.fcmfix.log");
-        log.putExtra("text",text);
-        XposedBridge.log("[fcmfix] "+ text);
-        try{
-            context.sendBroadcast(log);
-        }catch (Exception e){
-            XposedBridge.log("[fcmfix] "+ text);
+        printLog(text, true);
+    }
+
+    protected static void printLog(String text, Boolean isDiagnosticsLog) {
+        if (!isDiagnosticsLog) {
+            XposedBridge.log("[fcmfix] " + text);
+        } else {
+            Intent log = new Intent("com.kooritea.fcmfix.log");
+            log.putExtra("text", text);
+
+            try {
+                context.sendBroadcast(log);
+            } catch (Exception e) {
+                XposedBridge.log("[fcmfix] " + text);
+            }
         }
     }
 
@@ -174,7 +182,7 @@ public abstract class XposedModule {
     }
 
     protected void sendUpdateNotification(String title, String content) {
-        printLog(title);
+        printLog(title, false);
         title = "[fcmfix]" + title;
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
         this.createFcmfixChannel(notificationManager);
