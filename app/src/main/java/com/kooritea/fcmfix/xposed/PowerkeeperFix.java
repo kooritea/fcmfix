@@ -24,7 +24,7 @@ public class PowerkeeperFix extends XposedModule {
                         String device = (String)XposedHelpers.callStaticMethod(XposedHelpers.findClass("android.os.SystemProperties", loadPackageParam.classLoader),"get", "ro.product.name");
                         String modDevice = (String)param.getResult();
                         if(!modDevice.endsWith("_global") && !"".equals(device) && device != null){
-                            printLog("[powerkeeper]" + device + "_global", false);
+                            printLog("[powerkeeper]" + device + "_global");
                             param.setResult(device + "_global");
                         }
                     }

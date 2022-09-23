@@ -94,7 +94,7 @@ public class AutoStartFix extends XposedModule {
                 }
             });
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e) {
-            printLog("No Such Method com.miui.server.smartpower.SmartPowerPolicyManager.shouldInterceptService");
+            printLog("No Such Method com.miui.server.smartpower.SmartPowerPolicyManager.shouldInterceptService", false);
         }
     }
 }

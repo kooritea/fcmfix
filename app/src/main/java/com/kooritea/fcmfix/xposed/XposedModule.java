@@ -108,7 +108,7 @@ public abstract class XposedModule {
             try {
                 this.onUpdateConfig();
             } catch (Exception e) {
-                printLog("更新配置文件失败: " + e.getMessage(), false);
+                printLog("更新配置文件失败: " + e.getMessage());
             }
         }
     }
@@ -137,7 +137,7 @@ public abstract class XposedModule {
                 }
             }
         }else{
-            printLog("Allow list is not ready", false);
+            printLog("Allow list is not ready");
         }
         return false;
     }
@@ -151,7 +151,7 @@ public abstract class XposedModule {
                     ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
                     allowList = contentProviderHelper.getStringSet("allowList");
                     if(allowList != null){
-                        printLog( "onUpdateConfig allowList size: " + allowList.size(), false);
+                        printLog( "onUpdateConfig allowList size: " + allowList.size());
                     }
                     loadConfigThread = null;
                 }
