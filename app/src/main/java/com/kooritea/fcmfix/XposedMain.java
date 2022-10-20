@@ -2,6 +2,7 @@ package com.kooritea.fcmfix;
 
 import com.kooritea.fcmfix.xposed.AutoStartFix;
 import com.kooritea.fcmfix.xposed.BroadcastFix;
+import com.kooritea.fcmfix.xposed.KeepNotification;
 import com.kooritea.fcmfix.xposed.MiuiLocalNotificationFix;
 import com.kooritea.fcmfix.xposed.PowerkeeperFix;
 import com.kooritea.fcmfix.xposed.ReconnectManagerFix;
@@ -28,6 +29,9 @@ public class XposedMain implements IXposedHookLoadPackage {
 
             XposedBridge.log("[fcmfix] com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
             new AutoStartFix(loadPackageParam);
+
+            XposedBridge.log("[fcmfix] com.android.server.notification.NotificationManagerService");
+            new KeepNotification(loadPackageParam);
         }
         if(loadPackageParam.packageName.equals("com.google.android.gms") && loadPackageParam.isFirstApplication){
             XposedBridge.log("[fcmfix] start hook com.google.android.gms");
