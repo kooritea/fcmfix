@@ -31,7 +31,7 @@ public abstract class XposedModule {
 
     protected static Context context = null;
     private static ArrayList<XposedModule> instances = new ArrayList();
-    private static Boolean isInitUpdateConfigReceiver = false;
+    private static Boolean isInitReceiver = false;
     private static Thread loadConfigThread = null;
 
     protected XposedModule(final XC_LoadPackage.LoadPackageParam loadPackageParam) {
@@ -69,7 +69,11 @@ public abstract class XposedModule {
         });
     }
 
+    /**
+     * 每个被hook的APP第一次获取到context时调用
+     */
     private static void callAllOnCanReadConfig(){
+        initReceiver();
         for(XposedModule instance : instances){
             try{
                 instance.onCanReadConfig();
@@ -86,9 +90,7 @@ public abstract class XposedModule {
     }
 
     protected static void printLog(String text, Boolean isDiagnosticsLog) {
-        if (!isDiagnosticsLog) {
-            XposedBridge.log("[fcmfix] " + text);
-        } else {
+        if (isDiagnosticsLog) {
             Intent log = new Intent("com.kooritea.fcmfix.log");
             log.putExtra("text", text);
 
@@ -97,6 +99,8 @@ public abstract class XposedModule {
             } catch (Exception e) {
                 XposedBridge.log("[fcmfix] " + text);
             }
+        } else {
+            XposedBridge.log("[fcmfix] " + text);
         }
     }
 
@@ -128,7 +132,6 @@ public abstract class XposedModule {
     protected boolean targetIsAllow(String packageName){
         if(allowList == null){
             this.checkUserDeviceUnlockAndUpdateConfig();
-            initUpdateConfigReceiver();
         }
         if(allowList != null){
             for (String item : allowList) {
@@ -136,8 +139,6 @@ public abstract class XposedModule {
                     return true;
                 }
             }
-        }else{
-            printLog("Allow list is not ready");
         }
         return false;
     }
@@ -150,7 +151,7 @@ public abstract class XposedModule {
                     super.run();
                     ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
                     allowList = contentProviderHelper.getStringSet("allowList");
-                    if(allowList != null){
+                    if(allowList != null && "android".equals(context.getPackageName())){
                         printLog( "onUpdateConfig allowList size: " + allowList.size());
                     }
                     loadConfigThread = null;
@@ -160,16 +161,34 @@ public abstract class XposedModule {
         }
     }
 
-    private static synchronized void initUpdateConfigReceiver(){
-        if(!isInitUpdateConfigReceiver && context != null){
-            isInitUpdateConfigReceiver = true;
+    private static void onUninstallFcmfix(){
+        NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
+        NotificationChannel channel = notificationManager.getNotificationChannel("fcmfix");
+        if(channel != null){
+            notificationManager.deleteNotificationChannel(channel.getId());
+        }
+    }
+
+    private static synchronized void initReceiver(){
+        if(!isInitReceiver && context != null){
+            isInitReceiver = true;
             IntentFilter intentFilter = new IntentFilter();
             intentFilter.addAction("com.kooritea.fcmfix.update.config");
+            intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+            intentFilter.addDataScheme("package");
             context.registerReceiver(new BroadcastReceiver() {
                 public void onReceive(Context context, Intent intent) {
                     String action = intent.getAction();
                     if ("com.kooritea.fcmfix.update.config".equals(action)) {
                         onUpdateConfig();
+                    }
+                    if(Intent.ACTION_PACKAGE_REMOVED.equals(action)){
+                        if("com.kooritea.fcmfix".equals(intent.getData().getSchemeSpecificPart())){
+                            onUninstallFcmfix();
+                        }
+                        if("android".equals(context.getPackageName())){
+                            printLog("Fcmfix已卸载，重启后停止生效。");
+                        }
                     }
                 }
             }, intentFilter);
@@ -177,11 +196,11 @@ public abstract class XposedModule {
 
     }
 
-    protected void sendUpdateNotification(String title) {
-        sendUpdateNotification(title,null);
+    protected void sendNotification(String title) {
+        sendNotification(title,null);
     }
 
-    protected void sendUpdateNotification(String title, String content) {
+    protected void sendNotification(String title, String content) {
         printLog(title, false);
         title = "[fcmfix]" + title;
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
@@ -197,17 +216,10 @@ public abstract class XposedModule {
     }
 
     protected void createFcmfixChannel(NotificationManager notificationManager) {
-        List<NotificationChannel> channelList = notificationManager.getNotificationChannels();
-        for (NotificationChannel item : channelList) {
-            if (item.getId() == "fcmfix") {
-                item.setName("fcmfix");
-                item.setImportance(NotificationManager.IMPORTANCE_HIGH);
-                item.setDescription("fcmfix");
-                return;
-            }
+        if(notificationManager.getNotificationChannel("fcmfix") == null){
+            NotificationChannel channel = new NotificationChannel("fcmfix", "fcmfix", NotificationManager.IMPORTANCE_HIGH);
+            channel.setDescription("[xposed] fcmfix");
+            notificationManager.createNotificationChannel(channel);
         }
-        NotificationChannel channel = new NotificationChannel("fcmfix", "fcmfix", NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("[xposed] fcmfix更新通知");
-        notificationManager.createNotificationChannel(channel);
     }
 }

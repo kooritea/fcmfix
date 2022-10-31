@@ -244,7 +244,7 @@ public class ReconnectManagerFix extends XposedModule {
                                             editor.apply();
                                             isFinish[0] = true;
                                             printLog("更新hook位置成功");
-                                            sendUpdateNotification("自动更新配置文件成功");
+                                            sendNotification("自动更新配置文件成功");
                                             startHook();
                                             return;
                                         }
@@ -260,7 +260,7 @@ public class ReconnectManagerFix extends XposedModule {
         }catch (Throwable e){
             editor.putBoolean("enable", false);
             printLog("自动寻找hook点失败"+e.getMessage());
-            this.sendUpdateNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
+            this.sendNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
             e.printStackTrace();
         }
         editor.apply();
