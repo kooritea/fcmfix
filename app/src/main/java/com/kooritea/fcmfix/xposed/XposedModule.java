@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Bundle;
 import android.os.UserManager;
 
 import androidx.core.app.NotificationCompat;
@@ -207,10 +208,12 @@ public abstract class XposedModule {
             context.registerReceiver(new BroadcastReceiver() {
                 public void onReceive(Context context, Intent intent) {
                     String action = intent.getAction();
-                    if(Intent.ACTION_PACKAGE_REMOVED.equals(action)){
-                        if("com.kooritea.fcmfix".equals(intent.getData().getSchemeSpecificPart())){
-                            onUninstallFcmfix();
+                    if(Intent.ACTION_PACKAGE_REMOVED.equals(action) && "com.kooritea.fcmfix".equals(intent.getData().getSchemeSpecificPart())){
+                        Bundle extras = intent.getExtras();
+                        if(extras.containsKey(Intent.EXTRA_REPLACING) && extras.getBoolean(Intent.EXTRA_REPLACING)){
+                            return;
                         }
+                        onUninstallFcmfix();
                         if("android".equals(context.getPackageName())){
                             printLog("Fcmfix已卸载，重启后停止生效。");
                         }
