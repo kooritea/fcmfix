@@ -24,7 +24,7 @@ public class MiuiLocalNotificationFix extends XposedModule  {
             final Method[] declareMethods = clazz.getDeclaredMethods();
             Method targetMethod = null;
             for(Method method : declareMethods){
-                if(method.getName().equals("isAllowLocalNotification") || method.getName().equals("isDeniedLocalNotification")){
+                if("isAllowLocalNotification".equals(method.getName()) || "isDeniedLocalNotification".equals(method.getName())){
                     targetMethod = method;
                     break;
                 }
@@ -35,7 +35,7 @@ public class MiuiLocalNotificationFix extends XposedModule  {
                     @Override
                     protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
                         if(targetIsAllow((String)methodHookParam.args[3])){
-                            methodHookParam.setResult(finalTargetMethod.getName().equals("isAllowLocalNotification"));
+                            methodHookParam.setResult("isAllowLocalNotification".equals(finalTargetMethod.getName()));
                         }
                     }
                 });

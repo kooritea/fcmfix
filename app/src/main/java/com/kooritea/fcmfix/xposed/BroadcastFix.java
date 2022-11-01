@@ -25,7 +25,7 @@ public class BroadcastFix extends XposedModule {
         final Method[] declareMethods = clazz.getDeclaredMethods();
         Method targetMethod = null;
         for(Method method : declareMethods){
-            if(method.getName().equals("broadcastIntentLocked")){
+            if("broadcastIntentLocked".equals(method.getName())){
                 if(targetMethod == null || targetMethod.getParameterTypes().length < method.getParameterTypes().length){
                     targetMethod = method;
                 }

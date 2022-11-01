@@ -69,16 +69,10 @@ public class XposedProvider extends ContentProvider {
         String[] COLUMN_NAME = { "key", "value" };
         MatrixCursor data = new MatrixCursor(COLUMN_NAME);
         try{
-            switch (selection){
-                case "heartbeatInterval":
-                    data.addRow(new Object[]{"heartbeatInterval", config.isNull("heartbeatInterval") ? config.getLong("heartbeatInterval") : 0L});
-                    break;
-                case "allowList":
-                    JSONArray jsonAllowList = config.getJSONArray("allowList");
-                    for(int i = 0; i < jsonAllowList.length(); i++){
-                        data.addRow(new Object[]{"allowList",jsonAllowList.getString(i)});
-                    }
-                    break;
+            data.addRow(new Object[]{"disableAutoCleanNotification", config.isNull("disableAutoCleanNotification") ? "0" : (config.getBoolean("disableAutoCleanNotification") ? "1" : "0") });
+            JSONArray jsonAllowList = config.getJSONArray("allowList");
+            for(int i = 0; i < jsonAllowList.length(); i++){
+                data.addRow(new Object[]{"allowList",jsonAllowList.getString(i)});
             }
         } catch (JSONException e) {
             e.printStackTrace();

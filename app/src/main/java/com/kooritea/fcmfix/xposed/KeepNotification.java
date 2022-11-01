@@ -26,7 +26,7 @@ public class KeepNotification extends XposedModule{
         final Method[] declareMethods = clazz.getDeclaredMethods();
         Method targetMethod = null;
         for(Method method : declareMethods){
-            if(method.getName().equals("cancelAllNotificationsInt")){
+            if("cancelAllNotificationsInt".equals(method.getName())){
                 if(targetMethod == null || targetMethod.getParameterTypes().length < method.getParameterTypes().length){
                     targetMethod = method;
                 }
@@ -38,7 +38,7 @@ public class KeepNotification extends XposedModule{
             XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    if(targetIsAllow((String) param.args[pkg_args_index]) && (int)param.args[reason_args_index] == 5){
+                    if(isDisableAutoCleanNotification() && targetIsAllow((String) param.args[pkg_args_index]) && (int)param.args[reason_args_index] == 5){
                         param.setResult(null);
                     }
                 }

@@ -2,81 +2,76 @@ package com.kooritea.fcmfix.util;
 
 import android.content.ContentResolver;
 import android.content.Context;
-import android.database.ContentObserver;
 import android.database.Cursor;
 import android.net.Uri;
-
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
+
 
 public class ContentProviderHelper {
 
     public ContentResolver contentResolver;
-    private Uri uri;
-    private ArrayList<ContentObserver> contentObservers = new ArrayList<>();
+    private Cursor cursor;
     public Boolean useDefaultValue = false;
 
     public ContentProviderHelper(Context context, String uri){
         contentResolver = context.getContentResolver();
-        this.uri = Uri.parse(uri);
+        this.cursor =contentResolver.query( Uri.parse(uri), null, "all", null,null);
     }
     public ContentProviderHelper(){
         useDefaultValue = true;
     }
 
     public Long getLong(String selection,Long defaultValue){
-        if(useDefaultValue){
+        if(useDefaultValue || cursor == null || cursor.getCount() == 0){
             return defaultValue;
         }
-        Cursor cursor = contentResolver.query(uri, null, selection, null,null);
-        if(cursor == null){
-            return defaultValue;
-        }
-        cursor.getCount();
-        while(cursor.moveToNext()) {
+        cursor.moveToFirst();
+        do{
             if(selection.equals(cursor.getString(cursor.getColumnIndex("key")))){
-                cursor.close();
                 return cursor.getLong(cursor.getColumnIndex("value"));
             }
-        }
-        cursor.close();
+        }while (cursor.moveToNext());
         return defaultValue;
     }
     public String getString(String selection,String defaultValue){
-        if(useDefaultValue){
+        if(useDefaultValue || cursor == null || cursor.getCount() == 0){
             return defaultValue;
         }
-        Cursor cursor =contentResolver.query(uri, null, selection, null,null);
-        if(cursor == null){
-            return defaultValue;
-        }
-        cursor.getCount();
-        while(cursor.moveToNext()) {
+        cursor.moveToFirst();
+        do{
             if(selection.equals(cursor.getString(cursor.getColumnIndex("key")))){
-                cursor.close();
                 return cursor.getString(cursor.getColumnIndex("value"));
             }
+        }while (cursor.moveToNext());
+        return defaultValue;
+    }
+    public Boolean getBoolean(String selection,Boolean defaultValue){
+        if(useDefaultValue || cursor == null || cursor.getCount() == 0){
+            return defaultValue;
         }
-        cursor.close();
+        cursor.moveToFirst();
+        do{
+            if(selection.equals(cursor.getString(cursor.getColumnIndex("key")))){
+                return "1".equals(cursor.getString(cursor.getColumnIndex("value")));
+            }
+        }while (cursor.moveToNext());
         return defaultValue;
     }
     public Set<String> getStringSet(String selection){
-        if(useDefaultValue){
+        if(useDefaultValue || cursor == null || cursor.getCount() == 0){
             return new HashSet<String>();
         }
-        Cursor cursor = contentResolver.query(uri, null, selection, null,null);
-        if(cursor == null){
-            return null;
-        }
-        cursor.getCount();
+        cursor.moveToFirst();
         Set<String> result = new HashSet<String>();
-        while(cursor.moveToNext()) {
+        do{
             if(selection.equals(cursor.getString(cursor.getColumnIndex("key")))){
                 result.add(cursor.getString(cursor.getColumnIndex("value")));
             }
-        }
-        cursor.close();
+        }while (cursor.moveToNext());
         return result;
+    }
+    public void close(){
+        this.cursor.close();
     }
 }

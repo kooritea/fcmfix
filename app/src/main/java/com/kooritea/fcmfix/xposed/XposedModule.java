@@ -28,6 +28,7 @@ public abstract class XposedModule {
 
     protected XC_LoadPackage.LoadPackageParam loadPackageParam;
     private static Set<String> allowList = null;
+    private static Boolean disableAutoCleanNotification = null;
 
     protected static Context context = null;
     private static ArrayList<XposedModule> instances = new ArrayList();
@@ -130,8 +131,11 @@ public abstract class XposedModule {
     };
 
     protected boolean targetIsAllow(String packageName){
-        if(allowList == null){
+        if(disableAutoCleanNotification == null){
             this.checkUserDeviceUnlockAndUpdateConfig();
+        }
+        if("com.kooritea.fcmfix".equals(packageName)){
+            return true;
         }
         if(allowList != null){
             for (String item : allowList) {
@@ -143,16 +147,29 @@ public abstract class XposedModule {
         return false;
     }
 
+    protected boolean isDisableAutoCleanNotification(){
+        if(disableAutoCleanNotification == null){
+            this.checkUserDeviceUnlockAndUpdateConfig();
+        }
+        return disableAutoCleanNotification == null ? false : disableAutoCleanNotification;
+    }
+
     private static void onUpdateConfig(){
         if(loadConfigThread == null){
             loadConfigThread = new Thread(){
                 @Override
                 public void run() {
                     super.run();
-                    ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
-                    allowList = contentProviderHelper.getStringSet("allowList");
-                    if(allowList != null && "android".equals(context.getPackageName())){
-                        printLog( "onUpdateConfig allowList size: " + allowList.size());
+                    try{
+                        ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
+                        allowList = contentProviderHelper.getStringSet("allowList");
+                        if(allowList != null && "android".equals(context.getPackageName())){
+                            printLog( "onUpdateConfig allowList size: " + allowList.size());
+                        }
+                        disableAutoCleanNotification = contentProviderHelper.getBoolean("disableAutoCleanNotification", false);
+                        contentProviderHelper.close();
+                    }catch (Exception e){
+                        printLog(e.getMessage());
                     }
                     loadConfigThread = null;
                 }

@@ -1,5 +1,6 @@
 package com.kooritea.fcmfix;
 
+import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -199,8 +200,8 @@ public class MainActivity extends AppCompatActivity {
             for(int i = 0; i < jsonAllowList.length(); i++){
                 this.allowList.add(jsonAllowList.getString(i));
             }
-            if(this.config.isNull("heartbeatInterval")){
-                this.config.put("heartbeatInterval", "0L");
+            if(this.config.isNull("disableAutoCleanNotification")){
+                this.config.put("disableAutoCleanNotification", false);
             }
         } catch (IOException | JSONException e) {
             e.printStackTrace();
@@ -224,29 +225,34 @@ public class MainActivity extends AppCompatActivity {
 
     private void addAppInAllowList(String packageName){
         this.allowList.add(packageName);
-        this.updateAllowList();
+        this.updateConfig();
     }
     private void deleteAppInAllowList(String packageName){
         this.allowList.remove(packageName);
-        this.updateAllowList();
+        this.updateConfig();
     }
 
-    private void updateAllowList(){
+    private void updateConfig(){
         try {
             FileOutputStream fos = this.openFileOutput("config.json", Context.MODE_PRIVATE);
             this.config.put("allowList", new JSONArray(this.allowList));
             fos.write(this.config.toString(2).getBytes());
+            this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
         } catch (IOException | JSONException e) {
             e.printStackTrace();
+            new AlertDialog.Builder(this).setTitle("更新配置文件失败").setMessage(e.getMessage()).show();
         }
-        this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
     }
 
     @Override
     public boolean onCreateOptionsMenu (Menu menu){
         MenuItem isShowLauncherIconMenuItem = menu.add("隐藏启动器图标");
-        menu.add("全选包含 FCM 的应用");
         isShowLauncherIconMenuItem.setCheckable(true);
+
+        MenuItem disableAutoCleanNotificationMenuItem = menu.add("阻止应用停止时自动清除通知");
+        disableAutoCleanNotificationMenuItem.setCheckable(true);
+
+        menu.add("全选包含 FCM 的应用");
         return true;
     }
 
@@ -256,7 +262,14 @@ public class MainActivity extends AppCompatActivity {
         PackageManager packageManager = getPackageManager();
         isShowLauncherIconMenuItem.setChecked(packageManager.getComponentEnabledSetting(new ComponentName("com.kooritea.fcmfix", "com.kooritea.fcmfix.Home")) == packageManager.COMPONENT_ENABLED_STATE_DISABLED);
 
-        MenuItem selectAllAppIncludeFcmMenuItem = menu.getItem(1);
+        MenuItem disableAutoCleanNotificationMenuItem = menu.getItem(1);
+        try {
+            disableAutoCleanNotificationMenuItem.setChecked(this.config.getBoolean("disableAutoCleanNotification"));
+        } catch (JSONException e) {
+            disableAutoCleanNotificationMenuItem.setChecked(false);
+        }
+
+        MenuItem selectAllAppIncludeFcmMenuItem = menu.getItem(2);
         selectAllAppIncludeFcmMenuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem menuItem) {
@@ -282,6 +295,14 @@ public class MainActivity extends AppCompatActivity {
                     menuItem.isChecked() ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP
             );
+        }
+        if(menuItem.getTitle().equals("阻止应用停止时自动清除通知")){
+            try {
+                this.config.put("disableAutoCleanNotification", !menuItem.isChecked());
+                this.updateConfig();
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
         }
         return true;
     }
