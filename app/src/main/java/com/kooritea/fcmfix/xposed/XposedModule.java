@@ -172,16 +172,24 @@ public abstract class XposedModule {
     private static synchronized void initReceiver(){
         if(!isInitReceiver && context != null){
             isInitReceiver = true;
-            IntentFilter intentFilter = new IntentFilter();
-            intentFilter.addAction("com.kooritea.fcmfix.update.config");
-            intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
-            intentFilter.addDataScheme("package");
+
+            IntentFilter updateConfigIntentFilter = new IntentFilter();
+            updateConfigIntentFilter.addAction("com.kooritea.fcmfix.update.config");
             context.registerReceiver(new BroadcastReceiver() {
                 public void onReceive(Context context, Intent intent) {
                     String action = intent.getAction();
                     if ("com.kooritea.fcmfix.update.config".equals(action)) {
                         onUpdateConfig();
                     }
+                }
+            }, updateConfigIntentFilter);
+
+            IntentFilter unInstallIntentFilter = new IntentFilter();
+            unInstallIntentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+            unInstallIntentFilter.addDataScheme("package");
+            context.registerReceiver(new BroadcastReceiver() {
+                public void onReceive(Context context, Intent intent) {
+                    String action = intent.getAction();
                     if(Intent.ACTION_PACKAGE_REMOVED.equals(action)){
                         if("com.kooritea.fcmfix".equals(intent.getData().getSchemeSpecificPart())){
                             onUninstallFcmfix();
@@ -191,7 +199,7 @@ public abstract class XposedModule {
                         }
                     }
                 }
-            }, intentFilter);
+            }, unInstallIntentFilter);
         }
 
     }
