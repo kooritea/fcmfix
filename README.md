@@ -9,6 +9,7 @@
 - 修复在国内网络下出现重连服务出现负数问题(貌似是miui优化的问题)
 - 固定心跳间隔(默认不开启,更改需要编辑配置文件/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml中的heartbeatInterval项，最小值为1000，1000==1s)
 - 国内版miui电量和性能伪装为国际版，防止锁屏fcm断线
+- 阻止应用关闭时清除通知
 ---
 
 这个模块并不是为了让不能使用fcm的机器使用fcm，而是在能正常使用fcm的机器上进行改造。  
