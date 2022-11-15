@@ -16,7 +16,7 @@ public class XposedUtils {
     }
 
     public static XC_MethodHook.Unhook findAndHookConstructorAnyParam(Class<?> clazz, XC_MethodHook callbacks, Class<?> ...parameterTypes){
-        Constructor bestMatch = null;
+        Constructor<?> bestMatch = null;
         int matchCount = 0;
         for(Constructor<?> constructor : clazz.getDeclaredConstructors()){
             Class<?>[] constructorParamTypes = constructor.getParameterTypes();
@@ -83,7 +83,7 @@ public class XposedUtils {
 
     public static Object getObjectFieldByPath(Object obj, String pathFieldName, Class<?> clazz){
         Object result = getObjectFieldByPath(obj,pathFieldName);
-        if(result.getClass() != clazz && result != null){
+        if(result.getClass() != clazz){
             throw new NoSuchFieldError(obj.getClass().getName() + "#" +pathFieldName + ";Found " + result.getClass().getName() + " but not equal " + clazz.getName() + ".");
         }
         return result;

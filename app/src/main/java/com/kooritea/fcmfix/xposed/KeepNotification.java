@@ -37,7 +37,7 @@ public class KeepNotification extends XposedModule{
             int reason_args_index = 8;
             XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                protected void beforeHookedMethod(MethodHookParam param) {
                     if(isDisableAutoCleanNotification() && targetIsAllow((String) param.args[pkg_args_index]) && (int)param.args[reason_args_index] == 5){
                         param.setResult(null);
                     }

@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets;
 
 public class XposedProvider extends ContentProvider {
 
-    private static UriMatcher uriMatcher;
+    private static final UriMatcher uriMatcher;
 
     static
     {
@@ -38,11 +38,6 @@ public class XposedProvider extends ContentProvider {
     @Nullable
     @Override
     public String getType(@NonNull Uri uri) {
-        switch (uriMatcher.match(uri))
-        {
-            default:
-                break;
-        }
         return null;
     }
 

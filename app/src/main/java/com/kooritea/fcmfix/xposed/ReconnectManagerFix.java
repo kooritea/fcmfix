@@ -1,5 +1,6 @@
 package com.kooritea.fcmfix.xposed;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -8,7 +9,6 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.SystemClock;
-import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
@@ -74,7 +74,7 @@ public class ReconnectManagerFix extends XposedModule {
             });
             XposedHelpers.findAndHookMethod(this.GcmChimeraService, "onDestroy", new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(final MethodHookParam param) throws Throwable {
+                protected void beforeHookedMethod(final MethodHookParam param) {
                     context.unregisterReceiver(logBroadcastReceive);
                 }
             });
@@ -112,7 +112,7 @@ public class ReconnectManagerFix extends XposedModule {
         if (!sharedPreferences.getString("gms_version", "").equals(versionName) ) {
             printLog("gms已更新: " + sharedPreferences.getString("gms_version", "") + "(" + sharedPreferences.getLong("gms_version_code", 0) + ")" + "->" + versionName + "(" +versionCode + ")");
             SharedPreferences.Editor editor = sharedPreferences.edit();
-            editor.putString("gms_version", versionName);;
+            editor.putString("gms_version", versionName);
             editor.putLong("gms_version_code", versionCode);
             editor.putBoolean("enable", false);
             editor.apply();
@@ -127,7 +127,7 @@ public class ReconnectManagerFix extends XposedModule {
         startHook();
     }
 
-    protected void startHook() throws Exception {
+    protected void startHook() {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         printLog("timer_class: "+ sharedPreferences.getString("timer_class", ""));
         printLog("timer_alarm_type_property: "+ sharedPreferences.getString("timer_alarm_type_property", ""));
@@ -135,12 +135,12 @@ public class ReconnectManagerFix extends XposedModule {
         final Class<?> timerClazz = XposedHelpers.findClass(sharedPreferences.getString("timer_class", ""), loadPackageParam.classLoader);
         XposedHelpers.findAndHookMethod(timerClazz, "toString", new XC_MethodHook() {
             @Override
-            protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
+            protected void afterHookedMethod(final MethodHookParam param) {
                 String alarmType = (String) XposedUtils.getObjectFieldByPath(param.thisObject,  sharedPreferences.getString("timer_alarm_type_property", ""));
                 if("GCM_HB_ALARM".equals(alarmType) || "GCM_CONN_ALARM".equals(alarmType)){
                     long hinterval = sharedPreferences.getLong("heartbeatInterval", 0L);
                     long cinterval = sharedPreferences.getLong("reconnInterval", 0L);
-                    if((hinterval != 0L && hinterval > 1000) || (cinterval != 0L && cinterval > 1000)){
+                    if((hinterval > 1000) || (cinterval > 1000)){
                         param.setResult(param.getResult() + "[fcmfix locked]");
                     }
                 }
@@ -148,25 +148,25 @@ public class ReconnectManagerFix extends XposedModule {
         });
         XposedHelpers.findAndHookMethod(timerClazz, sharedPreferences.getString("timer_settimeout_method", ""), long.class, new XC_MethodHook() {
             @Override
-            protected void beforeHookedMethod(final MethodHookParam param) throws Throwable {
+            protected void beforeHookedMethod(final MethodHookParam param) {
                 // 修改心跳间隔
                 String alarmType = (String) XposedUtils.getObjectFieldByPath(param.thisObject,  sharedPreferences.getString("timer_alarm_type_property", ""));
                 if ("GCM_HB_ALARM".equals(alarmType)) {
                     long interval = sharedPreferences.getLong("heartbeatInterval", 0L);
-                    if(interval != 0L && interval > 1000){
+                    if(interval > 1000){
                         param.args[0] = interval;
                     }
                 }
                 if ("GCM_CONN_ALARM".equals(alarmType)) {
                     long interval = sharedPreferences.getLong("reconnInterval", 0L);
-                    if(interval != 0L && interval > 1000){
+                    if(interval > 1000){
                         param.args[0] = interval;
                     }
                 }
             }
 
             @Override
-            protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
+            protected void afterHookedMethod(final MethodHookParam param) {
                 // 防止计时器出现负数计时,分别是心跳计时和重连计时
                 String alarmType = (String) XposedUtils.getObjectFieldByPath(param.thisObject,  sharedPreferences.getString("timer_alarm_type_property", ""));
                 if ("GCM_HB_ALARM".equals(alarmType) || "GCM_CONN_ALARM".equals(alarmType)) {
@@ -199,7 +199,7 @@ public class ReconnectManagerFix extends XposedModule {
         });
     }
 
-    private BroadcastReceiver logBroadcastReceive = new BroadcastReceiver() {
+    private final BroadcastReceiver logBroadcastReceive = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if ("com.kooritea.fcmfix.log".equals(action)) {
@@ -233,8 +233,8 @@ public class ReconnectManagerFix extends XposedModule {
                     final Boolean[] isFinish = {false};
                     XposedHelpers.findAndHookConstructor(alarmClass, Context.class, int.class, String.class, String.class, String.class, String.class, new XC_MethodHook() {
                         @Override
-                        protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
-                            if(isFinish[0] != true){
+                        protected void afterHookedMethod(final MethodHookParam param) {
+                            if(!isFinish[0]){
                                 for(Field field : alarmClass.getDeclaredFields()){
                                     if(field.getType() == String.class && Modifier.isFinal(field.getModifiers()) && Modifier.isPrivate(field.getModifiers())){
                                         if(param.args[2] != null && XposedHelpers.getObjectField(param.thisObject, field.getName()) == param.args[2]){
@@ -268,20 +268,18 @@ public class ReconnectManagerFix extends XposedModule {
 
     private void addReConnectButton(){
         XposedHelpers.findAndHookMethod("com.google.android.gms.gcm.GcmChimeraDiagnostics", loadPackageParam.classLoader, "onCreate", Bundle.class, new XC_MethodHook() {
+            @SuppressLint("SetTextI18n")
             @Override
-            protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
+            protected void afterHookedMethod(final MethodHookParam param) {
                 ViewGroup viewGroup = ((Window)XposedHelpers.callMethod(param.thisObject, "getWindow")).getDecorView().findViewById(android.R.id.content);
                 LinearLayout linearLayout = (LinearLayout)viewGroup.getChildAt(0);
                 LinearLayout linearLayout2 = (LinearLayout)linearLayout.getChildAt(0);
                 Button button = new Button((ContextWrapper)param.thisObject);
                 button.setText("RECONNECT");
                 linearLayout2.addView(button);
-                button.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
-                        printLog("Send broadcast GCM_RECONNECT");
-                    }
+                button.setOnClickListener(view -> {
+                    context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
+                    printLog("Send broadcast GCM_RECONNECT");
                 });
             }
         });

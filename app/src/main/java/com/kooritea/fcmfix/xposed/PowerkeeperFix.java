@@ -1,9 +1,6 @@
 package com.kooritea.fcmfix.xposed;
 
-import android.content.Intent;
-
 import com.kooritea.fcmfix.util.XposedUtils;
-
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
@@ -18,7 +15,7 @@ public class PowerkeeperFix extends XposedModule {
         try{
             XposedUtils.findAndHookMethodAnyParam("android.os.SystemProperties",loadPackageParam.classLoader,"get",new XC_MethodHook() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                protected void afterHookedMethod(MethodHookParam param) {
                     String name = (String)param.args[0];
                     if("ro.product.mod_device".equals(name)){
                         String device = (String)XposedHelpers.callStaticMethod(XposedHelpers.findClass("android.os.SystemProperties", loadPackageParam.classLoader),"get", "ro.product.name");

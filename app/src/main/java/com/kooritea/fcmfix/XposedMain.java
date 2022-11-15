@@ -1,5 +1,7 @@
 package com.kooritea.fcmfix;
 
+import android.annotation.SuppressLint;
+
 import com.kooritea.fcmfix.xposed.AutoStartFix;
 import com.kooritea.fcmfix.xposed.BroadcastFix;
 import com.kooritea.fcmfix.xposed.KeepNotification;
@@ -15,7 +17,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class XposedMain implements IXposedHookLoadPackage {
 
-    public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam loadPackageParam) throws Throwable {
+    @SuppressLint("SdCardPath")
+    public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam loadPackageParam) {
         if(fileIsExists("/sdcard/disable_fcmfix")){
             XposedBridge.log("[fcmfix] /sdcard/disable_fcmfix is exists, exit");
             return;

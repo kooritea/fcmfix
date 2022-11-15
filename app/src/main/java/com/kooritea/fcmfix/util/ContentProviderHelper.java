@@ -1,5 +1,6 @@
 package com.kooritea.fcmfix.util;
 
+import android.annotation.SuppressLint;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
@@ -11,18 +12,16 @@ import java.util.Set;
 public class ContentProviderHelper {
 
     public ContentResolver contentResolver;
-    private Cursor cursor;
+    private final Cursor cursor;
     public Boolean useDefaultValue = false;
 
     public ContentProviderHelper(Context context, String uri){
         contentResolver = context.getContentResolver();
         this.cursor =contentResolver.query( Uri.parse(uri), null, "all", null,null);
     }
-    public ContentProviderHelper(){
-        useDefaultValue = true;
-    }
 
-    public Long getLong(String selection,Long defaultValue){
+    @SuppressLint("Range")
+    public Long getLong(String selection, Long defaultValue){
         if(useDefaultValue || cursor == null || cursor.getCount() == 0){
             return defaultValue;
         }
@@ -34,7 +33,8 @@ public class ContentProviderHelper {
         }while (cursor.moveToNext());
         return defaultValue;
     }
-    public String getString(String selection,String defaultValue){
+    @SuppressLint("Range")
+    public String getString(String selection, String defaultValue){
         if(useDefaultValue || cursor == null || cursor.getCount() == 0){
             return defaultValue;
         }
@@ -46,7 +46,8 @@ public class ContentProviderHelper {
         }while (cursor.moveToNext());
         return defaultValue;
     }
-    public Boolean getBoolean(String selection,Boolean defaultValue){
+    @SuppressLint("Range")
+    public Boolean getBoolean(String selection, Boolean defaultValue){
         if(useDefaultValue || cursor == null || cursor.getCount() == 0){
             return defaultValue;
         }
@@ -58,12 +59,13 @@ public class ContentProviderHelper {
         }while (cursor.moveToNext());
         return defaultValue;
     }
+    @SuppressLint("Range")
     public Set<String> getStringSet(String selection){
         if(useDefaultValue || cursor == null || cursor.getCount() == 0){
-            return new HashSet<String>();
+            return new HashSet<>();
         }
         cursor.moveToFirst();
-        Set<String> result = new HashSet<String>();
+        Set<String> result = new HashSet<>();
         do{
             if(selection.equals(cursor.getString(cursor.getColumnIndex("key")))){
                 result.add(cursor.getString(cursor.getColumnIndex("value")));

@@ -32,17 +32,14 @@ public class BroadcastFix extends XposedModule {
             }
         }
         if(targetMethod != null){
-            if(Build.VERSION.SDK_INT < Build.VERSION_CODES.P){
-                printLog("不支持的安卓版本(<9)，fcmfix将不会工作。");
+            if(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q){
+                printLog("不支持的安卓版本(<10)，fcmfix将不会工作。");
                 return;
             }
             int intent_args_index = 0;
             int appOp_args_index = 0;
             Parameter[] parameters = targetMethod.getParameters();
-            if(Build.VERSION.SDK_INT == Build.VERSION_CODES.P){
-                intent_args_index = 2;
-                appOp_args_index = 9;
-            }else if(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q){
+            if(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q){
                 intent_args_index = 2;
                 appOp_args_index = 9;
             }else if(Build.VERSION.SDK_INT == Build.VERSION_CODES.R){
@@ -73,10 +70,10 @@ public class BroadcastFix extends XposedModule {
                 appOp_args_index = 0;
                 // 根据参数名称查找，部分经过混淆的系统无效
                 for(int i = 0; i < parameters.length; i++){
-                    if(parameters[i].getName() == "appOp" && parameters[i].getType() == int.class){
+                    if("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class){
                         appOp_args_index = i;
                     }
-                    if(parameters[i].getName() == "intent" && parameters[i].getType() == Intent.class){
+                    if("intent".equals(parameters[i].getName()) && parameters[i].getType() == Intent.class){
                         intent_args_index = i;
                     }
                 }
@@ -125,7 +122,7 @@ public class BroadcastFix extends XposedModule {
 
             XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+                protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) methodHookParam.args[finalIntent_args_index];
                     if(intent != null && intent.getPackage() != null && intent.getFlags() != Intent.FLAG_INCLUDE_STOPPED_PACKAGES && "com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
                         String target;
@@ -135,9 +132,9 @@ public class BroadcastFix extends XposedModule {
                             target = intent.getPackage();
                         }
                         if(targetIsAllow(target)){
-                            int i = ((Integer)methodHookParam.args[finalAppOp_args_index]).intValue();
+                            int i = (Integer) methodHookParam.args[finalAppOp_args_index];
                             if (i == -1) {
-                                methodHookParam.args[finalAppOp_args_index] = Integer.valueOf(11);
+                                methodHookParam.args[finalAppOp_args_index] = 11;
                             }
                             intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                             printLog("Send Forced Start Broadcast: " + target);

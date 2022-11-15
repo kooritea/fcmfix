@@ -1,5 +1,6 @@
 package com.kooritea.fcmfix;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
@@ -46,7 +47,7 @@ import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
     private AppListAdapter appListAdapter;
-    Set<String> allowList = new HashSet<String>();
+    Set<String> allowList = new HashSet<>();
     JSONObject config = new JSONObject();
 
     private class AppInfo {
@@ -76,11 +77,11 @@ public class MainActivity extends AppCompatActivity {
             public ViewHolder(View view) {
                 super(view);
                 appView = view;
-                icon = (ImageView) view.findViewById(R.id.icon);
-                name = (TextView) view.findViewById(R.id.name);
-                packageName = (TextView) view.findViewById(R.id.packageName);
-                includeFcm = (TextView) view.findViewById(R.id.includeFcm);
-                isAllow = (CheckBox) view.findViewById(R.id.isAllow);
+                icon = view.findViewById(R.id.icon);
+                name = view.findViewById(R.id.name);
+                packageName = view.findViewById(R.id.packageName);
+                includeFcm = view.findViewById(R.id.includeFcm);
+                isAllow = view.findViewById(R.id.isAllow);
             }
         }
 
@@ -117,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             class SortName implements Comparator<AppInfo> {
-                Collator localCompare = Collator.getInstance(Locale.getDefault());
+                final Collator localCompare = Collator.getInstance(Locale.getDefault());
                 @Override
                 public int compare(AppInfo a1, AppInfo a2) {
                     if(localCompare.compare(a1.name,a2.name)>0){
@@ -138,25 +139,23 @@ public class MainActivity extends AppCompatActivity {
         }
 
 
+        @SuppressLint("NotifyDataSetChanged")
         @NonNull
         @Override
         public AppListAdapter.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view = LayoutInflater.from(parent.getContext())
                     .inflate(R.layout.app_item, parent, false);
             final ViewHolder holder = new ViewHolder(view);
-            holder.appView.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    int position = holder.getBindingAdapterPosition();
-                    AppInfo appInfo = mAppList.get(position);
-                    if(appInfo.isAllow){
-                        deleteAppInAllowList(appInfo.packageName);
-                    }else{
-                        addAppInAllowList(appInfo.packageName);
-                    }
-                    appInfo.isAllow = !appInfo.isAllow;
-                    appListAdapter.notifyDataSetChanged();
+            holder.appView.setOnClickListener(v -> {
+                int position = holder.getBindingAdapterPosition();
+                AppInfo appInfo = mAppList.get(position);
+                if(appInfo.isAllow){
+                    deleteAppInAllowList(appInfo.packageName);
+                }else{
+                    addAppInAllowList(appInfo.packageName);
                 }
+                appInfo.isAllow = !appInfo.isAllow;
+                appListAdapter.notifyDataSetChanged();
             });
             return holder;
         }
@@ -206,14 +205,11 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException | JSONException e) {
             e.printStackTrace();
         }
-        new Handler().postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                appListAdapter = new AppListAdapter();
-                recyclerView.setAdapter(appListAdapter);
-                findViewById(R.id.progress_bar).setVisibility(View.GONE);
-                recyclerView.setVisibility(View.VISIBLE);
-            }
+        new Handler().postDelayed(() -> {
+            appListAdapter = new AppListAdapter();
+            recyclerView.setAdapter(appListAdapter);
+            findViewById(R.id.progress_bar).setVisibility(View.GONE);
+            recyclerView.setVisibility(View.VISIBLE);
         }, 1000);
     }
 
@@ -256,11 +252,12 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     @Override
     public final boolean onPrepareOptionsMenu(Menu menu) {
         MenuItem isShowLauncherIconMenuItem = menu.getItem(0);
         PackageManager packageManager = getPackageManager();
-        isShowLauncherIconMenuItem.setChecked(packageManager.getComponentEnabledSetting(new ComponentName("com.kooritea.fcmfix", "com.kooritea.fcmfix.Home")) == packageManager.COMPONENT_ENABLED_STATE_DISABLED);
+        isShowLauncherIconMenuItem.setChecked(packageManager.getComponentEnabledSetting(new ComponentName("com.kooritea.fcmfix", "com.kooritea.fcmfix.Home")) == PackageManager.COMPONENT_ENABLED_STATE_DISABLED);
 
         MenuItem disableAutoCleanNotificationMenuItem = menu.getItem(1);
         try {
@@ -270,18 +267,15 @@ public class MainActivity extends AppCompatActivity {
         }
 
         MenuItem selectAllAppIncludeFcmMenuItem = menu.getItem(2);
-        selectAllAppIncludeFcmMenuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
-            @Override
-            public boolean onMenuItemClick(MenuItem menuItem) {
-                for(AppInfo appInfo : appListAdapter.mAppList){
-                    if(appInfo.includeFcm){
-                        addAppInAllowList(appInfo.packageName);
-                        appInfo.isAllow = true;
-                    }
+        selectAllAppIncludeFcmMenuItem.setOnMenuItemClickListener(menuItem -> {
+            for(AppInfo appInfo : appListAdapter.mAppList){
+                if(appInfo.includeFcm){
+                    addAppInAllowList(appInfo.packageName);
+                    appInfo.isAllow = true;
                 }
-                appListAdapter.notifyDataSetChanged();
-                return false;
             }
+            appListAdapter.notifyDataSetChanged();
+            return false;
         });
         return super.onPrepareOptionsMenu(menu);
     }

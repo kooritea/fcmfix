@@ -1,5 +1,6 @@
 package com.kooritea.fcmfix.xposed;
 
+import android.annotation.SuppressLint;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
@@ -8,21 +9,15 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.UserManager;
-
 import androidx.core.app.NotificationCompat;
-
 import com.kooritea.fcmfix.R;
 import com.kooritea.fcmfix.util.ContentProviderHelper;
-
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
-
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
-
 import static android.content.Context.NOTIFICATION_SERVICE;
 
 public abstract class XposedModule {
@@ -31,8 +26,9 @@ public abstract class XposedModule {
     private static Set<String> allowList = null;
     private static Boolean disableAutoCleanNotification = null;
 
+    @SuppressLint("StaticFieldLeak")
     protected static Context context = null;
-    private static ArrayList<XposedModule> instances = new ArrayList();
+    private static final ArrayList<XposedModule> instances = new ArrayList();
     private static Boolean isInitReceiver = false;
     private static Thread loadConfigThread = null;
 
@@ -56,7 +52,7 @@ public abstract class XposedModule {
     private static void initContext(final XC_LoadPackage.LoadPackageParam loadPackageParam){
         XposedHelpers.findAndHookMethod("android.content.ContextWrapper", loadPackageParam.classLoader,"attachBaseContext", Context.class, new XC_MethodHook() {
             @Override
-            protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+            protected void afterHookedMethod(MethodHookParam methodHookParam) {
                 if(context == null){
                     context = (Context)methodHookParam.thisObject;
                     if (context.getSystemService(UserManager.class).isUserUnlocked()) {
@@ -85,7 +81,7 @@ public abstract class XposedModule {
         }
     }
 
-    protected void onCanReadConfig() throws Exception{};
+    protected void onCanReadConfig() throws Exception{}
 
     protected static void printLog(String text){
         printLog(text, true);
@@ -112,20 +108,20 @@ public abstract class XposedModule {
     protected void checkUserDeviceUnlockAndUpdateConfig(){
         if (context.getSystemService(UserManager.class).isUserUnlocked()) {
             try {
-                this.onUpdateConfig();
+                onUpdateConfig();
             } catch (Exception e) {
                 printLog("更新配置文件失败: " + e.getMessage());
             }
         }
     }
 
-    private static BroadcastReceiver unlockBroadcastReceive = new BroadcastReceiver() {
+    private static final BroadcastReceiver unlockBroadcastReceive = new BroadcastReceiver() {
         public void onReceive(Context _context, Intent intent) {
             String action = intent.getAction();
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
                 try {
                     context.unregisterReceiver(unlockBroadcastReceive);
-                } catch (Exception e) { }
+                } catch (Exception ignored) { }
                 callAllOnCanReadConfig();
             }
         }
@@ -152,7 +148,7 @@ public abstract class XposedModule {
         if(disableAutoCleanNotification == null){
             this.checkUserDeviceUnlockAndUpdateConfig();
         }
-        return disableAutoCleanNotification == null ? false : disableAutoCleanNotification;
+        return disableAutoCleanNotification != null && disableAutoCleanNotification;
     }
 
     private static void onUpdateConfig(){
