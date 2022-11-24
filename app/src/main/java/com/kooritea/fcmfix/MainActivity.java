@@ -249,6 +249,8 @@ public class MainActivity extends AppCompatActivity {
         disableAutoCleanNotificationMenuItem.setCheckable(true);
 
         menu.add("全选包含 FCM 的应用");
+
+        menu.add("打开FCM Diagnostics");
         return true;
     }
 
@@ -275,6 +277,16 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             appListAdapter.notifyDataSetChanged();
+            return false;
+        });
+
+        MenuItem openFcmDiagnosticsMenuItem = menu.getItem(3);
+        openFcmDiagnosticsMenuItem.setOnMenuItemClickListener(menuItem -> {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.setPackage("com.google.android.gms");
+            intent.setComponent(new ComponentName("com.google.android.gms","com.google.android.gms.gcm.GcmDiagnostics"));
+            startActivity(intent);
             return false;
         });
         return super.onPrepareOptionsMenu(menu);

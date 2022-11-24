@@ -2,6 +2,7 @@ package com.kooritea.fcmfix.xposed;
 
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
@@ -34,7 +35,7 @@ public class ReconnectManagerFix extends XposedModule {
 
     public ReconnectManagerFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
-        this.addReConnectButton();
+        this.addButton();
         this.startHookGcmServiceStart();
     }
 
@@ -266,7 +267,7 @@ public class ReconnectManagerFix extends XposedModule {
         editor.apply();
     }
 
-    private void addReConnectButton(){
+    private void addButton(){
         XposedHelpers.findAndHookMethod("com.google.android.gms.gcm.GcmChimeraDiagnostics", loadPackageParam.classLoader, "onCreate", Bundle.class, new XC_MethodHook() {
             @SuppressLint("SetTextI18n")
             @Override
@@ -274,13 +275,25 @@ public class ReconnectManagerFix extends XposedModule {
                 ViewGroup viewGroup = ((Window)XposedHelpers.callMethod(param.thisObject, "getWindow")).getDecorView().findViewById(android.R.id.content);
                 LinearLayout linearLayout = (LinearLayout)viewGroup.getChildAt(0);
                 LinearLayout linearLayout2 = (LinearLayout)linearLayout.getChildAt(0);
-                Button button = new Button((ContextWrapper)param.thisObject);
-                button.setText("RECONNECT");
-                linearLayout2.addView(button);
-                button.setOnClickListener(view -> {
+
+                Button reConnectButton = new Button((ContextWrapper)param.thisObject);
+                reConnectButton.setText("RECONNECT");
+                reConnectButton.setOnClickListener(view -> {
                     context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
                     printLog("Send broadcast GCM_RECONNECT");
                 });
+                linearLayout2.addView(reConnectButton);
+
+                Button openFcmFixButton = new Button((ContextWrapper)param.thisObject);
+                openFcmFixButton.setText("打开FCMFIX");
+                openFcmFixButton.setOnClickListener(view -> {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.setPackage("com.kooritea.fcmfix");
+                    intent.setComponent(new ComponentName("com.kooritea.fcmfix","com.kooritea.fcmfix.MainActivity"));
+                    context.startActivity(intent);
+                });
+                linearLayout2.addView(openFcmFixButton);
             }
         });
     }
