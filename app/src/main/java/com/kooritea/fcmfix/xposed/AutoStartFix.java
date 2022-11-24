@@ -25,16 +25,11 @@ public class AutoStartFix extends XposedModule {
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[2], "intent");
                     if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
-                        String target;
-                        if (intent.getComponent() != null) {
-                            target = intent.getComponent().getPackageName();
-                        } else {
-                            target = intent.getPackage();
-                        }
+                        String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             XposedHelpers.callStaticMethod(BroadcastQueueInjector,"checkAbnormalBroadcastInQueueLocked", methodHookParam.args[1], methodHookParam.args[0]);
-                            methodHookParam.setResult(true);
                             printLog("Allow Auto Start: " + target);
+                            methodHookParam.setResult(true);
                         }
                     }
                 }
@@ -50,16 +45,11 @@ public class AutoStartFix extends XposedModule {
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
-                        String target;
-                        if (intent.getComponent() != null) {
-                            target = intent.getComponent().getPackageName();
-                        } else {
-                            target = intent.getPackage();
-                        }
+                        String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
-                            methodHookParam.setResult(true);
                             printLog("Allow Auto Start: " + target);
+                            methodHookParam.setResult(true);
                         }
                     }
                 }
@@ -77,11 +67,13 @@ public class AutoStartFix extends XposedModule {
 
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    Intent service = (Intent) param.args[0];
-                    if("com.google.firebase.MESSAGING_EVENT".equals(service.getAction())){
-                        printLog("Disable MIUI Intercept: " +
-                                (service.getComponent() == null ? service.getPackage() : service.getComponent().getPackageName()));
-                        param.setResult(false);
+                    Intent intent = (Intent) param.args[0];
+                    if("com.google.firebase.MESSAGING_EVENT".equals(intent.getAction())){
+                        String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
+                        if(targetIsAllow(target)){
+                            printLog("Disable MIUI Intercept: " + target);
+                            param.setResult(false);
+                        }
                     }
                 }
             });
