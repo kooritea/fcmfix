@@ -15,6 +15,7 @@ import android.view.Window;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import com.kooritea.fcmfix.util.XposedUtils;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -232,7 +233,16 @@ public class ReconnectManagerFix extends XposedModule {
                 if(Modifier.isFinal(timerClassField.getModifiers()) && Modifier.isPublic(timerClassField.getModifiers())){
                     final Class<?> alarmClass = timerClassField.getType();
                     final Boolean[] isFinish = {false};
-                    XposedHelpers.findAndHookConstructor(alarmClass, Context.class, int.class, String.class, String.class, String.class, String.class, new XC_MethodHook() {
+                    Constructor alarmClassConstructor = null;
+		            for (Constructor constructor: alarmClass.getConstructors()) {
+			            Class[] pts = constructor.getParameterTypes();
+			            if (alarmClassConstructor == null || pts.length > alarmClassConstructor.getParameterCount()) {
+                            if (pts[0] == Context.class && pts[1] == int.class && pts[2] == String.class)
+				                alarmClassConstructor = constructor;
+			            }
+		            }
+                    if(alarmClassConstructor == null) throw new Throwable("未找到构造函数");
+                    XposedBridge.hookMethod(alarmClassConstructor, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(final MethodHookParam param) {
                             if(!isFinish[0]){
