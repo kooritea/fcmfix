@@ -85,6 +85,7 @@ public class ReconnectManagerFix extends XposedModule {
         }
     }
 
+    public static final String configVersion = "v3";
     private void checkVersion() throws Exception {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
@@ -93,7 +94,7 @@ public class ReconnectManagerFix extends XposedModule {
             printLog("当前为旧版GMS，请使用0.4.1版本FCMFIX，禁用重连修复功能");
             return;
         }
-        if (!sharedPreferences.getBoolean("isInit", false) || !sharedPreferences.getString("config_version", "").equals("v2")) {
+        if (!sharedPreferences.getBoolean("isInit", false) || !sharedPreferences.getString("config_version", "").equals(configVersion)) {
             printLog("fcmfix_config init");
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putBoolean("isInit", true);
@@ -102,7 +103,7 @@ public class ReconnectManagerFix extends XposedModule {
             editor.putLong("reconnInterval", 0L);
             editor.putString("gms_version", versionName);
             editor.putLong("gms_version_code", versionCode);
-            editor.putString("config_version", "v2");
+            editor.putString("config_version", configVersion);
             editor.putString("timer_class", "");
             editor.putString("timer_settimeout_method", "");
             editor.putString("timer_alarm_type_property", "");

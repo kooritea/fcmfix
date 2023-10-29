@@ -38,4 +38,4 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: fcmfix
-        path: ${{ github.workspace }}/app/build/outputs/apk/release/*signed.apk
+        path: ${{ github.workspace }}/app/build/outputs/apk/release/*-signed.apk
