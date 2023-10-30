@@ -15,6 +15,7 @@ import android.view.Window;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import com.kooritea.fcmfix.util.XposedUtils;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -84,6 +85,7 @@ public class ReconnectManagerFix extends XposedModule {
         }
     }
 
+    public static final String configVersion = "v3";
     private void checkVersion() throws Exception {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
@@ -92,7 +94,7 @@ public class ReconnectManagerFix extends XposedModule {
             printLog("当前为旧版GMS，请使用0.4.1版本FCMFIX，禁用重连修复功能");
             return;
         }
-        if (!sharedPreferences.getBoolean("isInit", false) || !sharedPreferences.getString("config_version", "").equals("v2")) {
+        if (!sharedPreferences.getBoolean("isInit", false) || !sharedPreferences.getString("config_version", "").equals(configVersion)) {
             printLog("fcmfix_config init");
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putBoolean("isInit", true);
@@ -101,7 +103,7 @@ public class ReconnectManagerFix extends XposedModule {
             editor.putLong("reconnInterval", 0L);
             editor.putString("gms_version", versionName);
             editor.putLong("gms_version_code", versionCode);
-            editor.putString("config_version", "v2");
+            editor.putString("config_version", configVersion);
             editor.putString("timer_class", "");
             editor.putString("timer_settimeout_method", "");
             editor.putString("timer_alarm_type_property", "");
@@ -232,7 +234,16 @@ public class ReconnectManagerFix extends XposedModule {
                 if(Modifier.isFinal(timerClassField.getModifiers()) && Modifier.isPublic(timerClassField.getModifiers())){
                     final Class<?> alarmClass = timerClassField.getType();
                     final Boolean[] isFinish = {false};
-                    XposedHelpers.findAndHookConstructor(alarmClass, Context.class, int.class, String.class, String.class, String.class, String.class, new XC_MethodHook() {
+                    Constructor alarmClassConstructor = null;
+		            for (Constructor constructor: alarmClass.getConstructors()) {
+			            Class[] pts = constructor.getParameterTypes();
+			            if (alarmClassConstructor == null || pts.length > alarmClassConstructor.getParameterCount()) {
+                            if (pts[0] == Context.class && pts[1] == int.class && pts[2] == String.class)
+				                alarmClassConstructor = constructor;
+			            }
+		            }
+                    if(alarmClassConstructor == null) throw new Throwable("未找到构造函数");
+                    XposedBridge.hookMethod(alarmClassConstructor, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(final MethodHookParam param) {
                             if(!isFinish[0]){
