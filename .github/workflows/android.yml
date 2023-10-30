@@ -20,6 +20,12 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
+    - name: Retrieve version
+      run: echo VERSION=$(echo ${{ github.event.head_commit.id }} | head -c 7) >> $GITHUB_ENV
+
+    - name: Set version name
+      run: sed -e "s/versionName \".*\"/versionName \"${{ env.VERSION }}\"/" ${{ github.workspace }}/app/build.gradle
+      
     - name: Build with Gradle
       run: ./gradlew assembleRelease
       
@@ -33,9 +39,6 @@ jobs:
         keyPassword: ${{ secrets.KEYPASSWORD }}
       env:
         BUILD_TOOLS_VERSION: "30.0.2"
-    
-    - name: Retrieve version
-      run: echo VERSION=$(echo ${{ github.event.head_commit.id }} | head -c 7) >> $GITHUB_ENV
 
     - name: Renamae
       run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned-signed.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION }}.apk
@@ -43,5 +46,5 @@ jobs:
     - name: Upload built apk
       uses: actions/upload-artifact@v3
       with:
-        name: snapshot
+        name: release
         path: ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION }}.apk
