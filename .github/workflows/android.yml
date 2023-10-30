@@ -24,7 +24,7 @@ jobs:
       run: echo VERSION=$(echo ${{ github.event.head_commit.id }} | head -c 7) >> $GITHUB_ENV
 
     - name: Set version name
-      run: sed -e "s/versionName \".*\"/versionName \"${{ env.VERSION }}\"/" ${{ github.workspace }}/app/build.gradle
+      run: sed -i "s/versionName \".*\"/versionName \"${{ env.VERSION }}\"/" ${{ github.workspace }}/app/build.gradle
       
     - name: Build with Gradle
       run: ./gradlew assembleRelease
