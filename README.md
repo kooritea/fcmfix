@@ -1,4 +1,4 @@
-# fcmfix(Android 10以上 )
+# fcmfix(Android 10以上13以下 )
 
 使用xposed让被完全停止的应用响应fcm，让fcm送达率达到100%，不错过任何通知  
 
@@ -10,7 +10,15 @@
 - 固定心跳间隔(默认不开启,更改需要编辑配置文件/data/data/com.google.android.gms/shared_prefs/fcmfix_config.xml中的heartbeatInterval项，最小值为1000，1000==1s)
 - 国内版miui电量和性能伪装为国际版，防止锁屏fcm断线
 - 阻止应用关闭时清除通知
+- 在miui12和miui13上自动赋予目标应用自启动权限
 ---
+
+## 已知问题
+
+- Android 14或以上暂未支持
+- 除miui12和miui13和原生系统外，要在fcmfix中勾选和在系统设置中给予类似允许自启动的权限
+
+## 其他
 
 这个模块并不是为了让不能使用fcm的机器使用fcm，而是在能正常使用fcm的机器上进行改造。  
 fcm的工作原理是通过公用系统级长链接来节省各个应用分别在后台维持长链接所消耗的资源。  
