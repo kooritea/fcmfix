@@ -1,4 +1,4 @@
-# fcmfix(Android 10以上13以下 )
+# fcmfix(Android 10以上13以下 )(Android 14?)
 
 使用xposed让被完全停止的应用响应fcm，让fcm送达率达到100%，不错过任何通知  
 
@@ -15,8 +15,8 @@
 
 ## 已知问题
 
-- Android 14或以上暂未支持
-- 除miui12和miui13和原生系统外，要在fcmfix中勾选和在系统设置中给予类似允许自启动的权限
+- Android 14可能支持了
+- 除miui12和miui13，HyperOS(?)和原生系统外，要在fcmfix中勾选和在系统设置中给予类似允许自启动的权限
 
 ## 其他
 
