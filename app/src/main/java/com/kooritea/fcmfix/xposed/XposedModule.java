@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.UserManager;
 import androidx.core.app.NotificationCompat;
@@ -189,14 +190,26 @@ public abstract class XposedModule {
 
             IntentFilter updateConfigIntentFilter = new IntentFilter();
             updateConfigIntentFilter.addAction("com.kooritea.fcmfix.update.config");
-            context.registerReceiver(new BroadcastReceiver() {
-                public void onReceive(Context context, Intent intent) {
-                    String action = intent.getAction();
-                    if ("com.kooritea.fcmfix.update.config".equals(action)) {
-                        onUpdateConfig();
+            if (Build.VERSION.SDK_INT >= 34) {
+                context.registerReceiver(new BroadcastReceiver() {
+                    public void onReceive(Context context, Intent intent) {
+                        String action = intent.getAction();
+                        if ("com.kooritea.fcmfix.update.config".equals(action)) {
+                            onUpdateConfig();
+                        }
                     }
-                }
-            }, updateConfigIntentFilter);
+                }, updateConfigIntentFilter, Context.RECEIVER_EXPORTED);
+                printLog("Registered Receiver successfully in Android 14 ");
+            } else {
+                context.registerReceiver(new BroadcastReceiver() {
+                    public void onReceive(Context context, Intent intent) {
+                        String action = intent.getAction();
+                        if ("com.kooritea.fcmfix.update.config".equals(action)) {
+                            onUpdateConfig();
+                        }
+                    }
+                }, updateConfigIntentFilter);
+            }
 
             IntentFilter unInstallIntentFilter = new IntentFilter();
             unInstallIntentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);

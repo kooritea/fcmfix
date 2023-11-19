@@ -8,6 +8,7 @@ import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.ViewGroup;
@@ -66,7 +67,11 @@ public class ReconnectManagerFix extends XposedModule {
                 protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
                     IntentFilter intentFilter = new IntentFilter();
                     intentFilter.addAction("com.kooritea.fcmfix.log");
-                    context.registerReceiver(logBroadcastReceive, intentFilter);
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        context.registerReceiver(logBroadcastReceive, intentFilter, Context.RECEIVER_EXPORTED);
+                    } else {
+                        context.registerReceiver(logBroadcastReceive, intentFilter);
+                    }
                     if(startHookFlag){
                         checkVersion();
                     }else {

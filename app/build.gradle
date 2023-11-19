@@ -1,12 +1,12 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 32
+    compileSdkVersion 34
 
     defaultConfig {
         applicationId "com.kooritea.fcmfix"
         minSdkVersion 29
-        targetSdkVersion 32
+        targetSdkVersion 34
         versionCode 38
         versionName "0.7.0"
 
@@ -22,6 +22,10 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
     }
 }
 
