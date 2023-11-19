@@ -57,6 +57,27 @@ public class AutoStartFix extends XposedModule {
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
             printLog("No Such Method com.android.server.am.BroadcastQueueImpl.checkApplicationAutoStart", false);
         }
+
+        try{
+            // hyperos
+            Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernStub",loadPackageParam.classLoader);
+            XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl,"checkApplicationAutoStart",new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
+                    if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
+                        String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
+                        if(targetIsAllow(target)){
+                            XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
+                            printLog("Allow Auto Start: " + target);
+                            methodHookParam.setResult(true);
+                        }
+                    }
+                }
+            });
+        }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
+            printLog("No Such Method com.android.server.am.BroadcastQueueModernStub.checkApplicationAutoStart", false);
+        }
     }
 
     protected void startHookRemovePowerPolicy(){
