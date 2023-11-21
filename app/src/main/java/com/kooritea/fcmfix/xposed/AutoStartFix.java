@@ -60,7 +60,7 @@ public class AutoStartFix extends XposedModule {
 
         try{
             // hyperos
-            Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernStub",loadPackageParam.classLoader);
+            Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernStubImpl",loadPackageParam.classLoader);
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl,"checkApplicationAutoStart",new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
@@ -68,7 +68,7 @@ public class AutoStartFix extends XposedModule {
                     if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
-                            XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
+                            //XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
                             printLog("Allow Auto Start: " + target);
                             methodHookParam.setResult(true);
                         }
