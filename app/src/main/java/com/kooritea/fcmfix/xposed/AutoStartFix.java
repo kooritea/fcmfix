@@ -66,13 +66,10 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
-                    if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())) {
-                        String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
-                        if (targetIsAllow(target)) {
-                            //XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
-                            printLog("Allow Auto Start: " + target, false);
-                            methodHookParam.setResult(true);
-                        }
+                    String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
+                    if (targetIsAllow(target)) {
+                        printLog("Allow Auto Start: " + target, false);
+                        methodHookParam.setResult(true);
                     }
                 }
             });
