@@ -24,7 +24,7 @@ import static android.content.Context.NOTIFICATION_SERVICE;
 public abstract class XposedModule {
 
     protected XC_LoadPackage.LoadPackageParam loadPackageParam;
-    private static Set<String> allowList = null;
+    public static Set<String> allowList = null;
     private static Boolean disableAutoCleanNotification = null;
 
     @SuppressLint("StaticFieldLeak")
@@ -85,7 +85,7 @@ public abstract class XposedModule {
     protected void onCanReadConfig() throws Exception{}
 
     protected static void printLog(String text){
-        printLog(text, true);
+        printLog(text, false);
     }
 
     protected static void printLog(String text, Boolean isDiagnosticsLog) {
@@ -107,7 +107,7 @@ public abstract class XposedModule {
      * 尝试读取允许的应用列表但列表未初始化时调用
      */
     protected void checkUserDeviceUnlockAndUpdateConfig(){
-        if (context.getSystemService(UserManager.class).isUserUnlocked()) {
+        if (context != null && context.getSystemService(UserManager.class).isUserUnlocked()) {
             try {
                 onUpdateConfig();
             } catch (Exception e) {
