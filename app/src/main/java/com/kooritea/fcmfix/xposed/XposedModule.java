@@ -25,6 +25,8 @@ public abstract class XposedModule {
 
     protected XC_LoadPackage.LoadPackageParam loadPackageParam;
     public static Set<String> allowList = null;
+
+    final String TAG = "FcmFix";
     private static Boolean disableAutoCleanNotification = null;
 
     @SuppressLint("StaticFieldLeak")
