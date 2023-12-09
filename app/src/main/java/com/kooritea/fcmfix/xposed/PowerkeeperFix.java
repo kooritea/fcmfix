@@ -4,12 +4,10 @@ import android.content.Context;
 
 import com.kooritea.fcmfix.util.XposedUtils;
 
-import java.lang.reflect.Method;
 import java.lang.reflect.Field;
 import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
@@ -47,7 +45,6 @@ public class PowerkeeperFix extends XposedModule {
                     boolean mSystemBlackList = false;
                     boolean whiteApps = false;
                     boolean mDataWhiteList = false;
-                    boolean musicApp = false;
 
                     for (Field field : MilletPolicy.getDeclaredFields()) {
                         if (field.getName().equals("mSystemBlackList")) {
@@ -56,8 +53,6 @@ public class PowerkeeperFix extends XposedModule {
                             whiteApps = true;
                         } else if (field.getName().equals("mDataWhiteList")) {
                             mDataWhiteList = true;
-                        } else if (field.getName().equals("musicApp")) {
-                            musicApp = true;
                         }
                     }
 
@@ -81,37 +76,15 @@ public class PowerkeeperFix extends XposedModule {
                     if (mDataWhiteList) {
                         List dataWhiteList = (List) XposedHelpers.getObjectField(methodHookParam.thisObject, "mDataWhiteList");
                         dataWhiteList.add("com.google.android.gms");
-                        dataWhiteList.add("org.telegram.messenger");
 
                         XposedHelpers.setObjectField(methodHookParam.thisObject, "mDataWhiteList", dataWhiteList);
                         printLog("Success: MilletPolicy mDataWhiteList.");
                     }
-                    if (musicApp) {
-                        List musicAppList = (List) XposedHelpers.getObjectField(methodHookParam.thisObject, "musicApp");
-                        musicAppList.add("com.google.android.apps.podcasts");
-                        musicAppList.add("com.spotify.music");
-                        musicAppList.add("au.com.shiftyjelly.pocketcasts");
-                        musicAppList.add("com.google.android.youtube");
-                        printLog("Success: MilletPolicy musicApp");
-                    }
+
                 }
             };
             printLog("[fcmfix] start hook com.miui.powerkeeper.millet.MilletPolicy constructor");
             XposedHelpers.findAndHookConstructor(MilletPolicy, new Object[] {Context.class, methodHook});
-
-            printLog("[fcmfix] start hook com.miui.powerkeeper.millet.MilletPolicy.isAllowFreeze");
-            Method isAllowFreeze = XposedUtils.findMethod(MilletPolicy, "isAllowFreeze", 1);
-            Class<?> MilletUidObserver = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletUidObserver", loadPackageParam.classLoader);
-            Method getPkgNameByUid = XposedUtils.findMethod(MilletUidObserver, "getPkgNameByUid", 1);
-            XposedBridge.hookMethod(isAllowFreeze, new XC_MethodHook() {
-                protected void beforeHookedMethod(XC_MethodHook.MethodHookParam methodHookParam) throws Throwable {
-                    String target = (String) getPkgNameByUid.invoke(methodHookParam.thisObject, Integer.valueOf(((Integer) methodHookParam.args[0]).intValue()));
-                    if (targetIsAllow(target)) {
-                        methodHookParam.setResult(false);
-                        printLog("[fcmfix]] MilletPolicy Freeze. package_name: " + target);
-                    }
-                }
-            });
 
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
             printLog("No Such Method com.android.server.am.ProcessMemoryCleaner.checkBackgroundAppException", false);
