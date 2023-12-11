@@ -76,6 +76,26 @@ public class XposedUtils {
         return XposedBridge.hookMethod(XposedHelpers.findMethodExact(clazz,methodName,bestMatch.getParameterTypes()), callbacks);
     }
 
+    public static XC_MethodHook.Unhook findAndHookMethod(Class<?> clazz, String methodName, int parameterCount, XC_MethodHook callbacks) {
+        Method method = null;
+        for (Method m : clazz.getDeclaredMethods()) {
+            if (m.getName().equals(methodName) && m.getParameterTypes().length == parameterCount) {
+                method = m;
+            }
+        }
+        return XposedBridge.hookMethod(XposedHelpers.findMethodExact(clazz,methodName, method.getParameterTypes()), callbacks);
+    }
+
+    public static Method findMethod(Class<?> clazz, String methodName, int parameterCount) {
+        Method method = null;
+        for (Method m : clazz.getDeclaredMethods()) {
+            if (m.getName().equals(methodName) && m.getParameterTypes().length == parameterCount) {
+                method = m;
+            }
+        }
+        return method;
+    }
+
     public static XC_MethodHook.Unhook findAndHookMethodAnyParam(String className, ClassLoader classLoader, String methodName, XC_MethodHook callbacks, Object ...parameterTypes){
         Class<?> clazz = XposedHelpers.findClass(className,classLoader);
         return findAndHookMethodAnyParam(clazz,methodName,callbacks,parameterTypes);

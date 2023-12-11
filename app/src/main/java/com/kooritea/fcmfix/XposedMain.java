@@ -1,6 +1,7 @@
 package com.kooritea.fcmfix;
 
 import android.annotation.SuppressLint;
+import android.os.Build;
 
 import com.kooritea.fcmfix.xposed.AutoStartFix;
 import com.kooritea.fcmfix.xposed.BroadcastFix;
@@ -24,8 +25,16 @@ public class XposedMain implements IXposedHookLoadPackage {
             return;
         }
         if(loadPackageParam.packageName.equals("android")){
-            XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
-            new BroadcastFix(loadPackageParam);
+            // Both hooks are no longer required in Android 14
+            if (Build.VERSION.SDK_INT < 34) {
+                XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
+                new BroadcastFix(loadPackageParam);
+
+                if(loadPackageParam.packageName.equals("com.google.android.gms") && loadPackageParam.isFirstApplication){
+                    XposedBridge.log("[fcmfix] start hook com.google.android.gms");
+                    new ReconnectManagerFix(loadPackageParam);
+                }
+            }
 
             XposedBridge.log("[fcmfix] start hook com.android.server.notification.NotificationManagerServiceInjector");
             new MiuiLocalNotificationFix(loadPackageParam);
@@ -36,14 +45,13 @@ public class XposedMain implements IXposedHookLoadPackage {
             XposedBridge.log("[fcmfix] com.android.server.notification.NotificationManagerService");
             new KeepNotification(loadPackageParam);
         }
-        if(loadPackageParam.packageName.equals("com.google.android.gms") && loadPackageParam.isFirstApplication){
-            XposedBridge.log("[fcmfix] start hook com.google.android.gms");
-            new ReconnectManagerFix(loadPackageParam);
-        }
+
+
         if(loadPackageParam.packageName.equals("com.miui.powerkeeper") && loadPackageParam.isFirstApplication){
             XposedBridge.log("[fcmfix] start hook com.miui.powerkeeper");
             new PowerkeeperFix(loadPackageParam);
         }
+
     }
     private boolean fileIsExists(String strFile) {
         try {
