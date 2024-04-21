@@ -1,7 +1,6 @@
 package com.kooritea.fcmfix.xposed;
 
 import android.content.Intent;
-import android.util.Log;
 
 import com.kooritea.fcmfix.util.XposedUtils;
 
@@ -29,14 +28,14 @@ public class AutoStartFix extends XposedModule {
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             XposedHelpers.callStaticMethod(BroadcastQueueInjector,"checkAbnormalBroadcastInQueueLocked", methodHookParam.args[1], methodHookParam.args[0]);
-                            Log.d(TAG, "Allow Auto Start: " + target);
+                            printLog("Allow Auto Start: " + target, true);
                             methodHookParam.setResult(true);
                         }
                     }
                 }
             });
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart", false);
+            printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
         }
         try{
             // miui13
@@ -49,14 +48,14 @@ public class AutoStartFix extends XposedModule {
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
-                            Log.d(TAG, "Allow Auto Start: " + target);
+                            printLog("Allow Auto Start: " + target, true);
                             methodHookParam.setResult(true);
                         }
                     }
                 }
             });
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.BroadcastQueueImpl.checkApplicationAutoStart", false);
+            printLog("No Such Method com.android.server.am.BroadcastQueueImpl.checkApplicationAutoStart");
         }
 
         try{
@@ -69,7 +68,7 @@ public class AutoStartFix extends XposedModule {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if (targetIsAllow(target)) {
-                        Log.d(TAG,"Allow Auto Start: " + target);
+                        printLog("Allow Auto Start: " + target, true);
                         methodHookParam.setResult(true);
                     }
                 }
@@ -83,24 +82,24 @@ public class AutoStartFix extends XposedModule {
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)){
                         //XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
-                        Log.d(TAG,"BroadcastQueueModernStubImpl.checkReceiverIfRestricted: " + target);
+                        printLog("BroadcastQueueModernStubImpl.checkReceiverIfRestricted: " + target, true);
                         methodHookParam.setResult(false);
                     }
                 }
             });
         }catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such class com.android.server.am.BroadcastQueueModernStubImpl", false);
+            printLog("No Such class com.android.server.am.BroadcastQueueModernStubImpl");
         }
 
         try {
-            Class<?> AutoStartManagerServiceStubImpl = XposedHelpers.findClassIfExists("com.android.server.am.AutoStartManagerServiceStubImpl", loadPackageParam.classLoader);
+            Class<?> AutoStartManagerServiceStubImpl = XposedHelpers.findClass("com.android.server.am.AutoStartManagerServiceStubImpl", loadPackageParam.classLoader);
             XC_MethodHook methodHook = new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+                protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent service = (Intent) methodHookParam.args[1];
                     String target = service.getComponent().getPackageName();
                     if(targetIsAllow(target)) {
-                        Log.d(TAG,"AutoStartManagerServiceStubImpl.isAllowStartService  package_name:" + target);
+                        printLog("AutoStartManagerServiceStubImpl.isAllowStartService  package_name: " + target, true);
                         methodHookParam.setResult(true);
                     }
                 }
@@ -110,19 +109,19 @@ public class AutoStartFix extends XposedModule {
             XposedUtils.findAndHookMethod(AutoStartManagerServiceStubImpl, "isAllowStartService", 3, methodHook);
             XposedUtils.findAndHookMethod(AutoStartManagerServiceStubImpl, "isAllowStartService", 4, methodHook);
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Class com.android.server.am.AutoStartManagerServiceStubImpl.isAllowStartService", false);
+            printLog("No Such Class com.android.server.am.AutoStartManagerServiceStubImpl.isAllowStartService");
         }
 
         try {
-            Class<?> SmartPowerService = XposedHelpers.findClassIfExists("com.android.server.am.SmartPowerService", loadPackageParam.classLoader);
+            Class<?> SmartPowerService = XposedHelpers.findClass("com.android.server.am.SmartPowerService", loadPackageParam.classLoader);
 
             printLog("[fcmfix] start hook com.android.server.am.SmartPowerService.isProcessWhiteList");
             XposedUtils.findAndHookMethodAnyParam(SmartPowerService, "isProcessWhiteList", new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+                protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     String target = (String)methodHookParam.args[1];
                     if(targetIsAllow(target)) {
-                        Log.d(TAG,"SmartPowerService.isProcessWhiteList  package_name: " + target);
+                        printLog("SmartPowerService.isProcessWhiteList  package_name: " + target, true);
                         methodHookParam.setResult(true);
                     }
                 }
@@ -131,17 +130,17 @@ public class AutoStartFix extends XposedModule {
             printLog("[fcmfix] start hook com.android.server.am.SmartPowerService.shouldInterceptBroadcast");
             XposedUtils.findAndHookMethodAnyParam(SmartPowerService, "shouldInterceptBroadcast", new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+                protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)) {
-                        Log.d(TAG,"SmartPowerService.shouldInterceptBroadcast  package_name: " + target);
+                        printLog("SmartPowerService.shouldInterceptBroadcast  package_name: " + target, true);
                         methodHookParam.setResult(false);
                     }
                 }
             });
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Class com.android.server.am.SmartPowerService", false);
+            printLog("No Such Class com.android.server.am.SmartPowerService");
         }
     }
 
@@ -157,14 +156,14 @@ public class AutoStartFix extends XposedModule {
                     if("com.google.firebase.MESSAGING_EVENT".equals(intent.getAction())){
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
-                            Log.d(TAG,"Disable MIUI Intercept: " + target);
+                            printLog("Disable MIUI Intercept: " + target, true);
                             param.setResult(false);
                         }
                     }
                 }
             });
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e) {
-            printLog("No Such Method com.miui.server.smartpower.SmartPowerPolicyManager.shouldInterceptService", false);
+            printLog("No Such Method com.miui.server.smartpower.SmartPowerPolicyManager.shouldInterceptService");
         }
     }
 }

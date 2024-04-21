@@ -100,7 +100,7 @@ public class ReconnectManagerFix extends XposedModule {
             return;
         }
         if (!sharedPreferences.getBoolean("isInit", false) || !sharedPreferences.getString("config_version", "").equals(configVersion)) {
-            printLog("fcmfix_config init");
+            printLog("fcmfix_config init", true);
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putBoolean("isInit", true);
             editor.putBoolean("enable", false);
@@ -113,23 +113,23 @@ public class ReconnectManagerFix extends XposedModule {
             editor.putString("timer_settimeout_method", "");
             editor.putString("timer_alarm_type_property", "");
             editor.apply();
-            printLog("正在更新hook位置");
+            printLog("正在更新hook位置", true);
             findAndUpdateHookTarget(sharedPreferences);
             return;
         }
         if (!sharedPreferences.getString("gms_version", "").equals(versionName) ) {
-            printLog("gms已更新: " + sharedPreferences.getString("gms_version", "") + "(" + sharedPreferences.getLong("gms_version_code", 0) + ")" + "->" + versionName + "(" +versionCode + ")");
+            printLog("gms已更新: " + sharedPreferences.getString("gms_version", "") + "(" + sharedPreferences.getLong("gms_version_code", 0) + ")" + "->" + versionName + "(" +versionCode + ")", true);
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putString("gms_version", versionName);
             editor.putLong("gms_version_code", versionCode);
             editor.putBoolean("enable", false);
             editor.apply();
-            printLog("正在更新hook位置");
+            printLog("正在更新hook位置", true);
             findAndUpdateHookTarget(sharedPreferences);
             return;
         }
         if (!sharedPreferences.getBoolean("enable", false)) {
-            printLog("当前配置文件enable标识为false，FCMFIX退出");
+            printLog("当前配置文件enable标识为false，FCMFIX退出", true);
             return;
         }
         startHook();
@@ -137,9 +137,9 @@ public class ReconnectManagerFix extends XposedModule {
 
     protected void startHook() {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
-        printLog("timer_class: "+ sharedPreferences.getString("timer_class", ""));
-        printLog("timer_alarm_type_property: "+ sharedPreferences.getString("timer_alarm_type_property", ""));
-        printLog("timer_settimeout_method: "+ sharedPreferences.getString("timer_settimeout_method", ""));
+        printLog("timer_class: "+ sharedPreferences.getString("timer_class", ""), true);
+        printLog("timer_alarm_type_property: "+ sharedPreferences.getString("timer_alarm_type_property", ""), true);
+        printLog("timer_settimeout_method: "+ sharedPreferences.getString("timer_settimeout_method", ""), true);
         final Class<?> timerClazz = XposedHelpers.findClass(sharedPreferences.getString("timer_class", ""), loadPackageParam.classLoader);
         XposedHelpers.findAndHookMethod(timerClazz, "toString", new XC_MethodHook() {
             @Override
@@ -197,7 +197,7 @@ public class ReconnectManagerFix extends XposedModule {
                             long nextConnectionTime = XposedHelpers.getLongField(param.thisObject, finalMaxField.getName());
                             if (nextConnectionTime != 0 && nextConnectionTime - SystemClock.elapsedRealtime() < 0) {
                                 context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
-                                printLog("Send broadcast GCM_RECONNECT");
+                                printLog("Send broadcast GCM_RECONNECT", true);
                             }
                             timer.cancel();
                         }
@@ -260,14 +260,14 @@ public class ReconnectManagerFix extends XposedModule {
                                             editor.putBoolean("enable", true);
                                             editor.apply();
                                             isFinish[0] = true;
-                                            printLog("更新hook位置成功");
+                                            printLog("更新hook位置成功", true);
                                             sendNotification("自动更新配置文件成功");
                                             startHook();
                                             return;
                                         }
                                     }
                                 }
-                                printLog("自动寻找hook点失败: 未找到目标方法");
+                                printLog("自动寻找hook点失败: 未找到目标方法", true);
                             }
                         }
                     });
@@ -276,7 +276,7 @@ public class ReconnectManagerFix extends XposedModule {
             }
         }catch (Throwable e){
             editor.putBoolean("enable", false);
-            printLog("自动寻找hook点失败"+e.getMessage());
+            printLog("自动寻找hook点失败"+e.getMessage(), true);
             this.sendNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
             e.printStackTrace();
         }
@@ -296,7 +296,7 @@ public class ReconnectManagerFix extends XposedModule {
                 reConnectButton.setText("RECONNECT");
                 reConnectButton.setOnClickListener(view -> {
                     context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
-                    printLog("Send broadcast GCM_RECONNECT");
+                    printLog("Send broadcast GCM_RECONNECT", true);
                 });
                 linearLayout2.addView(reConnectButton);
 

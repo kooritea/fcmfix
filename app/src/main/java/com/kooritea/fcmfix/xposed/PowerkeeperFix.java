@@ -30,7 +30,7 @@ public class PowerkeeperFix extends XposedModule {
                 @Override
                 protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
                     if("gms_control".equals((String) methodHookParam.args[1])) {
-                        printLog("Success: Success: PowerKeeper GMS Limitation. ", false);
+                        printLog("Success: Success: PowerKeeper GMS Limitation. ", true);
                         methodHookParam.setResult(false);
                     }
                 }
@@ -87,7 +87,7 @@ public class PowerkeeperFix extends XposedModule {
             XposedHelpers.findAndHookConstructor(MilletPolicy, new Object[] {Context.class, methodHook});
 
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.ProcessMemoryCleaner.checkBackgroundAppException", false);
+            printLog("No Such Method com.android.server.am.ProcessMemoryCleaner.checkBackgroundAppException");
         }
     }
 }

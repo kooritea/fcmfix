@@ -10,6 +10,8 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.UserManager;
+import android.util.Log;
+
 import androidx.core.app.NotificationCompat;
 import com.kooritea.fcmfix.R;
 import com.kooritea.fcmfix.util.ContentProviderHelper;
@@ -26,7 +28,7 @@ public abstract class XposedModule {
     protected XC_LoadPackage.LoadPackageParam loadPackageParam;
     public static Set<String> allowList = null;
 
-    final String TAG = "FcmFix";
+    static final String TAG = "FcmFix";
     private static Boolean disableAutoCleanNotification = null;
 
     @SuppressLint("StaticFieldLeak")
@@ -45,7 +47,7 @@ public abstract class XposedModule {
                 try{
                     onCanReadConfig();
                 }catch (Exception e){
-                    printLog(e.getMessage(), false);
+                    printLog(e.getMessage());
                 }
             }
         }
@@ -79,7 +81,7 @@ public abstract class XposedModule {
             try{
                 instance.onCanReadConfig();
             }catch (Exception e){
-                printLog(e.getMessage(), false);
+                printLog(e.getMessage());
             }
         }
     }
@@ -91,6 +93,7 @@ public abstract class XposedModule {
     }
 
     protected static void printLog(String text, Boolean isDiagnosticsLog) {
+        Log.d(TAG, text);
         if (isDiagnosticsLog) {
             Intent log = new Intent("com.kooritea.fcmfix.log");
             log.putExtra("text", text);
