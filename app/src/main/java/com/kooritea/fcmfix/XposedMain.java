@@ -25,11 +25,9 @@ public class XposedMain implements IXposedHookLoadPackage {
             return;
         }
         if(loadPackageParam.packageName.equals("android")){
-            // Both hooks are no longer required in Android 14
-            if (Build.VERSION.SDK_INT < 34) {
-                XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
-                new BroadcastFix(loadPackageParam);
-            }
+
+            XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
+            new BroadcastFix(loadPackageParam);
 
             XposedBridge.log("[fcmfix] start hook com.android.server.notification.NotificationManagerServiceInjector");
             new MiuiLocalNotificationFix(loadPackageParam);
