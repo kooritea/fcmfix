@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -229,6 +230,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateConfig(){
+        try {
+            SharedPreferences pref;
+            try {
+                pref = this.getSharedPreferences("config", Context.MODE_WORLD_READABLE);
+            } catch (SecurityException ignored) {
+                pref = null;
+            }
+            if(pref != null){
+                SharedPreferences.Editor sharedPreferencesEditor = pref.edit();
+                sharedPreferencesEditor.putBoolean("init", true);
+                sharedPreferencesEditor.putStringSet("allowList", this.allowList);
+                sharedPreferencesEditor.putBoolean("disableAutoCleanNotification", this.config.getBoolean("disableAutoCleanNotification"));
+                sharedPreferencesEditor.commit();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         try {
             FileOutputStream fos = this.openFileOutput("config.json", Context.MODE_PRIVATE);
             this.config.put("allowList", new JSONArray(this.allowList));

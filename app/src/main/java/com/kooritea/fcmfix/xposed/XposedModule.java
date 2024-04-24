@@ -18,6 +18,7 @@ import com.kooritea.fcmfix.util.ContentProviderHelper;
 import java.util.ArrayList;
 import java.util.Set;
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XSharedPreferences;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
@@ -164,15 +165,29 @@ public abstract class XposedModule {
                 public void run() {
                     super.run();
                     try{
+                        XSharedPreferences pref = new XSharedPreferences("com.kooritea.fcmfix", "config");
+                        if(pref.getBoolean("init", false)){
+                            allowList = pref.getStringSet("allowList", null);
+                            if(allowList != null && "android".equals(context.getPackageName())){
+                                printLog( "[XSharedPreferences Mode]onUpdateConfig allowList size: " + allowList.size());
+                            }
+                            disableAutoCleanNotification = pref.getBoolean("disableAutoCleanNotification", false);
+                            loadConfigThread = null;
+                            return;
+                        }
+                    }catch (Exception e){
+                        printLog("直接读取应用配置失败，将唤醒fcmfix本体进行读取: " + e.getMessage());
+                    }
+                    try{
                         ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
                         allowList = contentProviderHelper.getStringSet("allowList");
                         if(allowList != null && "android".equals(context.getPackageName())){
-                            printLog( "onUpdateConfig allowList size: " + allowList.size());
+                            printLog( "[ContentProvider Mode]onUpdateConfig allowList size: " + allowList.size());
                         }
                         disableAutoCleanNotification = contentProviderHelper.getBoolean("disableAutoCleanNotification", false);
                         contentProviderHelper.close();
                     }catch (Exception e){
-                        printLog(e.getMessage());
+                        printLog("唤醒fcmfix应用读取配置失败: " + e.getMessage());
                     }
                     loadConfigThread = null;
                 }
