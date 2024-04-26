@@ -20,11 +20,14 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
-    - name: Retrieve version
-      run: echo VERSION=$(date "+%Y%m%d")-$(echo ${{ github.event.head_commit.id }} | head -c 7) >> $GITHUB_ENV
+    - name: Retrieve version name
+      run: echo VERSION_NAME=$(date "+%Y%m%d")_$(echo ${{ github.event.head_commit.id }} | head -c 7) >> $GITHUB_ENV
+
+    - name: Retrieve version code
+      run: echo VERSION_CODE=$(cat ${{ github.workspace }}/app/build.gradle | grep "versionCode" | grep -Eo "[0-9]+") >> $GITHUB_ENV
 
     - name: Set version name
-      run: sed -i "s/versionName \".*\"/versionName \"${{ env.VERSION }}\"/" ${{ github.workspace }}/app/build.gradle
+      run: sed -i "s/versionName \".*\"/versionName \"${{ env.VERSION_NAME }}\"/" ${{ github.workspace }}/app/build.gradle
       
     - name: Build with Gradle
       run: ./gradlew assembleRelease
@@ -48,20 +51,38 @@ jobs:
         BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOL_VERSION }}
 
     - name: Renamae
-      run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned-signed.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION }}.apk
+      run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned-signed.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
     
     - name: Upload built apk
       uses: actions/upload-artifact@v3
       with:
         name: release
-        path: ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION }}.apk
+        path: ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
 
     - name: Release
-      uses: marvinpinto/action-automatic-releases@latest
+      uses: softprops/action-gh-release@v2
       with:
-        repo_token: "${{ secrets.TOKEN }}"
-        automatic_release_tag: ${{ env.VERSION }}
-        title: "Auto Release ${{ env.VERSION }}"
-        prerelease: false
+        name: "Auto Release ${{ env.VERSION_NAME }}"
+        tag_name: ${{ env.VERSION_CODE }}-${{ env.VERSION_NAME }}
+        token: "${{ secrets.TOKEN }}"
         files: |
-          ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION }}.apk
+          ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
+    
+    - name: List Changed Files
+      run: |
+        echo "Changed Files:"
+        echo "${{ github.event_name }} event"
+        echo "Modified Files: ${{ github.event.head_commit.modified }}"
+        echo "Added Files: ${{ github.event.head_commit.added }}"
+        echo "Removed Files: ${{ github.event.head_commit.removed }}"
+
+    - name: Release lsposed module repository
+      if: contains(github.event.head_commit.modified, 'app/build.gradle')
+      uses: softprops/action-gh-release@v2
+      with:
+        name: "Auto Release ${{ env.VERSION_NAME }}"
+        tag_name: ${{ env.VERSION_CODE }}-${{ env.VERSION_NAME }}
+        repository: Xposed-Modules-Repo/com.kooritea.fcmfix
+        token: "${{ secrets.TOKEN_CLASSIC }}"
+        files: |
+          ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
