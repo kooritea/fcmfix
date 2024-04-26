@@ -75,6 +75,6 @@ jobs:
         name: "Auto Release ${{ env.VERSION_NAME }}"
         tag_name: ${{ env.VERSION_CODE }}-${{ env.VERSION_NAME }}
         repository: Xposed-Modules-Repo/com.kooritea.fcmfix
-        token: "${{ secrets.TOKEN }}"
+        token: "${{ secrets.TOKEN_CLASSIC }}"
         files: |
           ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
