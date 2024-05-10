@@ -166,7 +166,7 @@ public abstract class XposedModule {
                     super.run();
                     try{
                         XSharedPreferences pref = new XSharedPreferences("com.kooritea.fcmfix", "config");
-                        if(pref.getBoolean("init", false)){
+                        if(pref.getFile().canRead() && pref.getBoolean("init", false)){
                             allowList = pref.getStringSet("allowList", null);
                             if(allowList != null && "android".equals(context.getPackageName())){
                                 printLog( "[XSharedPreferences Mode]onUpdateConfig allowList size: " + allowList.size());
