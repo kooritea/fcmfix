@@ -131,17 +131,6 @@ public class AutoStartFix extends XposedModule {
         try {
             Class<?> SmartPowerService = XposedHelpers.findClass("com.android.server.am.SmartPowerService", loadPackageParam.classLoader);
 
-            printLog("[fcmfix] start hook com.android.server.am.SmartPowerService.isProcessWhiteList");
-            XposedUtils.findAndHookMethodAnyParam(SmartPowerService, "isProcessWhiteList", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam methodHookParam) {
-                    String target = (String)methodHookParam.args[1];
-                    if(targetIsAllow(target)) {
-                        methodHookParam.setResult(true);
-                    }
-                }
-            });
-
             printLog("[fcmfix] start hook com.android.server.am.SmartPowerService.shouldInterceptBroadcast");
             XposedUtils.findAndHookMethodAnyParam(SmartPowerService, "shouldInterceptBroadcast", new XC_MethodHook() {
                 @Override
