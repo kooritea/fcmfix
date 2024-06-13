@@ -76,12 +76,22 @@ public class XposedUtils {
         return XposedBridge.hookMethod(XposedHelpers.findMethodExact(clazz,methodName,bestMatch.getParameterTypes()), callbacks);
     }
 
+    public static XC_MethodHook.Unhook tryFindAndHookMethod(Class<?> clazz, String methodName, int parameterCount, XC_MethodHook callbacks) {
+        try{
+            return findAndHookMethod(clazz,methodName,parameterCount,callbacks);
+        }catch (NoSuchMethodError e) {
+            return null;
+        }
+    }
     public static XC_MethodHook.Unhook findAndHookMethod(Class<?> clazz, String methodName, int parameterCount, XC_MethodHook callbacks) {
         Method method = null;
         for (Method m : clazz.getDeclaredMethods()) {
             if (m.getName().equals(methodName) && m.getParameterTypes().length == parameterCount) {
                 method = m;
             }
+        }
+        if (method == null) {
+            throw new NoSuchMethodError(clazz.getName() + '#' + methodName);
         }
         return XposedBridge.hookMethod(XposedHelpers.findMethodExact(clazz,methodName, method.getParameterTypes()), callbacks);
     }

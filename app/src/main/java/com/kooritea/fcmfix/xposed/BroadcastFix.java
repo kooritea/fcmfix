@@ -17,7 +17,11 @@ public class BroadcastFix extends XposedModule {
 
     @Override
     protected void onCanReadConfig() {
-        this.startHook();
+        try{
+            this.startHook();
+        }catch (Exception e) {
+            printLog("hook error com.android.server.am.ActivityManagerService.broadcastIntentLocked:" + e.getMessage());
+        }
     }
 
     protected void startHook(){

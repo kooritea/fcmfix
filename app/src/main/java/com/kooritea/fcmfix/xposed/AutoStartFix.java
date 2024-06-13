@@ -12,8 +12,12 @@ public class AutoStartFix extends XposedModule {
 
     public AutoStartFix(XC_LoadPackage.LoadPackageParam loadPackageParam){
         super(loadPackageParam);
-        this.startHook();
-        this.startHookRemovePowerPolicy();
+        try{
+            this.startHook();
+            this.startHookRemovePowerPolicy();
+        }catch (Exception e) {
+            printLog("hook error AutoStartFix:" + e.getMessage());
+        }
     }
 
     protected void startHook(){
@@ -122,8 +126,11 @@ public class AutoStartFix extends XposedModule {
             };
 
             printLog("[fcmfix] start hook com.android.server.am.AutoStartManagerServiceStubImpl.isAllowStartService");
-            XposedUtils.findAndHookMethod(AutoStartManagerServiceStubImpl, "isAllowStartService", 3, methodHook);
-            XposedUtils.findAndHookMethod(AutoStartManagerServiceStubImpl, "isAllowStartService", 4, methodHook);
+            XC_MethodHook.Unhook unhook1 = XposedUtils.tryFindAndHookMethod(AutoStartManagerServiceStubImpl, "isAllowStartService", 3, methodHook);
+            XC_MethodHook.Unhook unhook2 = XposedUtils.tryFindAndHookMethod(AutoStartManagerServiceStubImpl, "isAllowStartService", 4, methodHook);
+            if(unhook1 == null && unhook2 == null){
+                throw new NoSuchMethodError();
+            }
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
             printLog("No Such Class com.android.server.am.AutoStartManagerServiceStubImpl.isAllowStartService");
         }
