@@ -279,4 +279,13 @@ public abstract class XposedModule {
             notificationManager.createNotificationChannel(channel);
         }
     }
+
+    protected boolean isFCMIntent(Intent intent) {
+        String action = intent.getAction();
+        if (action != null && action.endsWith(".android.c2dm.intent.RECEIVE")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 }
