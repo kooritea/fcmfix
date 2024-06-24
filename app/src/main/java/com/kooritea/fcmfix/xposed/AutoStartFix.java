@@ -29,7 +29,7 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[2], "intent");
-                    if(intent.getAction().endsWith(FCM_RECEIVE)){
+                    if(isFCMIntent(intent)){
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             XposedHelpers.callStaticMethod(BroadcastQueueInjector,"checkAbnormalBroadcastInQueueLocked", methodHookParam.args[1], methodHookParam.args[0]);
@@ -49,7 +49,7 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
-                    if(intent.getAction().endsWith(FCM_RECEIVE)){
+                    if(isFCMIntent(intent)){
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
@@ -76,7 +76,7 @@ public class AutoStartFix extends XposedModule {
                         // 无日志，先放了
                         printLog("[" + intent.getAction() + "]checkApplicationAutoStart package_name: " + target, true);
                         methodHookParam.setResult(true);
-//                        if(intent.getAction().endsWith(FCM_RECEIVE)){
+//                        if(isFCMIntent(intent)){
 //                            printLog("checkApplicationAutoStart package_name: " + target, true);
 //                            methodHookParam.setResult(true);
 //                        }else{
@@ -94,7 +94,7 @@ public class AutoStartFix extends XposedModule {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)){
-                        if(intent.getAction().endsWith(FCM_RECEIVE)){
+                        if(isFCMIntent(intent)){
                             printLog("BroadcastQueueModernStubImpl.checkReceiverIfRestricted package_name: " + target, true);
                             methodHookParam.setResult(false);
                         }
@@ -116,7 +116,7 @@ public class AutoStartFix extends XposedModule {
                         // 拿不到action，先放了
                         printLog("[" + intent.getAction() + "]AutoStartManagerServiceStubImpl.isAllowStartService package_name: " + target, true);
                         methodHookParam.setResult(true);
-//                        if(intent.getAction().endsWith(FCM_RECEIVE)){
+//                        if(isFCMIntent(intent)){
 //                            printLog("AutoStartManagerServiceStubImpl.isAllowStartService package_name: " + target, true);
 //                            methodHookParam.setResult(true);
 //                        }else{
@@ -146,7 +146,7 @@ public class AutoStartFix extends XposedModule {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)) {
-                        if(intent.getAction().endsWith(FCM_RECEIVE)){
+                        if(isFCMIntent(intent)){
                             printLog("SmartPowerService.shouldInterceptBroadcast package_name: " + target, true);
                             methodHookParam.setResult(false);
                         }

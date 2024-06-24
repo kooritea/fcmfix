@@ -136,7 +136,7 @@ public class BroadcastFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) methodHookParam.args[finalIntent_args_index];
-                    if(intent != null && intent.getPackage() != null && intent.getFlags() != Intent.FLAG_INCLUDE_STOPPED_PACKAGES && intent.getAction().endsWith(".android.c2dm.intent.RECEIVE")){
+                    if(intent != null && intent.getPackage() != null && intent.getFlags() != Intent.FLAG_INCLUDE_STOPPED_PACKAGES && isFCMIntent(intent)){
                         String target;
                         if (intent.getComponent() != null) {
                             target = intent.getComponent().getPackageName();
