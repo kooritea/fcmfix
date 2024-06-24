@@ -9,6 +9,7 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class AutoStartFix extends XposedModule {
+    private final String FCM_RECEIVE = ".android.c2dm.intent.RECEIVE";
 
     public AutoStartFix(XC_LoadPackage.LoadPackageParam loadPackageParam){
         super(loadPackageParam);
@@ -28,7 +29,7 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[2], "intent");
-                    if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
+                    if(intent.getAction().endsWith(FCM_RECEIVE)){
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             XposedHelpers.callStaticMethod(BroadcastQueueInjector,"checkAbnormalBroadcastInQueueLocked", methodHookParam.args[1], methodHookParam.args[0]);
@@ -48,7 +49,7 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
-                    if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
+                    if(intent.getAction().endsWith(FCM_RECEIVE)){
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             XposedHelpers.callMethod(methodHookParam.thisObject, "checkAbnormalBroadcastInQueueLocked", methodHookParam.args[0]);
@@ -75,7 +76,7 @@ public class AutoStartFix extends XposedModule {
                         // 无日志，先放了
                         printLog("[" + intent.getAction() + "]checkApplicationAutoStart package_name: " + target, true);
                         methodHookParam.setResult(true);
-//                        if ("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())) {
+//                        if(intent.getAction().endsWith(FCM_RECEIVE)){
 //                            printLog("checkApplicationAutoStart package_name: " + target, true);
 //                            methodHookParam.setResult(true);
 //                        }else{
@@ -93,7 +94,7 @@ public class AutoStartFix extends XposedModule {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)){
-                        if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
+                        if(intent.getAction().endsWith(FCM_RECEIVE)){
                             printLog("BroadcastQueueModernStubImpl.checkReceiverIfRestricted package_name: " + target, true);
                             methodHookParam.setResult(false);
                         }
@@ -115,7 +116,7 @@ public class AutoStartFix extends XposedModule {
                         // 拿不到action，先放了
                         printLog("[" + intent.getAction() + "]AutoStartManagerServiceStubImpl.isAllowStartService package_name: " + target, true);
                         methodHookParam.setResult(true);
-//                        if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
+//                        if(intent.getAction().endsWith(FCM_RECEIVE)){
 //                            printLog("AutoStartManagerServiceStubImpl.isAllowStartService package_name: " + target, true);
 //                            methodHookParam.setResult(true);
 //                        }else{
@@ -145,7 +146,7 @@ public class AutoStartFix extends XposedModule {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)) {
-                        if("com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())){
+                        if(intent.getAction().endsWith(FCM_RECEIVE)){
                             printLog("SmartPowerService.shouldInterceptBroadcast package_name: " + target, true);
                             methodHookParam.setResult(false);
                         }
