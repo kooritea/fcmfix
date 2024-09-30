@@ -282,7 +282,7 @@ public abstract class XposedModule {
 
     protected boolean isFCMIntent(Intent intent) {
         String action = intent.getAction();
-        if (action != null && action.endsWith(".android.c2dm.intent.RECEIVE")) {
+        if (action != null && (action.startsWith("com.google.android.c2dm.") || action.startsWith("com.google.firebase."))) {
             return true;
         } else {
             return false;
