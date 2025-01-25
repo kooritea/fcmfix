@@ -36,10 +36,6 @@ public class BroadcastFix extends XposedModule {
             }
         }
         if(targetMethod != null){
-            if(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q){
-                printLog("不支持的安卓版本(<10)，fcmfix将不会工作。");
-                return;
-            }
             int intent_args_index = 0;
             int appOp_args_index = 0;
             Parameter[] parameters = targetMethod.getParameters();
@@ -157,6 +153,8 @@ public class BroadcastFix extends XposedModule {
                     }
                 }
             });
+        } else {
+            printLog("No Such Method com.android.server.am.ActivityManagerService.broadcastIntentLocked");
         }
     }
 }

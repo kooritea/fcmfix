@@ -25,6 +25,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import static android.content.Context.NOTIFICATION_SERVICE;
 
 public abstract class XposedModule {
+    static public XC_LoadPackage.LoadPackageParam staticLoadPackageParam = null;
 
     protected XC_LoadPackage.LoadPackageParam loadPackageParam;
     public static Set<String> allowList = null;
@@ -34,7 +35,7 @@ public abstract class XposedModule {
 
     @SuppressLint("StaticFieldLeak")
     protected static Context context = null;
-    private static final ArrayList<XposedModule> instances = new ArrayList();
+    private static final ArrayList<XposedModule> instances = new ArrayList<>();
     private static Boolean isInitReceiver = false;
     private static Thread loadConfigThread = null;
 
@@ -97,15 +98,15 @@ public abstract class XposedModule {
         Log.d(TAG, text);
         if (isDiagnosticsLog) {
             Intent log = new Intent("com.kooritea.fcmfix.log");
-            log.putExtra("text", text);
+            log.putExtra("text", "["+getSelfPackageName()+"]"+text);
 
             try {
                 context.sendBroadcast(log);
             } catch (Exception e) {
-                XposedBridge.log("[fcmfix] " + text);
+                XposedBridge.log("[fcmfix] ["+getSelfPackageName()+"]"+text);
             }
         } else {
-            XposedBridge.log("[fcmfix] " + text);
+            XposedBridge.log("[fcmfix] ["+getSelfPackageName()+"]"+text);
         }
     }
 
@@ -168,7 +169,7 @@ public abstract class XposedModule {
                         XSharedPreferences pref = new XSharedPreferences("com.kooritea.fcmfix", "config");
                         if(pref.getFile().canRead() && pref.getBoolean("init", false)){
                             allowList = pref.getStringSet("allowList", null);
-                            if(allowList != null && "android".equals(context.getPackageName())){
+                            if(allowList != null && "android".equals(getSelfPackageName())){
                                 printLog( "[XSharedPreferences Mode]onUpdateConfig allowList size: " + allowList.size());
                             }
                             disableAutoCleanNotification = pref.getBoolean("disableAutoCleanNotification", false);
@@ -181,7 +182,7 @@ public abstract class XposedModule {
                     try{
                         ContentProviderHelper contentProviderHelper = new ContentProviderHelper(context,"content://com.kooritea.fcmfix.provider/config");
                         allowList = contentProviderHelper.getStringSet("allowList");
-                        if(allowList != null && "android".equals(context.getPackageName())){
+                        if(allowList != null && "android".equals(getSelfPackageName())){
                             printLog( "[ContentProvider Mode]onUpdateConfig allowList size: " + allowList.size());
                         }
                         disableAutoCleanNotification = contentProviderHelper.getBoolean("disableAutoCleanNotification", false);
@@ -243,7 +244,7 @@ public abstract class XposedModule {
                             return;
                         }
                         onUninstallFcmfix();
-                        if("android".equals(context.getPackageName())){
+                        if("android".equals(getSelfPackageName())){
                             printLog("Fcmfix已卸载，重启后停止生效。");
                         }
                     }
@@ -287,5 +288,9 @@ public abstract class XposedModule {
         } else {
             return false;
         }
+    }
+
+     protected static String getSelfPackageName() {
+        return staticLoadPackageParam == null ? "UNKNOWN":staticLoadPackageParam.packageName;
     }
 }

@@ -13,6 +13,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -204,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
                 this.config.put("disableAutoCleanNotification", false);
             }
         } catch (IOException | JSONException e) {
-            e.printStackTrace();
+            Log.e("onCreate",e.toString());
         }
         new Handler().postDelayed(() -> {
             appListAdapter = new AppListAdapter();
@@ -245,7 +246,7 @@ public class MainActivity extends AppCompatActivity {
                 sharedPreferencesEditor.commit();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e("updateConfig",e.toString());
         }
         try {
             FileOutputStream fos = this.openFileOutput("config.json", Context.MODE_PRIVATE);
@@ -253,7 +254,7 @@ public class MainActivity extends AppCompatActivity {
             fos.write(this.config.toString(2).getBytes());
             this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
         } catch (IOException | JSONException e) {
-            e.printStackTrace();
+            Log.e("updateConfig",e.toString());
             new AlertDialog.Builder(this).setTitle("更新配置文件失败").setMessage(e.getMessage()).show();
         }
     }
@@ -325,7 +326,7 @@ public class MainActivity extends AppCompatActivity {
                 this.config.put("disableAutoCleanNotification", !menuItem.isChecked());
                 this.updateConfig();
             } catch (JSONException e) {
-                e.printStackTrace();
+                Log.e("onOptionsItemSelected",e.toString());
             }
         }
         return true;

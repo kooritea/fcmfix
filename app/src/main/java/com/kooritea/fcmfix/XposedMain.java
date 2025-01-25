@@ -9,6 +9,7 @@ import com.kooritea.fcmfix.xposed.KeepNotification;
 import com.kooritea.fcmfix.xposed.MiuiLocalNotificationFix;
 import com.kooritea.fcmfix.xposed.PowerkeeperFix;
 import com.kooritea.fcmfix.xposed.ReconnectManagerFix;
+import com.kooritea.fcmfix.xposed.XposedModule;
 
 import java.io.File;
 
@@ -25,7 +26,7 @@ public class XposedMain implements IXposedHookLoadPackage {
             return;
         }
         if(loadPackageParam.packageName.equals("android")){
-
+            XposedModule.staticLoadPackageParam = loadPackageParam;
             XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
             new BroadcastFix(loadPackageParam);
 
@@ -40,11 +41,13 @@ public class XposedMain implements IXposedHookLoadPackage {
         }
 
         if(loadPackageParam.packageName.equals("com.google.android.gms") && loadPackageParam.isFirstApplication){
+            XposedModule.staticLoadPackageParam = loadPackageParam;
             XposedBridge.log("[fcmfix] start hook com.google.android.gms");
             new ReconnectManagerFix(loadPackageParam);
         }
 
         if(loadPackageParam.packageName.equals("com.miui.powerkeeper") && loadPackageParam.isFirstApplication){
+            XposedModule.staticLoadPackageParam = loadPackageParam;
             XposedBridge.log("[fcmfix] start hook com.miui.powerkeeper");
             new PowerkeeperFix(loadPackageParam);
         }
