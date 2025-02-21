@@ -9,6 +9,8 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
+import com.kooritea.fcmfix.util.IceboxUtils;
+
 public class BroadcastFix extends XposedModule {
 
     public BroadcastFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
@@ -148,6 +150,30 @@ public class BroadcastFix extends XposedModule {
                                 methodHookParam.args[finalAppOp_args_index] = 11;
                             }
                             intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                            if (!IceboxUtils.isAppEnabled(context, target)) {
+                                methodHookParam.setResult(false);
+                                new Thread(() -> {
+                                    IceboxUtils.activeApp(context, target);
+                                    for (int i1 = 0; i1 < 300; i1++) {
+                                        if (!IceboxUtils.isAppEnabled(context, target)) {
+                                            try {
+                                                Thread.sleep(100);
+                                            } catch (Exception e) {
+                                                printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
+                                            }
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    try {
+                                        if(IceboxUtils.isAppEnabled(context, target)){
+                                            XposedBridge.invokeOriginalMethod(methodHookParam.method, methodHookParam.thisObject, methodHookParam.args);
+                                        }
+                                    } catch (Exception e) {
+                                        printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
+                                    }
+                                }).start();
+                            }
                             printLog("Send Forced Start Broadcast: " + target, true);
                         }
                     }

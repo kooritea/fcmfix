@@ -26,6 +26,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -46,6 +48,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+
+import com.kooritea.fcmfix.util.IceboxUtils;
 
 public class MainActivity extends AppCompatActivity {
     private AppListAdapter appListAdapter;
@@ -94,7 +98,7 @@ public class MainActivity extends AppCompatActivity {
             List<AppInfo> _notAllowList = new ArrayList<>();
             List<AppInfo> _notFoundFcm = new ArrayList<>();
             PackageManager packageManager = getPackageManager();
-            for(PackageInfo packageInfo : packageManager.getInstalledPackages(PackageManager.GET_RECEIVERS)){
+            for(PackageInfo packageInfo : packageManager.getInstalledPackages(PackageManager.GET_RECEIVERS | PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES)) {
                 boolean flag = false;
                 AppInfo appInfo = new AppInfo(packageInfo);
                 if (packageInfo.receivers != null) {
@@ -185,6 +189,13 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+        try {
+            if (ContextCompat.checkSelfPermission(this, IceboxUtils.SDK_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{IceboxUtils.SDK_PERMISSION}, IceboxUtils.REQUEST_CODE);
+            }
+        } catch (Exception ignored) {
+        }
 
         try {
             FileInputStream fis = this.openFileInput("config.json");
