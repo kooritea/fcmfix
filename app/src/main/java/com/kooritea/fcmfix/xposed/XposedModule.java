@@ -143,11 +143,7 @@ public abstract class XposedModule {
             return true;
         }
         if(allowList != null){
-            for (String item : allowList) {
-                if (item.equals(packageName)) {
-                    return true;
-                }
-            }
+            return allowList.contains(packageName);
         }
         return false;
     }
