@@ -215,6 +215,9 @@ public class MainActivity extends AppCompatActivity {
             if(this.config.isNull("disableAutoCleanNotification")){
                 this.config.put("disableAutoCleanNotification", false);
             }
+            if(this.config.isNull("includeIceBoxDisableApp")){
+                this.config.put("includeIceBoxDisableApp", false);
+            }
         } catch (IOException | JSONException e) {
             Log.e("onCreate",e.toString());
         }
@@ -254,6 +257,7 @@ public class MainActivity extends AppCompatActivity {
                 sharedPreferencesEditor.putBoolean("init", true);
                 sharedPreferencesEditor.putStringSet("allowList", this.allowList);
                 sharedPreferencesEditor.putBoolean("disableAutoCleanNotification", this.config.getBoolean("disableAutoCleanNotification"));
+                sharedPreferencesEditor.putBoolean("includeIceBoxDisableApp", this.config.getBoolean("includeIceBoxDisableApp"));
                 sharedPreferencesEditor.commit();
             }
         } catch (Exception e) {
@@ -278,6 +282,9 @@ public class MainActivity extends AppCompatActivity {
         MenuItem disableAutoCleanNotificationMenuItem = menu.add("阻止应用停止时自动清除通知");
         disableAutoCleanNotificationMenuItem.setCheckable(true);
 
+        MenuItem includeIceBoxDisableAppMenuItem = menu.add("允许唤醒被冰箱冻结的应用");
+        includeIceBoxDisableAppMenuItem.setCheckable(true);
+
         menu.add("全选包含 FCM 的应用");
 
         menu.add("打开FCM Diagnostics");
@@ -298,7 +305,15 @@ public class MainActivity extends AppCompatActivity {
             disableAutoCleanNotificationMenuItem.setChecked(false);
         }
 
-        MenuItem selectAllAppIncludeFcmMenuItem = menu.getItem(2);
+        MenuItem includeIceBoxDisableAppMenuItem = menu.getItem(2);
+        try {
+            includeIceBoxDisableAppMenuItem.setChecked(this.config.getBoolean("includeIceBoxDisableApp"));
+        } catch (JSONException e) {
+            includeIceBoxDisableAppMenuItem.setChecked(false);
+        }
+
+
+        MenuItem selectAllAppIncludeFcmMenuItem = menu.getItem(3);
         selectAllAppIncludeFcmMenuItem.setOnMenuItemClickListener(menuItem -> {
             for(AppInfo appInfo : appListAdapter.mAppList){
                 if(appInfo.includeFcm){
@@ -310,7 +325,7 @@ public class MainActivity extends AppCompatActivity {
             return false;
         });
 
-        MenuItem openFcmDiagnosticsMenuItem = menu.getItem(3);
+        MenuItem openFcmDiagnosticsMenuItem = menu.getItem(4);
         openFcmDiagnosticsMenuItem.setOnMenuItemClickListener(menuItem -> {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -335,6 +350,14 @@ public class MainActivity extends AppCompatActivity {
         if(menuItem.getTitle().equals("阻止应用停止时自动清除通知")){
             try {
                 this.config.put("disableAutoCleanNotification", !menuItem.isChecked());
+                this.updateConfig();
+            } catch (JSONException e) {
+                Log.e("onOptionsItemSelected",e.toString());
+            }
+        }
+        if(menuItem.getTitle().equals("允许唤醒被冰箱冻结的应用")){
+            try {
+                this.config.put("includeIceBoxDisableApp", !menuItem.isChecked());
                 this.updateConfig();
             } catch (JSONException e) {
                 Log.e("onOptionsItemSelected",e.toString());

@@ -32,6 +32,7 @@ public abstract class XposedModule {
 
     static final String TAG = "FcmFix";
     private static Boolean disableAutoCleanNotification = null;
+    private static Boolean includeIceBoxDisableApp = null;
 
     @SuppressLint("StaticFieldLeak")
     protected static Context context = null;
@@ -155,6 +156,13 @@ public abstract class XposedModule {
         return disableAutoCleanNotification != null && disableAutoCleanNotification;
     }
 
+    protected boolean isIncludeIceBoxDisableApp(){
+        if(includeIceBoxDisableApp == null){
+            this.checkUserDeviceUnlockAndUpdateConfig();
+        }
+        return includeIceBoxDisableApp != null && includeIceBoxDisableApp;
+    }
+
     private static void onUpdateConfig(){
         if(loadConfigThread == null){
             loadConfigThread = new Thread(){
@@ -169,6 +177,7 @@ public abstract class XposedModule {
                                 printLog( "[XSharedPreferences Mode]onUpdateConfig allowList size: " + allowList.size());
                             }
                             disableAutoCleanNotification = pref.getBoolean("disableAutoCleanNotification", false);
+                            includeIceBoxDisableApp = pref.getBoolean("includeIceBoxDisableApp", false);
                             loadConfigThread = null;
                             return;
                         }
@@ -182,6 +191,7 @@ public abstract class XposedModule {
                             printLog( "[ContentProvider Mode]onUpdateConfig allowList size: " + allowList.size());
                         }
                         disableAutoCleanNotification = contentProviderHelper.getBoolean("disableAutoCleanNotification", false);
+                        includeIceBoxDisableApp = contentProviderHelper.getBoolean("includeIceBoxDisableApp", false);
                         contentProviderHelper.close();
                     }catch (Exception e){
                         printLog("唤醒fcmfix应用读取配置失败: " + e.getMessage());

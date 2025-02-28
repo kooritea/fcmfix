@@ -150,7 +150,7 @@ public class BroadcastFix extends XposedModule {
                                 methodHookParam.args[finalAppOp_args_index] = 11;
                             }
                             intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                            if (!IceboxUtils.isAppEnabled(context, target)) {
+                            if (isIncludeIceBoxDisableApp() && !IceboxUtils.isAppEnabled(context, target)) {
                                 methodHookParam.setResult(false);
                                 new Thread(() -> {
                                     IceboxUtils.activeApp(context, target);
