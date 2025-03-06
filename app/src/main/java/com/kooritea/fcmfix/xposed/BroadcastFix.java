@@ -151,6 +151,7 @@ public class BroadcastFix extends XposedModule {
                             }
                             intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                             if (isIncludeIceBoxDisableApp() && !IceboxUtils.isAppEnabled(context, target)) {
+                                printLog("Waiting for IceBox to activate the app: " + target, true);
                                 methodHookParam.setResult(false);
                                 new Thread(() -> {
                                     IceboxUtils.activeApp(context, target);
@@ -167,14 +168,18 @@ public class BroadcastFix extends XposedModule {
                                     }
                                     try {
                                         if(IceboxUtils.isAppEnabled(context, target)){
-                                            XposedBridge.invokeOriginalMethod(methodHookParam.method, methodHookParam.thisObject, methodHookParam.args);
+                                            printLog("Send Forced Start Broadcast: " + target, true);
+                                        }else{
+                                            printLog("Waiting for IceBox to activate the app timed out: " + target, true);
                                         }
+                                        XposedBridge.invokeOriginalMethod(methodHookParam.method, methodHookParam.thisObject, methodHookParam.args);
                                     } catch (Exception e) {
                                         printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
                                     }
                                 }).start();
+                            }else{
+                                printLog("Send Forced Start Broadcast: " + target, true);
                             }
-                            printLog("Send Forced Start Broadcast: " + target, true);
                         }
                     }
                 }

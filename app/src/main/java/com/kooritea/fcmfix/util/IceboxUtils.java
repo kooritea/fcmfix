@@ -20,7 +20,6 @@ public class IceboxUtils extends BroadcastReceiver {
     public final static int REQUEST_CODE = 0x2333;
     public final static String PACKAGE_NAME = "com.catchingnow.icebox";
     public final static String SDK_PERMISSION = PACKAGE_NAME + ".SDK";
-    private final static int FLAG_HIDDEN = 1 << 27;
     private static final Uri PERMISSION_URI = Uri.parse("content://" + PACKAGE_NAME + ".SDK");
     private static final Uri NO_PERMISSION_URI = Uri.parse("content://" + PACKAGE_NAME + ".STATE");
     private static final String TAG = "IceboxUtils";
@@ -50,7 +49,7 @@ public class IceboxUtils extends BroadcastReceiver {
     public static boolean isAppEnabled(Context context, String packageName) {
         try {
             ApplicationInfo applicationInfo = context.getPackageManager().getApplicationInfo(packageName, PackageManager.MATCH_UNINSTALLED_PACKAGES | PackageManager.MATCH_DISABLED_COMPONENTS);
-            return applicationInfo.enabled && (applicationInfo.flags | FLAG_HIDDEN) != applicationInfo.flags;
+            return applicationInfo.enabled;
         } catch (Exception e) {
             Log.e(TAG, "[icebox] " + packageName + " " + e.getMessage());
         }
