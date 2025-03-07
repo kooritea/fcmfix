@@ -1,6 +1,7 @@
 package com.kooritea.fcmfix.xposed;
 
 import android.annotation.SuppressLint;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -20,6 +21,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
 import java.util.Timer;
 import java.util.TimerTask;
 import de.robv.android.xposed.XC_MethodHook;
@@ -45,6 +47,7 @@ public class ReconnectManagerFix extends XposedModule {
     protected void onCanReadConfig() throws Exception {
         if(startHookFlag){
             this.checkVersion();
+            onUpdateConfig();
         }else {
             startHookFlag = true;
         }
@@ -87,6 +90,47 @@ public class ReconnectManagerFix extends XposedModule {
             });
         }catch (Exception e){
             XposedBridge.log("GcmChimeraService hook 失败");
+        }
+        try{
+            Class<?> clazz = XposedHelpers.findClass("com.google.android.gms.gcm.DataMessageManager$BroadcastDoneReceiver", loadPackageParam.classLoader);
+            final Method[] declareMethods = clazz.getDeclaredMethods();
+            Method targetMethod = null;
+            for(Method method : declareMethods){
+                Parameter[] parameters = method.getParameters();
+                if(parameters.length == 2 && parameters[0].getType() == Context.class && parameters[1].getType() == Intent.class){
+                    targetMethod = method;
+                    break;
+                }
+            }
+            if(targetMethod != null){
+                XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+                        int resultCode = (int)XposedHelpers.callMethod(methodHookParam.thisObject, "getResultCode");
+                        Intent intent = (Intent)methodHookParam.args[1];
+                        String packageName = intent.getPackage();
+                        if(resultCode != -1 && targetIsAllow(packageName)){
+                            try{
+                                Intent notifyIntent = context.getPackageManager().getLaunchIntentForPackage(packageName);
+                                if(notifyIntent!=null){
+                                    notifyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    PendingIntent pendingIntent = PendingIntent.getActivity(
+                                            context, 0, notifyIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                                    sendNotification("FCM Message " + packageName, "",pendingIntent);
+                                }else{
+                                    printLog("无法获取目标应用active: " + packageName,false);
+                                }
+                            }catch (Exception e){
+                                printLog(e.getMessage(),false);
+                            }
+                        }
+                    }
+                });
+            }else{
+                printLog("No Such Method com.google.android.gms.gcm.DataMessageManager$BroadcastDoneReceiver.handler");
+            }
+        }catch (Exception e){
+            XposedBridge.log("DataMessageManager$BroadcastDoneReceiver hook 失败");
         }
     }
 

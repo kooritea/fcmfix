@@ -3,6 +3,7 @@ package com.kooritea.fcmfix.xposed;
 import android.annotation.SuppressLint;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -13,7 +14,8 @@ import android.os.UserManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
-import com.kooritea.fcmfix.R;
+import androidx.core.app.NotificationManagerCompat;
+
 import com.kooritea.fcmfix.util.ContentProviderHelper;
 import java.util.ArrayList;
 import java.util.Set;
@@ -163,7 +165,7 @@ public abstract class XposedModule {
         return includeIceBoxDisableApp != null && includeIceBoxDisableApp;
     }
 
-    private static void onUpdateConfig(){
+    protected static void onUpdateConfig(){
         if(loadConfigThread == null){
             loadConfigThread = new Thread(){
                 @Override
@@ -226,7 +228,6 @@ public abstract class XposedModule {
                         }
                     }
                 }, updateConfigIntentFilter, Context.RECEIVER_EXPORTED);
-                printLog("Registered Receiver successfully in Android 14 ");
             } else {
                 context.registerReceiver(new BroadcastReceiver() {
                     public void onReceive(Context context, Intent intent) {
@@ -261,25 +262,31 @@ public abstract class XposedModule {
     }
 
     protected void sendNotification(String title) {
-        sendNotification(title,null);
+        sendNotification(title,null,null);
     }
 
     protected void sendNotification(String title, String content) {
-        printLog(title, false);
-        title = "[fcmfix]" + title;
-        NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
-        this.createFcmfixChannel(notificationManager);
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, "fcmfix");
-        builder.setSmallIcon(R.mipmap.ic_launcher);
-        builder.setAutoCancel(true);
-        builder.setContentTitle(title);
-        if(content != null){
-            builder.setStyle(new NotificationCompat.BigTextStyle().bigText(content));
-        }
-        notificationManager.notify((int) System.currentTimeMillis(), builder.build());
+        sendNotification(title,content,null);
     }
 
-    protected void createFcmfixChannel(NotificationManager notificationManager) {
+    @SuppressLint("MissingPermission")
+    protected void sendNotification(String title, String content, PendingIntent pendingIntent ) {
+        printLog(title, false);
+        title = "[fcmfix]" + title;
+        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
+        this.createFcmfixChannel(notificationManager);
+        NotificationCompat.Builder notification = new NotificationCompat.Builder(context, "fcmfix")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+        if(pendingIntent != null){
+            notification.setContentIntent(pendingIntent).setAutoCancel(true);
+        }
+        notificationManager.notify((int) System.currentTimeMillis(), notification.build());
+    }
+
+    protected void createFcmfixChannel(NotificationManagerCompat notificationManager) {
         if(notificationManager.getNotificationChannel("fcmfix") == null){
             NotificationChannel channel = new NotificationChannel("fcmfix", "fcmfix", NotificationManager.IMPORTANCE_HIGH);
             channel.setDescription("[xposed] fcmfix");
