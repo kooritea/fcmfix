@@ -6,12 +6,13 @@
 
 ### 附加功能
 
-- 阻止Android系统在应用停止时自动移除通知栏的通知
-- 在miui/hyperos(?)上动态解除来自fcm的自启动限制
+- 阻止Android系统在应用停止时自动移除通知栏的通知(Android15 已无效)
+- 在miui/hyperos(?)/OxygenOS15(?)/ColorOS15(?)上动态解除来自fcm的自启动限制
 - 移除miui/hyperos对后台应用的通知限制
 
 ### lsposed作用域
 - 在miui/hyperos上如果推送没有问题，就不需要勾选电量和性能
+- 勾选gms服务可以在无法按预期启动目标应用时代为发送一条提示通知，但是会破坏play integrity legacy check
 
 ### 关于fcm
 
@@ -21,4 +22,4 @@ fcm是在Android中由google维护的一条介于google服务器与gms应用之�
 
 ### 已知问题
 
-- 非miui/hyperos系统可能需要给予目标应用类似允许自启动的权限。
+- 非miui/hyperos/OxygenOS15/ColorOS15系统可能需要给予目标应用类似允许自启动的权限。
