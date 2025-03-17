@@ -1,6 +1,8 @@
 package com.kooritea.fcmfix.xposed;
 
 import android.os.Build;
+import android.service.notification.NotificationListenerService;
+
 import java.lang.reflect.Method;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -61,7 +63,11 @@ public class KeepNotification extends XposedModule{
                     reason_args_index = 7;
                 }
             }
-            if(Build.VERSION.SDK_INT > 34){
+            if(Build.VERSION.SDK_INT == 35){
+                pkg_args_index = 2;
+                reason_args_index = 7;
+            }
+            if(Build.VERSION.SDK_INT > 35){
                 pkg_args_index = 2;
                 reason_args_index = 7;
             }
@@ -73,8 +79,14 @@ public class KeepNotification extends XposedModule{
             XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    if(isDisableAutoCleanNotification() && targetIsAllow((String) param.args[finalPkg_args_index]) && (int)param.args[finalReason_args_index] == 5){
-                        param.setResult(null);
+                    if(isDisableAutoCleanNotification() && targetIsAllow((String) param.args[finalPkg_args_index])){
+                        int reason = (int)param.args[finalReason_args_index];
+                        if(reason == NotificationListenerService.REASON_PACKAGE_CHANGED){
+                            param.setResult(null);
+                        }
+                        if(reason == 10020){ // cos15/oos15
+                            param.setResult(null);
+                        }
                     }
                 }
             });

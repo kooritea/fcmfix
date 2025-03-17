@@ -6,7 +6,7 @@
 
 ### 附加功能
 
-- 阻止Android系统在应用停止时自动移除通知栏的通知(Android15 已无效)
+- 阻止Android系统在应用停止时自动移除通知栏的通知
 - 在miui/hyperos(?)/OxygenOS15(?)/ColorOS15(?)上动态解除来自fcm的自启动限制
 - 移除miui/hyperos对后台应用的通知限制
 
