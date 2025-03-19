@@ -65,6 +65,8 @@ public class XposedProvider extends ContentProvider {
         MatrixCursor data = new MatrixCursor(COLUMN_NAME);
         try{
             data.addRow(new Object[]{"disableAutoCleanNotification", config.isNull("disableAutoCleanNotification") ? "0" : (config.getBoolean("disableAutoCleanNotification") ? "1" : "0") });
+            data.addRow(new Object[]{"includeIceBoxDisableApp", config.isNull("includeIceBoxDisableApp") ? "0" : (config.getBoolean("includeIceBoxDisableApp") ? "1" : "0") });
+            data.addRow(new Object[]{"noResponseNotification", config.isNull("noResponseNotification") ? "0" : (config.getBoolean("noResponseNotification") ? "1" : "0") });
             JSONArray jsonAllowList = config.getJSONArray("allowList");
             for(int i = 0; i < jsonAllowList.length(); i++){
                 data.addRow(new Object[]{"allowList",jsonAllowList.getString(i)});

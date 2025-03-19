@@ -218,6 +218,9 @@ public class MainActivity extends AppCompatActivity {
             if(this.config.isNull("includeIceBoxDisableApp")){
                 this.config.put("includeIceBoxDisableApp", false);
             }
+            if(this.config.isNull("noResponseNotification")){
+                this.config.put("noResponseNotification", false);
+            }
         } catch (IOException | JSONException e) {
             Log.e("onCreate",e.toString());
         }
@@ -258,6 +261,7 @@ public class MainActivity extends AppCompatActivity {
                 sharedPreferencesEditor.putStringSet("allowList", this.allowList);
                 sharedPreferencesEditor.putBoolean("disableAutoCleanNotification", this.config.getBoolean("disableAutoCleanNotification"));
                 sharedPreferencesEditor.putBoolean("includeIceBoxDisableApp", this.config.getBoolean("includeIceBoxDisableApp"));
+                sharedPreferencesEditor.putBoolean("noResponseNotification", this.config.getBoolean("noResponseNotification"));
                 sharedPreferencesEditor.commit();
             }
         } catch (Exception e) {
@@ -276,14 +280,13 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu (Menu menu){
-        MenuItem isShowLauncherIconMenuItem = menu.add("隐藏启动器图标");
-        isShowLauncherIconMenuItem.setCheckable(true);
+        menu.add("隐藏启动器图标").setCheckable(true);
 
-        MenuItem disableAutoCleanNotificationMenuItem = menu.add("阻止应用停止时自动清除通知");
-        disableAutoCleanNotificationMenuItem.setCheckable(true);
+        menu.add("阻止应用停止时自动清除通知").setCheckable(true);
 
-        MenuItem includeIceBoxDisableAppMenuItem = menu.add("允许唤醒被冰箱冻结的应用");
-        includeIceBoxDisableAppMenuItem.setCheckable(true);
+        menu.add("允许唤醒被冰箱冻结的应用").setCheckable(true);
+
+        menu.add("目标无响应时代发提示通知").setCheckable(true);
 
         menu.add("全选包含 FCM 的应用");
 
@@ -312,8 +315,15 @@ public class MainActivity extends AppCompatActivity {
             includeIceBoxDisableAppMenuItem.setChecked(false);
         }
 
+        MenuItem noResponseNotificationMenuItem = menu.getItem(3);
+        try {
+            noResponseNotificationMenuItem.setChecked(this.config.getBoolean("noResponseNotification"));
+        } catch (JSONException e) {
+            noResponseNotificationMenuItem.setChecked(false);
+        }
 
-        MenuItem selectAllAppIncludeFcmMenuItem = menu.getItem(3);
+
+        MenuItem selectAllAppIncludeFcmMenuItem = menu.getItem(4);
         selectAllAppIncludeFcmMenuItem.setOnMenuItemClickListener(menuItem -> {
             for(AppInfo appInfo : appListAdapter.mAppList){
                 if(appInfo.includeFcm){
@@ -325,7 +335,7 @@ public class MainActivity extends AppCompatActivity {
             return false;
         });
 
-        MenuItem openFcmDiagnosticsMenuItem = menu.getItem(4);
+        MenuItem openFcmDiagnosticsMenuItem = menu.getItem(5);
         openFcmDiagnosticsMenuItem.setOnMenuItemClickListener(menuItem -> {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -358,6 +368,14 @@ public class MainActivity extends AppCompatActivity {
         if(menuItem.getTitle().equals("允许唤醒被冰箱冻结的应用")){
             try {
                 this.config.put("includeIceBoxDisableApp", !menuItem.isChecked());
+                this.updateConfig();
+            } catch (JSONException e) {
+                Log.e("onOptionsItemSelected",e.toString());
+            }
+        }
+        if(menuItem.getTitle().equals("目标无响应时代发提示通知")){
+            try {
+                this.config.put("noResponseNotification", !menuItem.isChecked());
                 this.updateConfig();
             } catch (JSONException e) {
                 Log.e("onOptionsItemSelected",e.toString());

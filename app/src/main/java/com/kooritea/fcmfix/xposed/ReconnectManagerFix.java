@@ -109,7 +109,7 @@ public class ReconnectManagerFix extends XposedModule {
                         int resultCode = (int)XposedHelpers.callMethod(methodHookParam.thisObject, "getResultCode");
                         Intent intent = (Intent)methodHookParam.args[1];
                         String packageName = intent.getPackage();
-                        if(resultCode != -1 && targetIsAllow(packageName)){
+                        if(resultCode != -1 && getBooleanConfig("noResponseNotification",false) && targetIsAllow(packageName)){
                             try{
                                 Intent notifyIntent = context.getPackageManager().getLaunchIntentForPackage(packageName);
                                 if(notifyIntent!=null){
