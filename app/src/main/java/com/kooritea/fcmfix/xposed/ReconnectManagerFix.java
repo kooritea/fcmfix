@@ -9,6 +9,11 @@ import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -16,6 +21,10 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
 import android.widget.LinearLayout;
+
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+
 import com.kooritea.fcmfix.util.XposedUtils;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -66,6 +75,7 @@ public class ReconnectManagerFix extends XposedModule {
                 }
             }
             XposedHelpers.findAndHookMethod(this.GcmChimeraService, "onCreate", new XC_MethodHook() {
+                @SuppressLint("UnspecifiedRegisterReceiverFlag")
                 @Override
                 protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
                     IntentFilter intentFilter = new IntentFilter();
@@ -116,7 +126,18 @@ public class ReconnectManagerFix extends XposedModule {
                                     notifyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                     PendingIntent pendingIntent = PendingIntent.getActivity(
                                             context, 0, notifyIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                                    sendNotification("FCM Message " + packageName, "",pendingIntent);
+                                    NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
+                                    createFcmfixChannel(notificationManager);
+                                    NotificationCompat.Builder notification = new NotificationCompat.Builder(context, "fcmfix")
+                                            .setSmallIcon(android.R.drawable.ic_dialog_info)
+                                            .setContentTitle("FCM Message")
+                                            .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+                                    Bitmap icon = getAppIcon(packageName);
+                                    if(icon != null){
+                                        notification.setLargeIcon(icon);
+                                    }
+                                    notification.setContentIntent(pendingIntent).setAutoCancel(true);
+                                    notificationManager.notify((int) System.currentTimeMillis(), notification.build());
                                 }else{
                                     printLog("无法获取目标应用active: " + packageName,false);
                                 }
@@ -239,7 +260,7 @@ public class ReconnectManagerFix extends XposedModule {
                         @Override
                         public void run() {
                             long nextConnectionTime = XposedHelpers.getLongField(param.thisObject, finalMaxField.getName());
-                            if (nextConnectionTime != 0 && nextConnectionTime - SystemClock.elapsedRealtime() < 0) {
+                            if (nextConnectionTime != 0 && nextConnectionTime - SystemClock.elapsedRealtime() < -60000) {
                                 context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
                                 printLog("Send broadcast GCM_RECONNECT", true);
                             }
@@ -356,5 +377,26 @@ public class ReconnectManagerFix extends XposedModule {
                 linearLayout2.addView(openFcmFixButton);
             }
         });
+    }
+
+    private static Bitmap getAppIcon(String packageName) {
+        try {
+            PackageManager pm = context.getPackageManager();
+            ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
+            Drawable drawable = pm.getApplicationIcon(appInfo);
+            if (drawable instanceof BitmapDrawable) {
+                return ((BitmapDrawable) drawable).getBitmap();
+            } else {
+                Bitmap bitmap = Bitmap.createBitmap(
+                        drawable.getIntrinsicWidth(),
+                        drawable.getIntrinsicHeight(),
+                        Bitmap.Config.ARGB_8888);
+                drawable.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
+                drawable.draw(new android.graphics.Canvas(bitmap));
+                return bitmap;
+            }
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
+        }
     }
 }
