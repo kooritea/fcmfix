@@ -84,7 +84,7 @@ public class KeepNotification extends XposedModule{
                         if(reason == NotificationListenerService.REASON_PACKAGE_CHANGED){
                             param.setResult(null);
                         }
-                        if(reason == 10020){ // cos15/oos15
+                        if(reason == 10020 || reason == 10021){ // cos15/oos15
                             param.setResult(null);
                         }
                     }
