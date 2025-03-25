@@ -210,6 +210,9 @@ public class BroadcastFix extends XposedModule {
         XposedBridge.hookMethod(method,new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                if(methodHookParam.args[0] == null){
+                    return;
+                }
                 Intent intent = (Intent)XposedHelpers.getObjectField(methodHookParam.args[0],"intent");
                 int resultCode = (int) XposedHelpers.getObjectField(methodHookParam.args[0],"resultCode");
                 String packageName = intent.getPackage();
@@ -259,7 +262,7 @@ public class BroadcastFix extends XposedModule {
                 drawable.draw(new android.graphics.Canvas(bitmap));
                 return bitmap;
             }
-        } catch (PackageManager.NameNotFoundException e) {
+        } catch (Exception e) {
             return null;
         }
     }

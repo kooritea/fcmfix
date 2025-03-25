@@ -2,6 +2,8 @@ package com.kooritea.fcmfix;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.kooritea.fcmfix.xposed.AutoStartFix;
 import com.kooritea.fcmfix.xposed.BroadcastFix;
@@ -26,18 +28,20 @@ public class XposedMain implements IXposedHookLoadPackage {
             return;
         }
         if(loadPackageParam.packageName.equals("android")){
-            XposedModule.staticLoadPackageParam = loadPackageParam;
-            XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
-            new BroadcastFix(loadPackageParam);
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                XposedModule.staticLoadPackageParam = loadPackageParam;
+                XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
+                new BroadcastFix(loadPackageParam);
 
-            XposedBridge.log("[fcmfix] start hook com.android.server.notification.NotificationManagerServiceInjector");
-            new MiuiLocalNotificationFix(loadPackageParam);
+                XposedBridge.log("[fcmfix] start hook com.android.server.notification.NotificationManagerServiceInjector");
+                new MiuiLocalNotificationFix(loadPackageParam);
 
-            XposedBridge.log("[fcmfix] com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
-            new AutoStartFix(loadPackageParam);
+                XposedBridge.log("[fcmfix] com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
+                new AutoStartFix(loadPackageParam);
 
-            XposedBridge.log("[fcmfix] com.android.server.notification.NotificationManagerService");
-            new KeepNotification(loadPackageParam);
+                XposedBridge.log("[fcmfix] com.android.server.notification.NotificationManagerService");
+                new KeepNotification(loadPackageParam);
+            }, 60000);
         }
 
         if(loadPackageParam.packageName.equals("com.google.android.gms") && loadPackageParam.isFirstApplication){
@@ -51,7 +55,6 @@ public class XposedMain implements IXposedHookLoadPackage {
             XposedBridge.log("[fcmfix] start hook com.miui.powerkeeper");
             new PowerkeeperFix(loadPackageParam);
         }
-
     }
     private boolean fileIsExists(String strFile) {
         try {
