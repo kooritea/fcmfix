@@ -210,7 +210,7 @@ public class BroadcastFix extends XposedModule {
         XposedBridge.hookMethod(method,new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam methodHookParam) {
-                if(methodHookParam.args[0] == null){
+                if(methodHookParam.args[0] == null || XposedHelpers.getObjectField(methodHookParam.args[0],"resultTo") == null || XposedHelpers.getObjectField(methodHookParam.args[0],"intent") == null || XposedHelpers.getObjectField(methodHookParam.args[0],"resultCode") == null){
                     return;
                 }
                 Intent intent = (Intent)XposedHelpers.getObjectField(methodHookParam.args[0],"intent");
