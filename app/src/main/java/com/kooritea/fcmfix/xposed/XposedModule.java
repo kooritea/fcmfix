@@ -39,6 +39,7 @@ public abstract class XposedModule {
     protected static Context context = null;
     private static final ArrayList<XposedModule> instances = new ArrayList<>();
     private static Boolean isInitReceiver = false;
+    public static Boolean isBootComplete = true;
     private static Thread loadConfigThread = null;
 
     protected XposedModule(final XC_LoadPackage.LoadPackageParam loadPackageParam) {

@@ -13,17 +13,13 @@ public class KeepNotification extends XposedModule{
 
     public KeepNotification(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
-    }
-
-    @Override
-    protected void onCanReadConfig() {
         try {
             this.startHook();
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError e) {
             printLog("No Such Method com.android.server.notification.NotificationManagerService.cancelAllNotificationsInt");
         }
     }
-
+    
     protected void startHook() throws NoSuchMethodError, XposedHelpers.ClassNotFoundError {
         Class<?> clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerService",loadPackageParam.classLoader);
         final Method[] declareMethods = clazz.getDeclaredMethods();
@@ -79,6 +75,9 @@ public class KeepNotification extends XposedModule{
             XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
+                    if(!isBootComplete){
+                        return;
+                    }
                     if(getBooleanConfig("disableAutoCleanNotification",false) && targetIsAllow((String) param.args[finalPkg_args_index])){
                         int reason = (int)param.args[finalReason_args_index];
                         if(reason == NotificationListenerService.REASON_PACKAGE_CHANGED){

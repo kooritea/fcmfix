@@ -1,4 +1,4 @@
-# fcmfix(Android 10以上14以下 )(Android 14?)
+# fcmfix(Android 10-15 )
 
 [![Android CI](https://github.com/kooritea/fcmfix/workflows/Android%20CI/badge.svg)](https://github.com/kooritea/fcmfix/actions)
 

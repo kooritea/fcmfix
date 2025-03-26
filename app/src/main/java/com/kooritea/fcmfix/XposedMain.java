@@ -1,9 +1,6 @@
 package com.kooritea.fcmfix;
 
 import android.annotation.SuppressLint;
-import android.os.Build;
-import android.os.Handler;
-import android.os.Looper;
 
 import com.kooritea.fcmfix.xposed.AutoStartFix;
 import com.kooritea.fcmfix.xposed.BroadcastFix;
@@ -28,20 +25,28 @@ public class XposedMain implements IXposedHookLoadPackage {
             return;
         }
         if(loadPackageParam.packageName.equals("android")){
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                XposedModule.staticLoadPackageParam = loadPackageParam;
-                XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
-                new BroadcastFix(loadPackageParam);
+            XposedModule.isBootComplete = false;
+            XposedModule.staticLoadPackageParam = loadPackageParam;
+            new Thread(() -> {
+                try {
+                    Thread.sleep(60000);
+                    XposedModule.isBootComplete = true;
+                    XposedBridge.log("[fcmfix] isBootComplete");
+                } catch (Exception e) {
+                    XposedBridge.log("[fcmfix] "+e.getMessage());
+                }
+            }).start();
+            XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
+            new BroadcastFix(loadPackageParam);
 
-                XposedBridge.log("[fcmfix] start hook com.android.server.notification.NotificationManagerServiceInjector");
-                new MiuiLocalNotificationFix(loadPackageParam);
+            XposedBridge.log("[fcmfix] start hook com.android.server.notification.NotificationManagerServiceInjector");
+            new MiuiLocalNotificationFix(loadPackageParam);
 
-                XposedBridge.log("[fcmfix] com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
-                new AutoStartFix(loadPackageParam);
+            XposedBridge.log("[fcmfix] com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
+            new AutoStartFix(loadPackageParam);
 
-                XposedBridge.log("[fcmfix] com.android.server.notification.NotificationManagerService");
-                new KeepNotification(loadPackageParam);
-            }, 60000);
+            XposedBridge.log("[fcmfix] com.android.server.notification.NotificationManagerService");
+            new KeepNotification(loadPackageParam);
         }
 
         if(loadPackageParam.packageName.equals("com.google.android.gms") && loadPackageParam.isFirstApplication){

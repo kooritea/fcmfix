@@ -26,10 +26,6 @@ public class BroadcastFix extends XposedModule {
 
     public BroadcastFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
-    }
-
-    @Override
-    protected void onCanReadConfig() {
         try{
             this.startHookBroadcastIntentLocked();
         }catch (Exception e) {
@@ -152,6 +148,9 @@ public class BroadcastFix extends XposedModule {
             XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if(!isBootComplete){
+                        return;
+                    }
                     Intent intent = (Intent) methodHookParam.args[finalIntent_args_index];
                     if(intent != null && intent.getPackage() != null && intent.getFlags() != Intent.FLAG_INCLUDE_STOPPED_PACKAGES && isFCMIntent(intent)){
                         String target;
@@ -210,6 +209,9 @@ public class BroadcastFix extends XposedModule {
         XposedBridge.hookMethod(method,new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                if(!isBootComplete){
+                    return;
+                }
                 if(methodHookParam.args[0] == null || XposedHelpers.getObjectField(methodHookParam.args[0],"resultTo") == null || XposedHelpers.getObjectField(methodHookParam.args[0],"intent") == null || XposedHelpers.getObjectField(methodHookParam.args[0],"resultCode") == null){
                     return;
                 }
