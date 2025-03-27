@@ -40,7 +40,7 @@ public class IceboxUtils extends BroadcastReceiver {
             Bundle bundle = context.getContentResolver().call(NO_PERMISSION_URI, "query_mode", null, extra);
             assert bundle != null;
             return !Objects.equals(bundle.getString("work_mode", null), "MODE_NOT_AVAILABLE");
-        } catch (Exception e) {
+        } catch (Throwable e) {
             Log.e(TAG, "[icebox] queryWorkMode: " + e.getMessage());
             return false;
         }
@@ -50,7 +50,7 @@ public class IceboxUtils extends BroadcastReceiver {
         try {
             ApplicationInfo applicationInfo = context.getPackageManager().getApplicationInfo(packageName, PackageManager.MATCH_UNINSTALLED_PACKAGES | PackageManager.MATCH_DISABLED_COMPONENTS);
             return applicationInfo.enabled;
-        } catch (Exception e) {
+        } catch (Throwable e) {
             Log.e(TAG, "[icebox] " + packageName + " " + e.getMessage());
         }
         return true;
@@ -86,7 +86,7 @@ public class IceboxUtils extends BroadcastReceiver {
             } else {
                 Log.e(TAG, "[icebox] has been enabled " + pkg);
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             Log.e(TAG, "[icebox] " + pkg + " " + e.getMessage());
         }
     }

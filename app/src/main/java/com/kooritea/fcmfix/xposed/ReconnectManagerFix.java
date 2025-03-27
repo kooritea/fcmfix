@@ -53,7 +53,7 @@ public class ReconnectManagerFix extends XposedModule {
     }
 
     @Override
-    protected void onCanReadConfig() throws Exception {
+    protected void onCanReadConfig() throws Throwable {
         if(startHookFlag){
             this.checkVersion();
             onUpdateConfig();
@@ -98,13 +98,13 @@ public class ReconnectManagerFix extends XposedModule {
                     context.unregisterReceiver(logBroadcastReceive);
                 }
             });
-        }catch (Exception e){
+        }catch (Throwable e){
             XposedBridge.log("GcmChimeraService hook 失败");
         }
     }
 
     public static final String configVersion = "v3";
-    private void checkVersion() throws Exception {
+    private void checkVersion() throws Throwable {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         String versionName = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
         long versionCode = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).getLongVersionCode();

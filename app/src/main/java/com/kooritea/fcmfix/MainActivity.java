@@ -201,7 +201,7 @@ public class MainActivity extends AppCompatActivity {
             if (ContextCompat.checkSelfPermission(this, IceboxUtils.SDK_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{IceboxUtils.SDK_PERMISSION}, IceboxUtils.REQUEST_CODE);
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
 
         try {
@@ -271,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
                 sharedPreferencesEditor.putBoolean("noResponseNotification", this.config.getBoolean("noResponseNotification"));
                 sharedPreferencesEditor.commit();
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             Log.e("updateConfig",e.toString());
         }
         try {

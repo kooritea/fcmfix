@@ -51,7 +51,7 @@ public abstract class XposedModule {
             if(context != null && context.getSystemService(UserManager.class).isUserUnlocked()){
                 try{
                     onCanReadConfig();
-                }catch (Exception e){
+                }catch (Throwable e){
                     printLog(e.getMessage());
                 }
             }
@@ -88,7 +88,7 @@ public abstract class XposedModule {
                     Thread.sleep(60000);
                     isBootComplete = true;
                     printLog("Boot Complete");
-                } catch (Exception e) {
+                } catch (Throwable e) {
                     printLog(e.getMessage());
                 }
             }).start();
@@ -98,13 +98,13 @@ public abstract class XposedModule {
         for(XposedModule instance : instances){
             try{
                 instance.onCanReadConfig();
-            }catch (Exception e){
+            }catch (Throwable e){
                 printLog(e.getMessage());
             }
         }
     }
 
-    protected void onCanReadConfig() throws Exception{}
+    protected void onCanReadConfig() throws Throwable{}
 
     protected static void printLog(String text){
         printLog(text, false);
@@ -118,7 +118,7 @@ public abstract class XposedModule {
 
             try {
                 context.sendBroadcast(log);
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 XposedBridge.log("[fcmfix] ["+getSelfPackageName()+"]"+text);
             }
         } else {
@@ -133,7 +133,7 @@ public abstract class XposedModule {
         if (context != null && context.getSystemService(UserManager.class).isUserUnlocked()) {
             try {
                 onUpdateConfig();
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 printLog("更新配置文件失败: " + e.getMessage());
             }
         }
@@ -145,7 +145,7 @@ public abstract class XposedModule {
             if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
                 try {
                     context.unregisterReceiver(unlockBroadcastReceive);
-                } catch (Exception ignored) { }
+                } catch (Throwable ignored) { }
                 callAllOnCanReadConfig();
             }
         }
@@ -195,7 +195,7 @@ public abstract class XposedModule {
                             loadConfigThread = null;
                             return;
                         }
-                    }catch (Exception e){
+                    }catch (Throwable e){
                         printLog("直接读取应用配置失败，将唤醒fcmfix本体进行读取: " + e.getMessage());
                     }
                     try{
@@ -209,7 +209,7 @@ public abstract class XposedModule {
                         config.put("noResponseNotification", contentProviderHelper.getBoolean("noResponseNotification", false));
                         config.put("init", true);
                         contentProviderHelper.close();
-                    }catch (Exception e){
+                    }catch (Throwable e){
                         printLog("唤醒fcmfix应用读取配置失败: " + e.getMessage());
                     }
                     loadConfigThread = null;

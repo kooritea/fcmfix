@@ -126,7 +126,7 @@ public class XposedUtils {
             for(String fieldName : paths){
                 tmp = XposedHelpers.getObjectField(tmp,fieldName);
             }
-        }catch (Exception e){
+        }catch (Throwable e){
             throw new NoSuchFieldError(obj.getClass().getName() + "#" +pathFieldName);
         }
         return tmp;
