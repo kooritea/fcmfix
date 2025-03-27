@@ -142,6 +142,13 @@ public class MainActivity extends AppCompatActivity {
             _allowList.addAll(_notAllowList);
             _allowList.addAll(_notFoundFcm);
             this.mAppList = _allowList;
+            if(_allowList.size() == 0 || _allowList.isEmpty() ||(_allowList.size() == 1 && "com.kooritea.fcmfix".equals(_allowList.get(0).packageName))){
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("请在系统设置中授予读取应用列表权限")
+                        .setMessage("或直接编辑" + getApplicationContext().getFilesDir().getAbsolutePath() + "/config.json(需重启生效)")
+                        .setPositiveButton("确定", (dialog, which) -> {})
+                        .show();
+            }
         }
 
 
