@@ -25,17 +25,7 @@ public class XposedMain implements IXposedHookLoadPackage {
             return;
         }
         if(loadPackageParam.packageName.equals("android")){
-            XposedModule.isBootComplete = false;
             XposedModule.staticLoadPackageParam = loadPackageParam;
-            new Thread(() -> {
-                try {
-                    Thread.sleep(60000);
-                    XposedModule.isBootComplete = true;
-                    XposedBridge.log("[fcmfix] isBootComplete");
-                } catch (Exception e) {
-                    XposedBridge.log("[fcmfix] "+e.getMessage());
-                }
-            }).start();
             XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
             new BroadcastFix(loadPackageParam);
 

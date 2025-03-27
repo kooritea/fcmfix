@@ -39,7 +39,7 @@ public abstract class XposedModule {
     protected static Context context = null;
     private static final ArrayList<XposedModule> instances = new ArrayList<>();
     private static Boolean isInitReceiver = false;
-    public static Boolean isBootComplete = true;
+    public static Boolean isBootComplete = false;
     private static Thread loadConfigThread = null;
 
     protected XposedModule(final XC_LoadPackage.LoadPackageParam loadPackageParam) {
@@ -82,6 +82,19 @@ public abstract class XposedModule {
      */
     private static void callAllOnCanReadConfig(){
         initReceiver();
+        if("android".equals(getSelfPackageName())){
+            new Thread(() -> {
+                try {
+                    Thread.sleep(60000);
+                    isBootComplete = true;
+                    printLog("Boot Complete");
+                } catch (Exception e) {
+                    printLog(e.getMessage());
+                }
+            }).start();
+        }else{
+            isBootComplete = true;
+        }
         for(XposedModule instance : instances){
             try{
                 instance.onCanReadConfig();
