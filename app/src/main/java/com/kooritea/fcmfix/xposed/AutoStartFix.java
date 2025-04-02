@@ -162,37 +162,20 @@ public class AutoStartFix extends XposedModule {
 
         try{
             // oos15/cos15
-            Method method = XposedUtils.findMethod(XposedHelpers.findClass("com.android.server.am.OplusAppStartupManager",loadPackageParam.classLoader),"isAllowStartFromBroadCast",4);
+            Method method = XposedUtils.findMethod(XposedHelpers.findClass("com.android.server.am.OplusAppStartupManager",loadPackageParam.classLoader),"shouldPreventSendReceiverReal",4);
             XposedBridge.hookMethod(method,new XC_MethodHook() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam methodHookParam) {
-                    Intent intent = (Intent)methodHookParam.args[2];
-                    String packageName = (String) XposedUtils.getObjectFieldByPath(methodHookParam.args[3],"activityInfo.applicationInfo.packageName");
-                    if(isFCMIntent(intent) && targetIsAllow(packageName)){
-                        printLog("com.android.server.am.OplusAppStartupManager.isAllowStartFromBroadCast(4) package_name: " + packageName, true);
-                        methodHookParam.setResult(true);
+                protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if(methodHookParam.args[0] != null && XposedHelpers.getObjectField(methodHookParam.args[0],"intent") != null){
+                        Intent intent = (Intent)XposedHelpers.getObjectField(methodHookParam.args[0],"intent");
+                        if(isFCMIntent(intent) && targetIsAllow(intent.getPackage())){
+                            methodHookParam.setResult(false);
+                        }
                     }
                 }
             });
         } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e) {
-            printLog("No Such Method com.android.server.am.OplusAppStartupManager.isAllowStartFromBroadCast(4)");
-        }
-        try{
-            // oos15/cos15
-            Method method = XposedUtils.findMethod(XposedHelpers.findClass("com.android.server.am.OplusAppStartupManager",loadPackageParam.classLoader),"isAllowStartFromBroadCast",5);
-            XposedBridge.hookMethod(method,new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam methodHookParam) {
-                    Intent intent = (Intent)methodHookParam.args[3];
-                    String packageName = (String) XposedUtils.getObjectFieldByPath(methodHookParam.args[4],"activityInfo.applicationInfo.packageName");
-                    if(isFCMIntent(intent) && targetIsAllow(packageName)){
-                        printLog("com.android.server.am.OplusAppStartupManager.isAllowStartFromBroadCast(5) package_name: " + packageName, true);
-                        methodHookParam.setResult(true);
-                    }
-                }
-            });
-        } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e) {
-            printLog("No Such Method com.android.server.am.OplusAppStartupManager.isAllowStartFromBroadCast(5)");
+            printLog("No Such Method com.android.server.am.OplusAppStartupManager.shouldPreventSendReceiverReal");
         }
     }
 
