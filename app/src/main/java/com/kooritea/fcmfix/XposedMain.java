@@ -26,7 +26,7 @@ public class XposedMain implements IXposedHookLoadPackage {
         }
         if(loadPackageParam.packageName.equals("android")){
             XposedModule.staticLoadPackageParam = loadPackageParam;
-            XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService");
+            XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService/com.android.server.am.BroadcastController");
             new BroadcastFix(loadPackageParam);
 
             XposedBridge.log("[fcmfix] start hook com.android.server.notification.NotificationManagerServiceInjector");
@@ -58,7 +58,7 @@ public class XposedMain implements IXposedHookLoadPackage {
                 return false;
             }
         }
-        catch (Exception e) {
+        catch (Throwable e) {
             return false;
         }
         return true;

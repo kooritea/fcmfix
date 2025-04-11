@@ -29,7 +29,7 @@ public class BroadcastFix extends XposedModule {
         try{
             this.startHookBroadcastIntentLocked();
         }catch (Throwable e) {
-            printLog("hook error com.android.server.am.ActivityManagerService.broadcastIntentLocked:" + e.getMessage());
+            printLog("hook error broadcastIntentLocked:" + e.getMessage());
         }
         try{
             this.startHookScheduleResultTo();
@@ -39,142 +39,151 @@ public class BroadcastFix extends XposedModule {
     }
 
     protected void startHookBroadcastIntentLocked(){
-        Class<?> clazz = XposedHelpers.findClass("com.android.server.am.ActivityManagerService",loadPackageParam.classLoader);
-        final Method[] declareMethods = clazz.getDeclaredMethods();
         Method targetMethod = null;
-        for(Method method : declareMethods){
-            if("broadcastIntentLocked".equals(method.getName())){
-                if(targetMethod == null || targetMethod.getParameterTypes().length < method.getParameterTypes().length){
-                    targetMethod = method;
+        int intent_args_index = 0;
+        int appOp_args_index = 0;
+        if(Build.VERSION.SDK_INT >= 35){
+            targetMethod = XposedUtils.tryFindMethodMostParam(loadPackageParam,"com.android.server.am.BroadcastController","broadcastIntentLocked");
+            if(targetMethod != null){
+                if(Build.VERSION.SDK_INT >= 35){
+                    intent_args_index = 3;
+                    appOp_args_index = 13;
                 }
             }
         }
-        if(targetMethod != null){
-            int intent_args_index = 0;
-            int appOp_args_index = 0;
-            Parameter[] parameters = targetMethod.getParameters();
-            if(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q){
-                intent_args_index = 2;
-                appOp_args_index = 9;
-            }else if(Build.VERSION.SDK_INT == Build.VERSION_CODES.R){
-                intent_args_index = 3;
-                appOp_args_index = 10;
-            }else if(Build.VERSION.SDK_INT == 31){
-                intent_args_index = 3;
-                if(parameters[11].getType() == int.class){
-                    appOp_args_index = 11;
-                }
-                if(parameters[12].getType() == int.class){
-                    appOp_args_index = 12;
-                }
-            }else if(Build.VERSION.SDK_INT == 32){
-                intent_args_index = 3;
-                if(parameters[11].getType() == int.class){
-                    appOp_args_index = 11;
-                }
-                if(parameters[12].getType() == int.class){
-                    appOp_args_index = 12;
-                }
-            }else if(Build.VERSION.SDK_INT == 33){
-                intent_args_index = 3;
-                appOp_args_index = 12;
-            } else if(Build.VERSION.SDK_INT == 34){
-                intent_args_index = 3;
-                if(parameters[12].getType() == int.class){
-                    appOp_args_index = 12;
-                }
-                if(parameters[13].getType() == int.class){
-                    appOp_args_index = 13;
-                }
-            } else if(Build.VERSION.SDK_INT == 35){
-                intent_args_index = 3;
-                if(parameters[12].getType() == int.class){
-                    appOp_args_index = 12;
-                }
-                if(parameters[13].getType() == int.class){
-                    appOp_args_index = 13;
-                }
-            }
-            if(intent_args_index == 0 || appOp_args_index == 0){
-                intent_args_index = 0;
-                appOp_args_index = 0;
-                // 根据参数名称查找，部分经过混淆的系统无效
-                for(int i = 0; i < parameters.length; i++){
-                    if("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class){
-                        appOp_args_index = i;
+        if(targetMethod == null){
+            targetMethod = XposedUtils.tryFindMethodMostParam(loadPackageParam,"com.android.server.am.ActivityManagerService","broadcastIntentLocked");
+            if(targetMethod != null){
+                Parameter[] parameters = targetMethod.getParameters();
+                if(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q){
+                    intent_args_index = 2;
+                    appOp_args_index = 9;
+                }else if(Build.VERSION.SDK_INT == Build.VERSION_CODES.R){
+                    intent_args_index = 3;
+                    appOp_args_index = 10;
+                }else if(Build.VERSION.SDK_INT == 31){
+                    intent_args_index = 3;
+                    if(parameters[11].getType() == int.class){
+                        appOp_args_index = 11;
                     }
-                    if("intent".equals(parameters[i].getName()) && parameters[i].getType() == Intent.class){
-                        intent_args_index = i;
+                    if(parameters[12].getType() == int.class){
+                        appOp_args_index = 12;
+                    }
+                }else if(Build.VERSION.SDK_INT == 32){
+                    intent_args_index = 3;
+                    if(parameters[11].getType() == int.class){
+                        appOp_args_index = 11;
+                    }
+                    if(parameters[12].getType() == int.class){
+                        appOp_args_index = 12;
+                    }
+                }else if(Build.VERSION.SDK_INT == 33){
+                    intent_args_index = 3;
+                    appOp_args_index = 12;
+                } else if(Build.VERSION.SDK_INT == 34){
+                    intent_args_index = 3;
+                    if(parameters[12].getType() == int.class){
+                        appOp_args_index = 12;
+                    }
+                    if(parameters[13].getType() == int.class){
+                        appOp_args_index = 13;
+                    }
+                } else if(Build.VERSION.SDK_INT >= 35){
+                    intent_args_index = 3;
+                    if(parameters[12].getType() == int.class){
+                        appOp_args_index = 12;
+                    }
+                    if(parameters[13].getType() == int.class){
+                        appOp_args_index = 13;
                     }
                 }
-            }
-            printLog("Android API: " + Build.VERSION.SDK_INT);
-            printLog("appOp_args_index: " + appOp_args_index);
-            printLog("intent_args_index: " + intent_args_index);
-            if(intent_args_index == 0 || appOp_args_index == 0 || parameters[intent_args_index].getType() != Intent.class || parameters[appOp_args_index].getType() != int.class){
-                printLog("broadcastIntentLocked hook 位置查找失败，fcmfix将不会工作。");
-                return;
-            }
-            final int finalIntent_args_index = intent_args_index;
-            final int finalAppOp_args_index = appOp_args_index;
-
-            XposedBridge.hookMethod(targetMethod,new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam methodHookParam) {
-                    if(!isBootComplete){
-                        return;
-                    }
-                    Intent intent = (Intent) methodHookParam.args[finalIntent_args_index];
-                    if(intent != null && intent.getPackage() != null && intent.getFlags() != Intent.FLAG_INCLUDE_STOPPED_PACKAGES && isFCMIntent(intent)){
-                        String target;
-                        if (intent.getComponent() != null) {
-                            target = intent.getComponent().getPackageName();
-                        } else {
-                            target = intent.getPackage();
+                if(intent_args_index == 0 || appOp_args_index == 0){
+                    intent_args_index = 0;
+                    appOp_args_index = 0;
+                    // 根据参数名称查找，部分经过混淆的系统无效
+                    for(int i = 0; i < parameters.length; i++){
+                        if("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class){
+                            appOp_args_index = i;
                         }
-                        if(targetIsAllow(target)){
-                            int i = (Integer) methodHookParam.args[finalAppOp_args_index];
-                            if (i == -1) {
-                                methodHookParam.args[finalAppOp_args_index] = 11;
-                            }
-                            intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                            if (getBooleanConfig("includeIceBoxDisableApp",false) && !IceboxUtils.isAppEnabled(context, target)) {
-                                printLog("Waiting for IceBox to activate the app: " + target, true);
-                                methodHookParam.setResult(false);
-                                new Thread(() -> {
-                                    IceboxUtils.activeApp(context, target);
-                                    for (int i1 = 0; i1 < 300; i1++) {
-                                        if (!IceboxUtils.isAppEnabled(context, target)) {
-                                            try {
-                                                Thread.sleep(100);
-                                            } catch (Throwable e) {
-                                                printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
-                                            }
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                    try {
-                                        if(IceboxUtils.isAppEnabled(context, target)){
-                                            printLog("Send Forced Start Broadcast: " + target, true);
-                                        }else{
-                                            printLog("Waiting for IceBox to activate the app timed out: " + target, true);
-                                        }
-                                        XposedBridge.invokeOriginalMethod(methodHookParam.method, methodHookParam.thisObject, methodHookParam.args);
-                                    } catch (Throwable e) {
-                                        printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
-                                    }
-                                }).start();
-                            }else{
-                                printLog("Send Forced Start Broadcast: " + target, true);
-                            }
+                        if("intent".equals(parameters[i].getName()) && parameters[i].getType() == Intent.class){
+                            intent_args_index = i;
                         }
                     }
                 }
-            });
+            }
+        }
+        if(targetMethod != null && intent_args_index != 0 & appOp_args_index != 0 && targetMethod.getParameters()[intent_args_index].getType() == Intent.class && targetMethod.getParameters()[appOp_args_index].getType() == int.class){
+            createBroadcastIntentLockedHooker(intent_args_index,appOp_args_index,targetMethod);
         } else {
-            printLog("No Such Method com.android.server.am.ActivityManagerService.broadcastIntentLocked");
+            printLog("broadcastIntentLocked hook 位置查找失败，fcmfix将不会工作。");
         }
+    }
+
+    protected void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method){
+        printLog("Android API: " + Build.VERSION.SDK_INT);
+        printLog("appOp_args_index: " + appOp_args_index);
+        printLog("intent_args_index: " + intent_args_index);
+        printLog("hook target: " + method.getDeclaringClass().getName());
+        final int finalIntent_args_index = intent_args_index;
+        final int finalAppOp_args_index = appOp_args_index;
+
+        XposedBridge.hookMethod(method,new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                if(!isBootComplete){
+                    return;
+                }
+                if(methodHookParam.args[finalIntent_args_index] == null){
+                    return;
+                }
+                Intent intent = (Intent) methodHookParam.args[finalIntent_args_index];
+                if(intent.getFlags() != Intent.FLAG_INCLUDE_STOPPED_PACKAGES && isFCMIntent(intent)){
+                    String target;
+                    if (intent.getComponent() != null) {
+                        target = intent.getComponent().getPackageName();
+                    } else {
+                        target = intent.getPackage();
+                    }
+                    if(targetIsAllow(target)){
+                        int i = (Integer) methodHookParam.args[finalAppOp_args_index];
+                        if (i == -1) {
+                            methodHookParam.args[finalAppOp_args_index] = 11;
+                        }
+                        intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                        if (getBooleanConfig("includeIceBoxDisableApp",false) && !IceboxUtils.isAppEnabled(context, target)) {
+                            printLog("Waiting for IceBox to activate the app: " + target, true);
+                            methodHookParam.setResult(false);
+                            new Thread(() -> {
+                                IceboxUtils.activeApp(context, target);
+                                for (int i1 = 0; i1 < 300; i1++) {
+                                    if (!IceboxUtils.isAppEnabled(context, target)) {
+                                        try {
+                                            Thread.sleep(100);
+                                        } catch (Throwable e) {
+                                            printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                try {
+                                    if(IceboxUtils.isAppEnabled(context, target)){
+                                        printLog("Send Forced Start Broadcast: " + target, true);
+                                    }else{
+                                        printLog("Waiting for IceBox to activate the app timed out: " + target, true);
+                                    }
+                                    XposedBridge.invokeOriginalMethod(methodHookParam.method, methodHookParam.thisObject, methodHookParam.args);
+                                } catch (Throwable e) {
+                                    printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
+                                }
+                            }).start();
+                        }else{
+                            printLog("Send Forced Start Broadcast: " + target, true);
+                        }
+                    }
+                }
+            }
+        });
     }
 
     protected void startHookScheduleResultTo(){

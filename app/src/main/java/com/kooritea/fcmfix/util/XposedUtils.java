@@ -6,6 +6,7 @@ import java.lang.reflect.Method;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class XposedUtils {
 
@@ -37,7 +38,24 @@ public class XposedUtils {
         return XposedBridge.hookMethod(XposedHelpers.findConstructorExact(clazz,bestMatch.getParameterTypes()), callbacks);
     }
 
-    public static XC_MethodHook.Unhook findAndHookMethodMostParam(Class<?> clazz, String methodName, XC_MethodHook callbacks){
+    public static Method tryFindMethodMostParam(XC_LoadPackage.LoadPackageParam loadPackageParam, String className, String methodName){
+        Class<?> clazz = XposedHelpers.findClassIfExists(className,loadPackageParam.classLoader);
+        if(clazz != null){
+            return tryFindMethodMostParam(clazz,methodName);
+        }else{
+            return null;
+        }
+    }
+
+    public static Method findMethodMostParam(Class<?> clazz, String methodName){
+        Method bestMatch = tryFindMethodMostParam(clazz,methodName);
+        if(bestMatch == null){
+            throw new NoSuchMethodError(clazz.getName() + '#' + methodName);
+        }
+        return bestMatch;
+    }
+
+    public static Method tryFindMethodMostParam(Class<?> clazz, String methodName){
         Method bestMatch = null;
         for(Method method : clazz.getDeclaredMethods()){
             if(methodName.equals(method.getName())){
@@ -46,10 +64,11 @@ public class XposedUtils {
                 }
             }
         }
-        if(bestMatch == null){
-            throw new NoSuchMethodError(clazz.getName() + '#' + methodName);
-        }
-        return XposedBridge.hookMethod(XposedHelpers.findMethodExact(clazz,methodName,bestMatch.getParameterTypes()), callbacks);
+        return bestMatch;
+    }
+
+    public static XC_MethodHook.Unhook findAndHookMethodMostParam(Class<?> clazz, String methodName, XC_MethodHook callbacks){
+        return XposedBridge.hookMethod(XposedHelpers.findMethodExact(clazz,methodName,findMethodMostParam(clazz,methodName).getParameterTypes()), callbacks);
     }
 
     public static XC_MethodHook.Unhook findAndHookMethodAnyParam(Class<?> clazz, String methodName, XC_MethodHook callbacks, Object ...parameterTypes){
