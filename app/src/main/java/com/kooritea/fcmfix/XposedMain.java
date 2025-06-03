@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 
 import com.kooritea.fcmfix.xposed.AutoStartFix;
 import com.kooritea.fcmfix.xposed.BroadcastFix;
+import com.kooritea.fcmfix.xposed.GMSRestrictFix;
 import com.kooritea.fcmfix.xposed.KeepNotification;
 import com.kooritea.fcmfix.xposed.MiuiLocalNotificationFix;
 import com.kooritea.fcmfix.xposed.PowerkeeperFix;
@@ -29,6 +30,9 @@ public class XposedMain implements IXposedHookLoadPackage {
             XposedBridge.log("[fcmfix] start hook com.android.server.am.ActivityManagerService/com.android.server.am.BroadcastController");
             new BroadcastFix(loadPackageParam);
 
+            XposedBridge.log("[fcmfix] start hook com.android.server.hans.scene.OplusBgSceneManager");
+            new GMSRestrictFix(loadPackageParam);
+
             XposedBridge.log("[fcmfix] start hook com.android.server.notification.NotificationManagerServiceInjector");
             new MiuiLocalNotificationFix(loadPackageParam);
 
@@ -50,6 +54,7 @@ public class XposedMain implements IXposedHookLoadPackage {
             XposedBridge.log("[fcmfix] start hook com.miui.powerkeeper");
             new PowerkeeperFix(loadPackageParam);
         }
+
     }
     private boolean fileIsExists(String strFile) {
         try {
