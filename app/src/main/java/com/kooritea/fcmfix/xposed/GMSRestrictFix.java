@@ -1,6 +1,6 @@
 package com.kooritea.fcmfix.xposed;
 
-import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XC_MethodReplacement;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
@@ -9,17 +9,14 @@ public class GMSRestrictFix extends XposedModule {
         super(loadPackageParam);
         try {
             this.startHookGMSRestrict();
-        } catch (Throwable ignored) {
-
+        } catch (Throwable e) {
+            printLog("hook error registerGmsRestrictObserver:" + e.getMessage());
         }
     }
 
     private void startHookGMSRestrict() {
-        XposedHelpers.findAndHookMethod("com.android.server.hans.scene.OplusBgSceneManager", loadPackageParam.classLoader, "registerGmsRestrictObserver", new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                param.setResult(null);
-            }
-        });
+        XposedHelpers.findAndHookMethod("com.android.server.hans.scene.OplusBgSceneManager", loadPackageParam.classLoader, "registerGmsRestrictObserver", XC_MethodReplacement.DO_NOTHING);
+
+        XposedHelpers.findAndHookMethod("com.android.server.hans.scene.OplusBgSceneManager", loadPackageParam.classLoader, "updateGmsRestrict", XC_MethodReplacement.DO_NOTHING);
     }
 }
