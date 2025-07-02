@@ -309,11 +309,15 @@ public abstract class XposedModule {
         }
     }
 
-    protected boolean isFCMIntent(Intent intent) {
-        String action = intent.getAction();
+    protected boolean isFCMAction(String action) {
         return action != null && (action.endsWith(".android.c2dm.intent.RECEIVE") ||
                 "com.google.firebase.MESSAGING_EVENT".equals(action) ||
                 "com.google.firebase.INSTANCE_ID_EVENT".equals(action));
+    }
+
+    protected boolean isFCMIntent(Intent intent) {
+        String action = intent.getAction();
+        return isFCMAction(action);
     }
 
      protected static String getSelfPackageName() {

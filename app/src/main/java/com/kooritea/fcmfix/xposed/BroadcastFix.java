@@ -181,6 +181,8 @@ public class BroadcastFix extends XposedModule {
                         }else{
                             printLog("Send Forced Start Broadcast: " + target, true);
                         }
+                        // cos15 unfreeze
+                        OplusProxyFix.unfreeze(target);
                     }
                 }
             }
