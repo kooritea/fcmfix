@@ -21,12 +21,21 @@ jobs:
         java-version: '17'  
         distribution: 'temurin'  
         cache: gradle  
+      
+    - name: 生成 Debug 签名密钥  
+      run: |  
+        keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"  
           
     - name: 授予 gradlew 执行权限  
       run: chmod +x gradlew  
         
-    - name: 构建 Debug APK  
+    - name: 构建并签名 Debug APK  
       run: ./gradlew assembleDebug  
+      env:  
+        SIGNING_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore  
+        SIGNING_KEYSTORE_PASSWORD: android  
+        SIGNING_KEY_ALIAS: androiddebugkey  
+        SIGNING_KEY_PASSWORD: android  
         
     - name: 构建 Release APK  
       run: ./gradlew assembleRelease  
@@ -34,7 +43,7 @@ jobs:
     - name: 上传 Debug APK  
       uses: actions/upload-artifact@v4  
       with:  
-        name: fcmfix-debug  
+        name: fcmfix-debug-signed  
         path: app/build/outputs/apk/debug/*.apk  
         retention-days: 30  
           
