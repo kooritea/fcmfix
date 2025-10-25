@@ -25,6 +25,14 @@ jobs:
     - name: 生成 Debug 签名密钥  
       run: |  
         keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"  
+      
+    - name: 动态修改 versionName  
+      run: |  
+        BUILD_DATE=$(date +%Y%m%d)  
+        GIT_HASH=$(git rev-parse --short=7 HEAD)  
+        VERSION_NAME="${BUILD_DATE}_${GIT_HASH}"  
+        echo "Generated versionName: $VERSION_NAME"  
+        sed -i "s/versionName \"dev\"/versionName \"$VERSION_NAME\"/" app/build.gradle  
           
     - name: 授予 gradlew 执行权限  
       run: chmod +x gradlew  
