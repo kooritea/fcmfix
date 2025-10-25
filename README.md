@@ -1,6 +1,3 @@
-r8和gradle上的一些更新和一些小更改
-自行使用android studio构建
-2025.10.25
 # fcmfix(Android 10-15 )
 
 [![Android CI](https://github.com/kooritea/fcmfix/workflows/Android%20CI/badge.svg)](https://github.com/kooritea/fcmfix/actions)
