@@ -130,7 +130,11 @@ public class OplusProxyFix extends XposedModule {
 
         printLog("unfreeze " + target + ", uid=" + uid);
         WorkSource ws = new WorkSource();
-        XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, "FCMXX"); // 5 chars tag
+        try {
+            XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, "FCMXX");
+        } catch (Throwable e) {
+            XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, "FCMXX", "FCMFix");
+        }
     }
 
     private void startHookRegisterGmsRestrictObserver() {
