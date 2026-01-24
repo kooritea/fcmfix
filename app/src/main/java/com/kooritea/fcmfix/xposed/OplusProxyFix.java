@@ -13,6 +13,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class OplusProxyFix extends XposedModule {
 
     private static Object s_oplusProxyWakeLock = null;
+    private static volatile boolean s_useFourParams = false;
+    private static volatile boolean s_signatureDetected = false;
 
     public OplusProxyFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         super(loadPackageParam);
@@ -128,12 +130,32 @@ public class OplusProxyFix extends XposedModule {
             02 String tag
          */
 
-        printLog("unfreeze " + target + ", uid=" + uid);
         WorkSource ws = new WorkSource();
-        try {
-            XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, "FCMXX");
-        } catch (Throwable e) {
-            XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, "FCMXX", "FCMFix");
+        String tag = "FCMXX";
+
+        if (!s_signatureDetected) {
+            try {
+                XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
+                s_useFourParams = true;
+                printLog("First unfreeze success with 4 params → remember to use 4");
+            } catch (Throwable e) {
+                // 降级用3参
+                XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
+                s_useFourParams = false;
+                printLog("First unfreeze fallback to 3 params");
+            }
+            s_signatureDetected = true;
+        } else {
+            // 后续调用直接用缓存的
+            try {
+                if (s_useFourParams) {
+                    XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
+                } else {
+                    XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
+            }
+            } catch (Throwable ignored) {
+                // 静默或log
+            }
         }
     }
 
