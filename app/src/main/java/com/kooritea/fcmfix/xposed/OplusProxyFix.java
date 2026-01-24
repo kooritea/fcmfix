@@ -137,12 +137,10 @@ public class OplusProxyFix extends XposedModule {
             try {
                 XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
                 s_useFourParams = true;
-                printLog("First unfreeze success with 4 params → remember to use 4");
             } catch (Throwable e) {
                 // 降级用3参
                 XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
                 s_useFourParams = false;
-                printLog("First unfreeze fallback to 3 params");
             }
             s_signatureDetected = true;
         } else {
@@ -150,9 +148,11 @@ public class OplusProxyFix extends XposedModule {
             try {
                 if (s_useFourParams) {
                     XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
+                    printLog("unfreeze " + target + ", uid=" + uid);
                 } else {
                     XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
-            }
+                    printLog("unfreeze " + target + ", uid=" + uid);
+                }
             } catch (Throwable ignored) {
                 // 静默或log
             }
