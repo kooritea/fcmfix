@@ -12,6 +12,8 @@ import com.kooritea.fcmfix.libxposed.XposedHelpers;
 public class OplusProxyFix extends XposedModule {
 
     private static Object s_oplusProxyWakeLock = null;
+    private static volatile boolean s_useFourParams = false;
+    private static volatile boolean s_signatureDetected = false;
 
     public OplusProxyFix(ClassLoader classLoader) {
         super(classLoader);
@@ -127,9 +129,33 @@ public class OplusProxyFix extends XposedModule {
             02 String tag
          */
 
-        printLog("unfreeze " + target + ", uid=" + uid);
         WorkSource ws = new WorkSource();
-        XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, "FCMXX"); // 5 chars tag
+        String tag = "FCMXX";
+
+        if (!s_signatureDetected) {
+            try {
+                XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
+                s_useFourParams = true;
+            } catch (Throwable e) {
+                // 降级用3参
+                XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
+                s_useFourParams = false;
+            }
+            s_signatureDetected = true;
+        } else {
+            // 后续调用直接用缓存的
+            try {
+                if (s_useFourParams) {
+                    XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
+                    printLog("unfreeze " + target + ", uid=" + uid);
+                } else {
+                    XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
+                    printLog("unfreeze " + target + ", uid=" + uid);
+                }
+            } catch (Throwable ignored) {
+                // 静默或log
+            }
+        }
     }
 
     private void startHookRegisterGmsRestrictObserver() {
