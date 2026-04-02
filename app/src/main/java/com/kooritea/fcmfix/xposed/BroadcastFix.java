@@ -14,18 +14,17 @@ import androidx.core.app.NotificationManagerCompat;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.kooritea.fcmfix.libxposed.XC_MethodHook;
+import com.kooritea.fcmfix.libxposed.XposedBridge;
+import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 import com.kooritea.fcmfix.util.IceboxUtils;
 import com.kooritea.fcmfix.util.XposedUtils;
 
 public class BroadcastFix extends XposedModule {
 
-    public BroadcastFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
-        super(loadPackageParam);
+    public BroadcastFix(ClassLoader classLoader) {
+        super(classLoader);
         try{
             this.startHookBroadcastIntentLocked();
         }catch (Throwable e) {
@@ -43,7 +42,7 @@ public class BroadcastFix extends XposedModule {
         int intent_args_index = 0;
         int appOp_args_index = 0;
         if(Build.VERSION.SDK_INT >= 35){
-            targetMethod = XposedUtils.tryFindMethodMostParam(loadPackageParam,"com.android.server.am.BroadcastController","broadcastIntentLocked");
+            targetMethod = XposedUtils.tryFindMethodMostParam(classLoader,"com.android.server.am.BroadcastController","broadcastIntentLocked");
             if(targetMethod != null){
                 if(Build.VERSION.SDK_INT >= 35){
                     intent_args_index = 3;
@@ -52,7 +51,7 @@ public class BroadcastFix extends XposedModule {
             }
         }
         if(targetMethod == null){
-            targetMethod = XposedUtils.tryFindMethodMostParam(loadPackageParam,"com.android.server.am.ActivityManagerService","broadcastIntentLocked");
+            targetMethod = XposedUtils.tryFindMethodMostParam(classLoader,"com.android.server.am.ActivityManagerService","broadcastIntentLocked");
             if(targetMethod != null){
                 Parameter[] parameters = targetMethod.getParameters();
                 if(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q){
@@ -190,7 +189,7 @@ public class BroadcastFix extends XposedModule {
     }
 
     protected void startHookScheduleResultTo(){
-        Method method = XposedUtils.findMethod(XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernImpl",loadPackageParam.classLoader),"scheduleResultTo",1);
+        Method method = XposedUtils.findMethod(XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernImpl",classLoader),"scheduleResultTo",1);
         XposedBridge.hookMethod(method,new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam methodHookParam) {

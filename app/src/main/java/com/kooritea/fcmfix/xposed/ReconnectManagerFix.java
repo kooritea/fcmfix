@@ -33,10 +33,9 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.util.Timer;
 import java.util.TimerTask;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.kooritea.fcmfix.libxposed.XC_MethodHook;
+import com.kooritea.fcmfix.libxposed.XposedBridge;
+import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 
 public class ReconnectManagerFix extends XposedModule {
@@ -46,8 +45,8 @@ public class ReconnectManagerFix extends XposedModule {
     private Boolean startHookFlag = false;
 
 
-    public ReconnectManagerFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
-        super(loadPackageParam);
+    public ReconnectManagerFix(ClassLoader classLoader) {
+        super(classLoader);
         this.addButton();
         this.startHookGcmServiceStart();
     }
@@ -64,7 +63,7 @@ public class ReconnectManagerFix extends XposedModule {
     }
 
     private void startHookGcmServiceStart() {
-        this.GcmChimeraService = XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService", loadPackageParam.classLoader);
+        this.GcmChimeraService = XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService", classLoader);
         try{
             for(Method method : this.GcmChimeraService.getMethods()){
                 if(method.getParameterTypes().length == 2){
@@ -153,7 +152,7 @@ public class ReconnectManagerFix extends XposedModule {
         printLog("timer_class: "+ sharedPreferences.getString("timer_class", ""), true);
         printLog("timer_alarm_type_property: "+ sharedPreferences.getString("timer_alarm_type_property", ""), true);
         printLog("timer_settimeout_method: "+ sharedPreferences.getString("timer_settimeout_method", ""), true);
-        final Class<?> timerClazz = XposedHelpers.findClass(sharedPreferences.getString("timer_class", ""), loadPackageParam.classLoader);
+        final Class<?> timerClazz = XposedHelpers.findClass(sharedPreferences.getString("timer_class", ""), classLoader);
         XposedHelpers.findAndHookMethod(timerClazz, "toString", new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(final MethodHookParam param) {
@@ -236,7 +235,7 @@ public class ReconnectManagerFix extends XposedModule {
     private void findAndUpdateHookTarget(final SharedPreferences sharedPreferences){
         final SharedPreferences.Editor editor = sharedPreferences.edit();
         try{
-            Class<?> heartbeatChimeraAlarm =  XposedHelpers.findClass("com.google.android.gms.gcm.connection.HeartbeatChimeraAlarm",loadPackageParam.classLoader);
+            Class<?> heartbeatChimeraAlarm =  XposedHelpers.findClass("com.google.android.gms.gcm.connection.HeartbeatChimeraAlarm",classLoader);
             Class<?> timerClass = heartbeatChimeraAlarm.getConstructors()[0].getParameterTypes()[3];
             if (timerClass.getDeclaredMethods().length == 0) {
                 timerClass = timerClass.getSuperclass();
@@ -297,7 +296,7 @@ public class ReconnectManagerFix extends XposedModule {
     }
 
     private void addButton(){
-        XposedHelpers.findAndHookMethod("com.google.android.gms.gcm.GcmChimeraDiagnostics", loadPackageParam.classLoader, "onCreate", Bundle.class, new XC_MethodHook() {
+        XposedHelpers.findAndHookMethod("com.google.android.gms.gcm.GcmChimeraDiagnostics", classLoader, "onCreate", Bundle.class, new XC_MethodHook() {
             @SuppressLint("SetTextI18n")
             @Override
             protected void afterHookedMethod(final MethodHookParam param) {

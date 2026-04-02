@@ -3,10 +3,9 @@ package com.kooritea.fcmfix.util;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.kooritea.fcmfix.libxposed.XC_MethodHook;
+import com.kooritea.fcmfix.libxposed.XposedBridge;
+import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 public class XposedUtils {
 
@@ -38,8 +37,8 @@ public class XposedUtils {
         return XposedBridge.hookMethod(XposedHelpers.findConstructorExact(clazz,bestMatch.getParameterTypes()), callbacks);
     }
 
-    public static Method tryFindMethodMostParam(XC_LoadPackage.LoadPackageParam loadPackageParam, String className, String methodName){
-        Class<?> clazz = XposedHelpers.findClassIfExists(className,loadPackageParam.classLoader);
+    public static Method tryFindMethodMostParam(ClassLoader classLoader, String className, String methodName){
+        Class<?> clazz = XposedHelpers.findClassIfExists(className,classLoader);
         if(clazz != null){
             return tryFindMethodMostParam(clazz,methodName);
         }else{

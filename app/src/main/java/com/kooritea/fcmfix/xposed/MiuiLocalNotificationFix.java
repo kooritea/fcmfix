@@ -1,15 +1,14 @@
 package com.kooritea.fcmfix.xposed;
 
 import java.lang.reflect.Method;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.kooritea.fcmfix.libxposed.XC_MethodHook;
+import com.kooritea.fcmfix.libxposed.XposedBridge;
+import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 public class MiuiLocalNotificationFix extends XposedModule  {
 
-    public MiuiLocalNotificationFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
-        super(loadPackageParam);
+    public MiuiLocalNotificationFix(ClassLoader classLoader) {
+        super(classLoader);
         this.startHook();
     }
 
@@ -17,9 +16,9 @@ public class MiuiLocalNotificationFix extends XposedModule  {
         try{
             Class<?> clazz;
             try{
-                clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceInjector",loadPackageParam.classLoader);
+                clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceInjector",classLoader);
             } catch (XposedHelpers.ClassNotFoundError e) {
-                clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceImpl",loadPackageParam.classLoader);
+                clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerServiceImpl",classLoader);
             }
             final Method[] declareMethods = clazz.getDeclaredMethods();
             Method targetMethod = null;

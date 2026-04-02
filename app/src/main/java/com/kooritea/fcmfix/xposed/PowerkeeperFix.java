@@ -7,24 +7,23 @@ import com.kooritea.fcmfix.util.XposedUtils;
 import java.lang.reflect.Field;
 import java.util.List;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.kooritea.fcmfix.libxposed.XC_MethodHook;
+import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 public class PowerkeeperFix extends XposedModule {
-    public PowerkeeperFix(XC_LoadPackage.LoadPackageParam loadPackageParam) {
-        super(loadPackageParam);
+    public PowerkeeperFix(ClassLoader classLoader) {
+        super(classLoader);
         this.startHook();
     }
 
     protected void startHook(){
         try {
 
-            Class<?> MilletConfig = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletConfig", loadPackageParam.classLoader);
+            Class<?> MilletConfig = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletConfig", classLoader);
             XposedHelpers.setStaticBooleanField(MilletConfig, "isGlobal", true);
             printLog("Set com.miui.powerkeeper.millet.MilletConfig.isGlobal to true");
 
-            Class<?> Misc = XposedHelpers.findClassIfExists("com.miui.powerkeeper.provider.SimpleSettings.Misc", loadPackageParam.classLoader);
+            Class<?> Misc = XposedHelpers.findClassIfExists("com.miui.powerkeeper.provider.SimpleSettings.Misc", classLoader);
             printLog("[fcmfix] start hook com.miui.powerkeeper.provider.SimpleSettings.Misc.getBoolean");
             XposedUtils.findAndHookMethod(Misc, "getBoolean", 3, new XC_MethodHook() {
                 @Override
@@ -36,7 +35,7 @@ public class PowerkeeperFix extends XposedModule {
                 }
             });
 
-            Class<?> MilletPolicy = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletPolicy", loadPackageParam.classLoader);
+            Class<?> MilletPolicy = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletPolicy", classLoader);
 
             XC_MethodHook methodHook = new XC_MethodHook() {
                 protected void beforeHookedMethod(XC_MethodHook.MethodHookParam methodHookParam) throws Throwable {

@@ -31,16 +31,13 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import io.github.libxposed.service.XposedService;
+import io.github.libxposed.service.XposedServiceHelper;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -53,8 +50,84 @@ import com.kooritea.fcmfix.util.IceboxUtils;
 
 public class MainActivity extends AppCompatActivity {
     private AppListAdapter appListAdapter;
+    private static XposedService xposedService;
     Set<String> allowList = new HashSet<>();
     JSONObject config = new JSONObject();
+
+    private SharedPreferences getRemotePreferencesOrNull() {
+        if (xposedService == null) {
+            return null;
+        }
+        try {
+            return xposedService.getRemotePreferences("config");
+        } catch (Throwable e) {
+            Log.e("getRemotePreferences", e.toString());
+            return null;
+        }
+    }
+
+    private void initXposedService() {
+        try {
+            XposedServiceHelper.registerListener(new XposedServiceHelper.OnServiceListener() {
+                @Override
+                public void onServiceBind(@NonNull XposedService service) {
+                    xposedService = service;
+                    runOnUiThread(() -> {
+                        loadConfigFromRemotePreferences();
+                        if (appListAdapter != null) {
+                            appListAdapter.notifyDataSetChanged();
+                        }
+                    });
+                }
+
+                @Override
+                public void onServiceDied(@NonNull XposedService service) {
+                    if (xposedService == service) {
+                        xposedService = null;
+                    }
+                }
+            });
+        } catch (Throwable e) {
+            Log.e("initXposedService", e.toString());
+        }
+    }
+
+    private void ensureDefaultConfigValues() {
+        try {
+            if (!this.config.has("allowList")) {
+                this.config.put("allowList", new JSONArray());
+            }
+            if (!this.config.has("disableAutoCleanNotification")) {
+                this.config.put("disableAutoCleanNotification", false);
+            }
+            if (!this.config.has("includeIceBoxDisableApp")) {
+                this.config.put("includeIceBoxDisableApp", false);
+            }
+            if (!this.config.has("noResponseNotification")) {
+                this.config.put("noResponseNotification", false);
+            }
+        } catch (JSONException e) {
+            Log.e("ensureDefaultConfig", e.toString());
+        }
+    }
+
+    private void loadConfigFromRemotePreferences() {
+        ensureDefaultConfigValues();
+        SharedPreferences pref = getRemotePreferencesOrNull();
+        if (pref == null) {
+            return;
+        }
+        this.allowList.clear();
+        this.allowList.addAll(pref.getStringSet("allowList", new HashSet<>()));
+        try {
+            this.config.put("allowList", new JSONArray(this.allowList));
+            this.config.put("disableAutoCleanNotification", pref.getBoolean("disableAutoCleanNotification", false));
+            this.config.put("includeIceBoxDisableApp", pref.getBoolean("includeIceBoxDisableApp", false));
+            this.config.put("noResponseNotification", pref.getBoolean("noResponseNotification", false));
+        } catch (JSONException e) {
+            Log.e("loadRemoteConfig", e.toString());
+        }
+    }
 
     private class AppInfo {
         public String name;
@@ -62,7 +135,8 @@ public class MainActivity extends AppCompatActivity {
         public Drawable icon;
         public Boolean isAllow = false;
         public Boolean includeFcm = false;
-        public AppInfo(PackageInfo packageInfo){
+
+        public AppInfo(PackageInfo packageInfo) {
             this.name = packageInfo.applicationInfo.loadLabel(getPackageManager()).toString();
             this.packageName = packageInfo.packageName;
             this.icon = packageInfo.applicationInfo.loadIcon(getPackageManager());
@@ -197,6 +271,8 @@ public class MainActivity extends AppCompatActivity {
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
+        initXposedService();
+
         try {
             if (ContextCompat.checkSelfPermission(this, IceboxUtils.SDK_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{IceboxUtils.SDK_PERMISSION}, IceboxUtils.REQUEST_CODE);
@@ -204,33 +280,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable ignored) {
         }
 
-        try {
-            FileInputStream fis = this.openFileInput("config.json");
-            InputStreamReader inputStreamReader = new InputStreamReader(fis, StandardCharsets.UTF_8);
-            StringBuilder stringBuilder = new StringBuilder();
-            BufferedReader reader = new BufferedReader(inputStreamReader);
-            String line = reader.readLine();
-            while (line != null) {
-                stringBuilder.append(line).append('\n');
-                line = reader.readLine();
-            }
-            this.config = new JSONObject(stringBuilder.toString());
-            JSONArray jsonAllowList = this.config.getJSONArray("allowList");
-            for(int i = 0; i < jsonAllowList.length(); i++){
-                this.allowList.add(jsonAllowList.getString(i));
-            }
-            if(this.config.isNull("disableAutoCleanNotification")){
-                this.config.put("disableAutoCleanNotification", false);
-            }
-            if(this.config.isNull("includeIceBoxDisableApp")){
-                this.config.put("includeIceBoxDisableApp", false);
-            }
-            if(this.config.isNull("noResponseNotification")){
-                this.config.put("noResponseNotification", false);
-            }
-        } catch (IOException | JSONException e) {
-            Log.e("onCreate",e.toString());
-        }
         new Handler().postDelayed(() -> {
             appListAdapter = new AppListAdapter();
             recyclerView.setAdapter(appListAdapter);
@@ -256,30 +305,20 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateConfig(){
         try {
-            SharedPreferences pref;
-            try {
-                pref = this.getSharedPreferences("config", Context.MODE_WORLD_READABLE);
-            } catch (SecurityException ignored) {
-                pref = null;
+            SharedPreferences pref = getRemotePreferencesOrNull();
+            if (pref == null) {
+                throw new IllegalStateException("XposedService 未连接，无法写入远程配置");
             }
-            if(pref != null){
-                SharedPreferences.Editor sharedPreferencesEditor = pref.edit();
-                sharedPreferencesEditor.putBoolean("init", true);
-                sharedPreferencesEditor.putStringSet("allowList", this.allowList);
-                sharedPreferencesEditor.putBoolean("disableAutoCleanNotification", this.config.getBoolean("disableAutoCleanNotification"));
-                sharedPreferencesEditor.putBoolean("includeIceBoxDisableApp", this.config.getBoolean("includeIceBoxDisableApp"));
-                sharedPreferencesEditor.putBoolean("noResponseNotification", this.config.getBoolean("noResponseNotification"));
-                sharedPreferencesEditor.commit();
-            }
-        } catch (Throwable e) {
-            Log.e("updateConfig",e.toString());
-        }
-        try {
-            FileOutputStream fos = this.openFileOutput("config.json", Context.MODE_PRIVATE);
             this.config.put("allowList", new JSONArray(this.allowList));
-            fos.write(this.config.toString(2).getBytes());
+            pref.edit()
+                    .putBoolean("init", true)
+                    .putStringSet("allowList", new HashSet<>(this.allowList))
+                    .putBoolean("disableAutoCleanNotification", this.config.getBoolean("disableAutoCleanNotification"))
+                    .putBoolean("includeIceBoxDisableApp", this.config.getBoolean("includeIceBoxDisableApp"))
+                    .putBoolean("noResponseNotification", this.config.getBoolean("noResponseNotification"))
+                    .apply();
             this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
-        } catch (IOException | JSONException e) {
+        } catch (Throwable e) {
             Log.e("updateConfig",e.toString());
             new AlertDialog.Builder(this).setTitle("更新配置文件失败").setMessage(e.getMessage()).show();
         }
