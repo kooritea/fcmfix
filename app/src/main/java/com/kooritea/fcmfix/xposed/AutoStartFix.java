@@ -6,16 +6,15 @@ import com.kooritea.fcmfix.util.XposedUtils;
 
 import java.lang.reflect.Method;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.kooritea.fcmfix.libxposed.XC_MethodHook;
+import com.kooritea.fcmfix.libxposed.XposedBridge;
+import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 public class AutoStartFix extends XposedModule {
     private final String FCM_RECEIVE = ".android.c2dm.intent.RECEIVE";
 
-    public AutoStartFix(XC_LoadPackage.LoadPackageParam loadPackageParam){
-        super(loadPackageParam);
+    public AutoStartFix(ClassLoader classLoader){
+        super(classLoader);
         try{
             this.startHook();
             this.startHookRemovePowerPolicy();
@@ -27,7 +26,7 @@ public class AutoStartFix extends XposedModule {
     protected void startHook(){
         try{
             // miui12
-            Class<?> BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueInjector",loadPackageParam.classLoader);
+            Class<?> BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueInjector",classLoader);
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueInjector,"checkApplicationAutoStart",new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
@@ -47,7 +46,7 @@ public class AutoStartFix extends XposedModule {
         }
         try{
             // miui13
-            Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueImpl",loadPackageParam.classLoader);
+            Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueImpl",classLoader);
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl,"checkApplicationAutoStart",new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
@@ -68,7 +67,7 @@ public class AutoStartFix extends XposedModule {
 
         try{
             // hyperos
-            Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernStubImpl",loadPackageParam.classLoader);
+            Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernStubImpl",classLoader);
             printLog("[fcmfix] start hook com.android.server.am.BroadcastQueueModernStubImpl.checkApplicationAutoStart");
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl,"checkApplicationAutoStart", new XC_MethodHook() {
                 @Override
@@ -109,7 +108,7 @@ public class AutoStartFix extends XposedModule {
         }
 
         try {
-            Class<?> AutoStartManagerServiceStubImpl = XposedHelpers.findClass("com.android.server.am.AutoStartManagerServiceStubImpl", loadPackageParam.classLoader);
+            Class<?> AutoStartManagerServiceStubImpl = XposedHelpers.findClass("com.android.server.am.AutoStartManagerServiceStubImpl", classLoader);
             XC_MethodHook methodHook = new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
@@ -140,7 +139,7 @@ public class AutoStartFix extends XposedModule {
         }
 
         try {
-            Class<?> SmartPowerService = XposedHelpers.findClass("com.android.server.am.SmartPowerService", loadPackageParam.classLoader);
+            Class<?> SmartPowerService = XposedHelpers.findClass("com.android.server.am.SmartPowerService", classLoader);
 
             printLog("[fcmfix] start hook com.android.server.am.SmartPowerService.shouldInterceptBroadcast");
             XposedUtils.findAndHookMethodAnyParam(SmartPowerService, "shouldInterceptBroadcast", new XC_MethodHook() {
@@ -162,7 +161,7 @@ public class AutoStartFix extends XposedModule {
 
         try{
             // oos15/cos15
-            Method method = XposedUtils.findMethod(XposedHelpers.findClass("com.android.server.am.OplusAppStartupManager",loadPackageParam.classLoader),"shouldPreventSendReceiverReal",4);
+            Method method = XposedUtils.findMethod(XposedHelpers.findClass("com.android.server.am.OplusAppStartupManager",classLoader),"shouldPreventSendReceiverReal",4);
             XposedBridge.hookMethod(method,new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
@@ -182,7 +181,7 @@ public class AutoStartFix extends XposedModule {
     protected void startHookRemovePowerPolicy(){
         try {
             // MIUI13
-            Class<?> AutoStartManagerService = XposedHelpers.findClass("com.miui.server.smartpower.SmartPowerPolicyManager",loadPackageParam.classLoader);
+            Class<?> AutoStartManagerService = XposedHelpers.findClass("com.miui.server.smartpower.SmartPowerPolicyManager",classLoader);
             XposedUtils.findAndHookMethodAnyParam(AutoStartManagerService,"shouldInterceptService",new XC_MethodHook() {
 
                 @Override

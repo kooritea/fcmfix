@@ -4,15 +4,14 @@ import android.os.Build;
 import android.service.notification.NotificationListenerService;
 
 import java.lang.reflect.Method;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import com.kooritea.fcmfix.libxposed.XC_MethodHook;
+import com.kooritea.fcmfix.libxposed.XposedBridge;
+import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 public class KeepNotification extends XposedModule{
 
-    public KeepNotification(XC_LoadPackage.LoadPackageParam loadPackageParam) {
-        super(loadPackageParam);
+    public KeepNotification(ClassLoader classLoader) {
+        super(classLoader);
         try {
             this.startHook();
         } catch (Throwable e) {
@@ -21,7 +20,7 @@ public class KeepNotification extends XposedModule{
     }
     
     protected void startHook() throws NoSuchMethodError, XposedHelpers.ClassNotFoundError {
-        Class<?> clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerService",loadPackageParam.classLoader);
+        Class<?> clazz = XposedHelpers.findClass("com.android.server.notification.NotificationManagerService",classLoader);
         final Method[] declareMethods = clazz.getDeclaredMethods();
         Method targetMethod = null;
         for(Method method : declareMethods){

@@ -1,7 +1,8 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 34
+    namespace = "com.kooritea.fcmfix"
+    compileSdkVersion 36
 
     defaultConfig {
         applicationId "com.kooritea.fcmfix"
@@ -20,18 +21,19 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
-    lintOptions {
-        checkReleaseBuilds false
+    lint {
+        checkReleaseBuilds = false
     }
 }
 
 dependencies {
-    compileOnly 'de.robv.android.xposed:api:82'
-    compileOnly 'de.robv.android.xposed:api:82:sources'
+    compileOnly 'io.github.libxposed:api:101.0.1'
+    implementation 'io.github.libxposed:interface:101.0.0'
+    implementation 'io.github.libxposed:service:101.0.0'
     implementation fileTree(dir: "libs", include: ["*.jar"])
     implementation 'androidx.appcompat:appcompat:1.5.1'
     implementation 'androidx.recyclerview:recyclerview:1.2.1'
