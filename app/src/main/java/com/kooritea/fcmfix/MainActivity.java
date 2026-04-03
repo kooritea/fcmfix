@@ -326,7 +326,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu (Menu menu){
-        menu.add("隐藏启动器图标").setCheckable(true);
+//      menu.add("隐藏启动器图标").setCheckable(true);
 
         menu.add("阻止应用停止时自动清除通知").setCheckable(true);
 
