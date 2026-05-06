@@ -14,15 +14,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
+import android.view.*;
 import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -30,23 +25,15 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
+import com.kooritea.fcmfix.util.IceboxUtils;
 import io.github.libxposed.service.XposedService;
 import io.github.libxposed.service.XposedServiceHelper;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.text.Collator;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-
-import com.kooritea.fcmfix.util.IceboxUtils;
+import java.util.*;
 
 public class MainActivity extends AppCompatActivity {
     private AppListAdapter appListAdapter;
@@ -329,7 +316,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu (Menu menu){
-//      menu.add("隐藏启动器图标").setCheckable(true);
+        menu.add("隐藏启动器图标").setCheckable(true);
 
         menu.add("阻止应用停止时自动清除通知").setCheckable(true);
 
