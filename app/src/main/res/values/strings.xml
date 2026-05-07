@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">fcmfix</string>
+    <string name="description">让FCM/GCM唤醒未启动的应用进行发送通知</string>
 </resources>
