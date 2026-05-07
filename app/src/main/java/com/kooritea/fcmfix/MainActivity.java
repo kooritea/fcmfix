@@ -37,6 +37,16 @@ import java.util.*;
 
 public class MainActivity extends AppCompatActivity {
     private AppListAdapter appListAdapter;
+    private RecyclerView recyclerView;
+    private final Handler configRetryHandler = new Handler();
+    private final Runnable configRetryRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!loadConfigFromRemotePreferencesInternal()) {
+                configRetryHandler.postDelayed(this, 500);
+            }
+        }
+    };
     private static XposedService xposedService;
     Set<String> allowList = new HashSet<>();
     JSONObject config = new JSONObject();
@@ -61,9 +71,6 @@ public class MainActivity extends AppCompatActivity {
                     xposedService = service;
                     runOnUiThread(() -> {
                         loadConfigFromRemotePreferences();
-                        if (appListAdapter != null) {
-                            appListAdapter.notifyDataSetChanged();
-                        }
                     });
                 }
 
@@ -98,11 +105,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void loadConfigFromRemotePreferences() {
+    private boolean loadConfigFromRemotePreferencesInternal() {
         ensureDefaultConfigValues();
         SharedPreferences pref = getRemotePreferencesOrNull();
         if (pref == null) {
-            return;
+            return false;
         }
         this.allowList.clear();
         this.allowList.addAll(pref.getStringSet("allowList", new HashSet<>()));
@@ -114,6 +121,72 @@ public class MainActivity extends AppCompatActivity {
         } catch (JSONException e) {
             Log.e("loadRemoteConfig", e.toString());
         }
+        return true;
+    }
+
+    private void loadConfigFromRemotePreferences() {
+        if (loadConfigFromRemotePreferencesInternal()) {
+            refreshAppList();
+        }
+    }
+
+    private void refreshAppList() {
+        if (appListAdapter != null) {
+            appListAdapter.submitList(buildAppList());
+        }
+    }
+
+    private List<AppInfo> buildAppList() {
+        Set<String> allowListSet = new HashSet<>(allowList);
+        List<AppInfo> _allowList = new ArrayList<>();
+        List<AppInfo> _notAllowList = new ArrayList<>();
+        List<AppInfo> _notFoundFcm = new ArrayList<>();
+        PackageManager packageManager = getPackageManager();
+        for (PackageInfo packageInfo : packageManager.getInstalledPackages(PackageManager.GET_RECEIVERS | PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES)) {
+            boolean flag = false;
+            AppInfo appInfo = new AppInfo(packageInfo);
+            if (packageInfo.receivers != null) {
+                for (ActivityInfo receiverInfo : packageInfo.receivers) {
+                    if (receiverInfo.name.equals("com.google.firebase.iid.FirebaseInstanceIdReceiver") || receiverInfo.name.equals("com.google.android.gms.measurement.AppMeasurementReceiver")) {
+                        flag = true;
+                        appInfo.includeFcm = true;
+                        break;
+                    }
+                }
+            } else {
+                continue;
+            }
+            if (allowListSet.contains(appInfo.packageName)) {
+                appInfo.isAllow = true;
+                _allowList.add(appInfo);
+            } else {
+                if (flag) {
+                    _notAllowList.add(appInfo);
+                } else {
+                    _notFoundFcm.add(appInfo);
+                }
+            }
+        }
+        class SortName implements Comparator<AppInfo> {
+            final Collator localCompare = Collator.getInstance(Locale.getDefault());
+
+            @Override
+            public int compare(AppInfo a1, AppInfo a2) {
+                if (localCompare.compare(a1.name, a2.name) > 0) {
+                    return 1;
+                } else if (localCompare.compare(a1.name, a2.name) < 0) {
+                    return -1;
+                }
+                return 0;
+            }
+        }
+        final SortName sortName = new SortName();
+        _allowList.sort(sortName);
+        _notAllowList.sort(sortName);
+        _notFoundFcm.sort(sortName);
+        _allowList.addAll(_notAllowList);
+        _allowList.addAll(_notFoundFcm);
+        return _allowList;
     }
 
     private class AppInfo {
@@ -132,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
 
     private class AppListAdapter  extends RecyclerView.Adapter<AppListAdapter.ViewHolder> {
 
-        private final List<AppInfo> mAppList;
+        private final List<AppInfo> mAppList = new ArrayList<>();
         class ViewHolder extends RecyclerView.ViewHolder {
             View appView;
             ImageView icon;
@@ -153,63 +226,20 @@ public class MainActivity extends AppCompatActivity {
         }
 
         public AppListAdapter(){
-            Set<String> allowListSet = new HashSet<>(allowList);
-            allowListSet.containsAll(allowList);
-            List<AppInfo> _allowList = new ArrayList<>();
-            List<AppInfo> _notAllowList = new ArrayList<>();
-            List<AppInfo> _notFoundFcm = new ArrayList<>();
-            PackageManager packageManager = getPackageManager();
-            for(PackageInfo packageInfo : packageManager.getInstalledPackages(PackageManager.GET_RECEIVERS | PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES)) {
-                boolean flag = false;
-                AppInfo appInfo = new AppInfo(packageInfo);
-                if (packageInfo.receivers != null) {
-                    for (ActivityInfo  receiverInfo : packageInfo.receivers ){
-                        if(receiverInfo.name.equals("com.google.firebase.iid.FirebaseInstanceIdReceiver") || receiverInfo.name.equals("com.google.android.gms.measurement.AppMeasurementReceiver")){
-                            flag = true;
-                            appInfo.includeFcm = true;
-                            break;
-                        }
-                    }
-                }else{
-                    continue;
-                }
-                if(allowListSet.contains(appInfo.packageName)){
-                    appInfo.isAllow = true;
-                    _allowList.add(appInfo);
-                }else{
-                    if(flag){
-                        _notAllowList.add(appInfo);
-                    }else{
-                        _notFoundFcm.add(appInfo);
-                    }
-                }
-            }
-            class SortName implements Comparator<AppInfo> {
-                final Collator localCompare = Collator.getInstance(Locale.getDefault());
-                @Override
-                public int compare(AppInfo a1, AppInfo a2) {
-                    if(localCompare.compare(a1.name,a2.name)>0){
-                        return 1;
-                    }else if (localCompare.compare(a1.name, a2.name) < 0) {
-                        return -1;
-                    }
-                    return 0;
-                }
-            }
-            final SortName sortName = new SortName();
-            _allowList.sort(sortName);
-            _notAllowList.sort(sortName);
-            _notFoundFcm.sort(sortName);
-            _allowList.addAll(_notAllowList);
-            _allowList.addAll(_notFoundFcm);
-            this.mAppList = _allowList;
-            if(_allowList.size() == 0 || _allowList.isEmpty() ||(_allowList.size() == 1 && "com.kooritea.fcmfix".equals(_allowList.get(0).packageName))){
+            submitList(buildAppList());
+            if(mAppList.size() == 0 || mAppList.isEmpty() ||(mAppList.size() == 1 && "com.kooritea.fcmfix".equals(mAppList.get(0).packageName))){
                 new AlertDialog.Builder(MainActivity.this)
                         .setTitle("请在系统设置中授予读取应用列表权限")
                         .setMessage("或直接编辑" + getApplicationContext().getFilesDir().getAbsolutePath() + "/config.json(需重启生效)")
                         .setPositiveButton("确定", (dialog, which) -> {})
                         .show();
             }
+        }
+
+        public void submitList(List<AppInfo> appList) {
+            mAppList.clear();
+            mAppList.addAll(appList);
+            notifyDataSetChanged();
         }
 
 
@@ -255,10 +285,12 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        RecyclerView recyclerView = findViewById(R.id.recycler_view);
+        recyclerView = findViewById(R.id.recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
         initXposedService();
+        loadConfigFromRemotePreferences();
+        configRetryHandler.postDelayed(configRetryRunnable, 300);
 
         try {
             if (ContextCompat.checkSelfPermission(this, IceboxUtils.SDK_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
@@ -273,6 +305,18 @@ public class MainActivity extends AppCompatActivity {
             findViewById(R.id.progress_bar).setVisibility(View.GONE);
             recyclerView.setVisibility(View.VISIBLE);
         }, 1000);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadConfigFromRemotePreferences();
+    }
+
+    @Override
+    protected void onDestroy() {
+        configRetryHandler.removeCallbacks(configRetryRunnable);
+        super.onDestroy();
     }
 
     @Nullable
