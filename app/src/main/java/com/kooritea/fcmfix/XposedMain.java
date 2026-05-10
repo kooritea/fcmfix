@@ -5,6 +5,7 @@ import com.kooritea.fcmfix.xposed.AutoStartFix;
 import com.kooritea.fcmfix.xposed.BroadcastFix;
 import com.kooritea.fcmfix.xposed.KeepNotification;
 import com.kooritea.fcmfix.xposed.MiuiLocalNotificationFix;
+import com.kooritea.fcmfix.xposed.OplusBatteryFix;
 import com.kooritea.fcmfix.xposed.OplusProxyFix;
 import com.kooritea.fcmfix.xposed.PowerkeeperFix;
 import com.kooritea.fcmfix.xposed.ReconnectManagerFix;
@@ -50,6 +51,12 @@ public class XposedMain extends io.github.libxposed.api.XposedModule {
             XposedModule.setSelfPackageName("com.miui.powerkeeper");
             XposedBridge.log("[fcmfix] start hook com.miui.powerkeeper");
             new PowerkeeperFix(param.getClassLoader());
+        }
+
+        if ("com.oplus.battery".equals(param.getPackageName()) && param.isFirstPackage()) {
+            XposedModule.setSelfPackageName("com.oplus.battery");
+            XposedBridge.log("[fcmfix] start hook com.oplus.battery");
+            new OplusBatteryFix(param.getClassLoader());
         }
     }
 }
