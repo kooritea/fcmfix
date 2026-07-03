@@ -136,6 +136,13 @@ public class BroadcastFix extends XposedModule {
                     return;
                 }
                 Intent intent = (Intent) methodHookParam.args[finalIntent_args_index];
+
+                // 检测当前分发的广播是否是标准 Google FCM 的接收 action
+                if (intent.getAction() == null || !"com.google.android.c2dm.intent.RECEIVE".equals(intent.getAction())) {
+                    return;
+                }
+
+
                 // 介入条件：Intent未包含唤醒停止的pkg 且 Intent是FCM
                 if((intent.getFlags() & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) == 0 && isFCMIntent(intent)){
                     String target;
