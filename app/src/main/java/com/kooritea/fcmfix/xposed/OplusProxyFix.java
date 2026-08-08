@@ -86,21 +86,24 @@ public class OplusProxyFix extends XposedModule {
                 "com.android.server.am.OplusProxyBroadcast$RESULT", classLoader);
         Object notIncludeValue = XposedHelpers.getStaticObjectField(resultEnum, "NOT_INCLUDE");
 
-        XposedBridge.hookAllMethods(oplusProxyBroadcastClass, "shouldProxy", new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                if (param.args.length < 7) return;
-                String pkgName = null;
-                String action = null;
-                // 精确匹配：第5个参数是pkgName，第6个是action
-                if (param.args[5] instanceof String) pkgName = (String) param.args[5];
-                if (param.args[6] instanceof String) action = (String) param.args[6];
-                if (action != null && isFCMAction(action) && pkgName != null && targetIsAllow(pkgName)) {
-                    printLog("shouldProxy bypass: pkg=" + pkgName + ", action=" + action);
-                    param.setResult(notIncludeValue);
-                }
+        for (java.lang.reflect.Method m : oplusProxyBroadcastClass.getDeclaredMethods()) {
+            if ("shouldProxy".equals(m.getName())) {
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        if (param.args.length < 7) return;
+                        String pkgName = null;
+                        String action = null;
+                        if (param.args[5] instanceof String) pkgName = (String) param.args[5];
+                        if (param.args[6] instanceof String) action = (String) param.args[6];
+                        if (action != null && isFCMAction(action) && pkgName != null && targetIsAllow(pkgName)) {
+                            printLog("shouldProxy bypass: pkg=" + pkgName + ", action=" + action);
+                            param.setResult(notIncludeValue);
+                        }
+                    }
+                });
             }
-        });
+        }
     }
 
     public static void unfreeze(String target) {
@@ -368,5 +371,23 @@ public class OplusProxyFix extends XposedModule {
             return intent.getComponent().getPackageName();
         }
         return intent.getPackage();
+    }
+    private static int getTargetUidFromPackageName(String pkgName) {
+        try {
+            // 优先使用 system_server 内部的 AppGlobals 获取 UID
+            Class<?> appGlobalsClass = XposedHelpers.findClass("com.android.server.pm.pkg.AppGlobals", null);
+            Object pm = XposedHelpers.callStaticMethod(appGlobalsClass, "getPackageManager");
+            if (pm != null) {
+                return (int) XposedHelpers.callMethod(pm, "getPackageUid", pkgName, 0);
+            }
+        } catch (Throwable t1) {
+            // 降级使用 Context 获取
+            try {
+                if (s_context != null) {
+                    return s_context.getPackageManager().getPackageUid(pkgName, 0);
+                }
+            } catch (Throwable t2) {}
+        }
+        return -1;
     }
 }
