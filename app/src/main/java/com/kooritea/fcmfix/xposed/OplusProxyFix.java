@@ -1,6 +1,9 @@
 package com.kooritea.fcmfix.xposed;
 
+import android.app.job.JobInfo;
+import android.content.ComponentName;
 import android.content.pm.PackageManager;
+import android.os.PersistableBundle;
 import android.os.WorkSource;
 
 import com.kooritea.fcmfix.util.XposedUtils;
@@ -37,6 +40,11 @@ public class OplusProxyFix extends XposedModule {
             this.startHookIsGoogleRestricInfoOn(); // 阻止判断GMS限制
         } catch (Throwable e) {
             printLog("hook error isGoogleRestricInfoOn:" + e.getMessage());
+        }
+        try {
+            this.startHookHansGmailSyncJob(); // 放行被Hans错误限制的Gmail同步任务
+        } catch (Throwable e) {
+            printLog("hook error HansGmailSyncJob:" + e.getMessage());
         }
         /*
         try {
@@ -168,6 +176,42 @@ public class OplusProxyFix extends XposedModule {
 
     private void startHookIsGoogleRestricInfoOn() {
         XposedHelpers.findAndHookMethod("com.android.server.am.OplusAppStartupManager$OplusStartupStrategy", classLoader, "isGoogleRestricInfoOn", int.class, XC_MethodReplacement.returnConstant(false));
+    }
+
+    private void startHookHansGmailSyncJob() throws Exception {
+        Class<?> oplusSceneManagerClass = XposedHelpers.findClass("com.android.server.am.OplusSceneManager", classLoader);
+        XposedUtils.findAndHookMethod(oplusSceneManagerClass, "checkJobIfRestricted", 3, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                if (!(param.args[1] instanceof String) || !(param.args[2] instanceof JobInfo)) {
+                    return;
+                }
+
+                String sourcePackage = (String) param.args[1];
+                JobInfo jobInfo = (JobInfo) param.args[2];
+                if (!"com.google.android.gm".equals(sourcePackage) || !targetIsAllow(sourcePackage)) {
+                    return;
+                }
+
+                ComponentName service = jobInfo.getService();
+                if (service == null
+                        || !"android".equals(service.getPackageName())
+                        || !"com.android.server.content.SyncJobService".equals(service.getClassName())) {
+                    return;
+                }
+
+                PersistableBundle extras = jobInfo.getExtras();
+                if (extras == null
+                        || !"gmail-ls".equals(extras.getString("provider"))
+                        || !"com.google.android.gm".equals(extras.getString("owningPackage"))) {
+                    return;
+                }
+
+                printLog("Hans job bypass: pkg=" + sourcePackage + ", provider=gmail-ls");
+                // false means the job is not restricted and JobScheduler may execute it.
+                param.setResult(false);
+            }
+        });
     }
 
     private void startHookIsGmsApp() {
