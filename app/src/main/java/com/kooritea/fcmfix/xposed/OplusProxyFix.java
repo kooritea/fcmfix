@@ -3,14 +3,11 @@ package com.kooritea.fcmfix.xposed;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
-import android.os.PowerExemptionManager;
 import android.os.WorkSource;
-
 import com.kooritea.fcmfix.libxposed.XC_MethodHook;
 import com.kooritea.fcmfix.libxposed.XC_MethodReplacement;
 import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
-
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -18,10 +15,9 @@ import java.lang.reflect.Method;
 public class OplusProxyFix extends XposedModule {
 
     private static Object s_oplusProxyWakeLock = null;
-    private static volatile boolean s_useFourParams = false;
-    private static volatile boolean s_signatureDetected = false;
     private static Context s_context = null;
-    private static PowerExemptionManager s_powerExemptionManager = null;
+    private static Object s_powerExemptionManager = null;
+    private static Method s_addToTempAllowListMethod = null;
 
     public OplusProxyFix(ClassLoader classLoader) {
         super(classLoader);
@@ -46,6 +42,7 @@ public class OplusProxyFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error isGoogleRestricInfoOn:" + e.getMessage());
         }
+
         // ===== 新增：fcmfuck 的暴力绕过 =====
         try {
             this.startHookOplusAutoStartRestrictions();
@@ -65,7 +62,6 @@ public class OplusProxyFix extends XposedModule {
     }
 
     // ==================== 原有方法 ====================
-
     private void startHookOplusProxyWakeLock() throws Exception {
         Class<?> wakeLockClass = XposedHelpers.findClass(
                 "com.android.server.power.OplusProxyWakeLock", classLoader);
@@ -85,27 +81,22 @@ public class OplusProxyFix extends XposedModule {
         Class<?> resultEnum = XposedHelpers.findClass(
                 "com.android.server.am.OplusProxyBroadcast$RESULT", classLoader);
         Object notIncludeValue = XposedHelpers.getStaticObjectField(resultEnum, "NOT_INCLUDE");
-
         XposedBridge.hookAllMethods(oplusProxyBroadcastClass, "shouldProxy", new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                 if (param.args.length < 7) return;
                 String pkgName = null;
                 String action = null;
-                // 尝试从参数中提取 pkgName 和 action
                 for (int i = 0; i < param.args.length; i++) {
                     if (param.args[i] instanceof String) {
                         String s = (String) param.args[i];
                         if (isFCMAction(s)) {
                             action = s;
                         } else if (s.contains(".") && !s.contains(" ")) {
-                            // 可能是包名
-                            if (pkgName == null) pkgName = s;
-                            else pkgName = s; // 取最后一个像包名的
+                            pkgName = s;
                         }
                     }
                 }
-                // 精确匹配：参考 fcmfuck，第5个参数是pkgName，第6个是action
                 if (param.args.length >= 7) {
                     if (param.args[5] instanceof String) pkgName = (String) param.args[5];
                     if (param.args[6] instanceof String) action = (String) param.args[6];
@@ -120,12 +111,10 @@ public class OplusProxyFix extends XposedModule {
 
     public static void unfreeze(String target) {
         if (s_oplusProxyWakeLock == null) return;
-
         WorkSource ws = new WorkSource();
         String tag = "FCMXX";
         int uid = getTargetUidFromPackageName(target);
-
-        // 尝试 1: 传 UID, 4参数 (fcmfix 原版)
+        
         if (uid >= 0) {
             try {
                 XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
@@ -138,15 +127,13 @@ public class OplusProxyFix extends XposedModule {
                 return;
             } catch (Throwable ignored) {}
         }
-
-        // 尝试 2: 传包名, 4参数 (fcmfuck 方式)
+        
         try {
             XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", target, ws, tag, "FCMFix");
             printLog("unfreeze(pkg,4) " + target);
             return;
         } catch (Throwable ignored) {}
-
-        // 尝试 3: 传包名, 3参数
+        
         try {
             XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", target, ws, tag);
             printLog("unfreeze(pkg,3) " + target);
@@ -156,13 +143,13 @@ public class OplusProxyFix extends XposedModule {
     private void startHookRegisterGmsRestrictObserver() {
         XposedHelpers.findAndHookMethod(
                 "com.android.server.hans.scene.OplusBgSceneManager", classLoader,
-                "registerGmsRestrictObserver", XC_MethodReplacement.DO_NOTHING);
+                "registerGmsRestrictObserver", XC_MethodReplacement.returnConstant(null));
     }
 
     private void startHookUpdateGmsRestrict() {
         XposedHelpers.findAndHookMethod(
                 "com.android.server.hans.scene.OplusBgSceneManager", classLoader,
-                "updateGmsRestrict", XC_MethodReplacement.DO_NOTHING);
+                "updateGmsRestrict", XC_MethodReplacement.returnConstant(null));
     }
 
     private void startHookIsGoogleRestricInfoOn() {
@@ -172,38 +159,17 @@ public class OplusProxyFix extends XposedModule {
     }
 
     // ==================== 新增：fcmfuck 的暴力绕过 ====================
-
-    /**
-     * 绕过 OPPO/ColorOS 的 7 个自启动/广播拦截点
-     * 对应 fcmfuck e.smali 中的 e() 方法
-     */
     private void startHookOplusAutoStartRestrictions() {
-        // 强制允许自启动 (返回 TRUE)
-        hookReturnConstant("com.android.server.am.BroadcastQueueInjector",
-                "checkApplicationAutoStart", Boolean.TRUE);
-        hookReturnConstant("com.android.server.am.BroadcastQueueImpl",
-                "checkApplicationAutoStart", Boolean.TRUE);
-        hookReturnConstant("com.android.server.am.BroadcastQueueModernStubImpl",
-                "checkApplicationAutoStart", Boolean.TRUE);
-        hookReturnConstant("com.android.server.am.AutoStartManagerServiceStubImpl",
-                "isAllowStartService", Boolean.TRUE);
-
-        // 强制取消拦截 (返回 FALSE)
-        hookReturnConstant("com.android.server.am.BroadcastQueueModernStubImpl",
-                "checkReceiverIfRestricted", Boolean.FALSE);
-        hookReturnConstant("com.android.server.am.SmartPowerService",
-                "shouldInterceptBroadcast", Boolean.FALSE);
-        hookReturnConstant("com.android.server.am.OplusAppStartupManager",
-                "shouldPreventSendReceiverReal", Boolean.FALSE);
+        hookReturnConstant("com.android.server.am.BroadcastQueueInjector", "checkApplicationAutoStart", Boolean.TRUE);
+        hookReturnConstant("com.android.server.am.BroadcastQueueImpl", "checkApplicationAutoStart", Boolean.TRUE);
+        hookReturnConstant("com.android.server.am.BroadcastQueueModernStubImpl", "checkApplicationAutoStart", Boolean.TRUE);
+        hookReturnConstant("com.android.server.am.AutoStartManagerServiceStubImpl", "isAllowStartService", Boolean.TRUE);
+        
+        hookReturnConstant("com.android.server.am.BroadcastQueueModernStubImpl", "checkReceiverIfRestricted", Boolean.FALSE);
+        hookReturnConstant("com.android.server.am.SmartPowerService", "shouldInterceptBroadcast", Boolean.FALSE);
+        hookReturnConstant("com.android.server.am.OplusAppStartupManager", "shouldPreventSendReceiverReal", Boolean.FALSE);
     }
 
-    /**
-     * Hook broadcastIntentLocked，在广播分发时：
-     * 1. 添加 FLAG_INCLUDE_STOPPED_PACKAGES
-     * 2. 调用 unfreeze 解冻目标应用
-     * 3. 将值为 -1 的 Integer 参数改为 11
-     * 对应 fcmfuck e.smali 中的 l() 方法 (p0==2 分支)
-     */
     private void startHookBroadcastIntentLocked() {
         String[] targetClasses = {
                 "com.android.server.am.ActivityManagerService",
@@ -220,20 +186,14 @@ public class OplusProxyFix extends XposedModule {
                                 Intent intent = findIntentInArgs(param.args);
                                 if (intent == null) return;
                                 if (!isFCMAction(intent.getAction())) return;
-
                                 String targetPkg = getPackageFromIntent(intent);
                                 if (targetPkg == null || !targetIsAllow(targetPkg)) return;
-
-                                // 1. 添加 FLAG_INCLUDE_STOPPED_PACKAGES
+                                
                                 intent.addFlags(0x20);
-
-                                // 2. 解冻
                                 unfreeze(targetPkg);
-
-                                // 3. 将值为 -1 的 Integer 参数改为 11
+                                
                                 for (int i = 0; i < param.args.length; i++) {
-                                    if (param.args[i] instanceof Integer
-                                            && (Integer) param.args[i] == -1) {
+                                    if (param.args[i] instanceof Integer && (Integer) param.args[i] == -1) {
                                         param.args[i] = 11;
                                     }
                                 }
@@ -242,29 +202,18 @@ public class OplusProxyFix extends XposedModule {
                         printLog("hooked broadcastIntentLocked in " + className);
                     }
                 }
-            } catch (Throwable t) {
-                // 非 OPPO 设备找不到类，静默跳过
-            }
+            } catch (Throwable t) {}
         }
     }
 
-    /**
-     * Hook broadcastIntentWithFeature / broadcastIntent
-     * 当 GMS 发送 C2DM 广播时，将目标应用临时加入电池白名单 (2秒)
-     * 对应 fcmfuck e.smali 中的 k() 方法
-     */
     private void startHookBroadcastWithFeature() {
         try {
-            Class<?> amsClass = XposedHelpers.findClass(
-                    "com.android.server.am.ActivityManagerService", classLoader);
-
-            // 获取 mContext 字段
+            Class<?> amsClass = XposedHelpers.findClass("com.android.server.am.ActivityManagerService", classLoader);
             Field mContextField = amsClass.getDeclaredField("mContext");
             mContextField.setAccessible(true);
-
-            String methodName = Build.VERSION.SDK_INT >= 31
-                    ? "broadcastIntentWithFeature" : "broadcastIntent";
-
+            
+            String methodName = Build.VERSION.SDK_INT >= 31 ? "broadcastIntentWithFeature" : "broadcastIntent";
+            
             for (Method m : amsClass.getDeclaredMethods()) {
                 if (methodName.equals(m.getName())) {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
@@ -272,41 +221,43 @@ public class OplusProxyFix extends XposedModule {
                         protected void beforeHookedMethod(MethodHookParam param) {
                             Intent intent = findIntentInArgs(param.args);
                             if (intent == null) return;
-
+                            
                             String action = intent.getAction();
-                            if (!"com.google.android.c2dm.intent.RECEIVE".equals(action)
-                                    && !isFCMAction(action)) return;
-
+                            if (!"com.google.android.c2dm.intent.RECEIVE".equals(action) && !isFCMAction(action)) return;
+                            
                             String targetPkg = getPackageFromIntent(intent);
                             if (targetPkg == null || !targetIsAllow(targetPkg)) return;
-
-                            // 添加 FLAG_INCLUDE_STOPPED_PACKAGES
+                            
                             if ((intent.getFlags() & 0x20) == 0) {
                                 intent.addFlags(0x20);
                             }
-
-                            // 临时电池白名单 (Android 12+)
+                            
                             if (Build.VERSION.SDK_INT >= 31) {
                                 try {
                                     if (s_context == null) {
                                         s_context = (Context) mContextField.get(param.thisObject);
                                     }
                                     if (s_context != null && s_powerExemptionManager == null) {
-                                        s_powerExemptionManager = new PowerExemptionManager(s_context);
+                                        // 通过反射获取 PowerExemptionManager 实例和方法
+                                        Class<?> pemClass = classLoader.loadClass("android.os.PowerExemptionManager");
+                                        s_powerExemptionManager = XposedHelpers.callMethod(s_context, "getSystemService", pemClass);
+                                        if (s_powerExemptionManager != null) {
+                                            s_addToTempAllowListMethod = pemClass.getDeclaredMethod("addToTemporaryAllowList", String.class, int.class, String.class, long.class);
+                                            s_addToTempAllowListMethod.setAccessible(true);
+                                        }
                                     }
-                                    if (s_powerExemptionManager != null) {
-                                        s_powerExemptionManager.addToTemporaryAllowList(
-                                                targetPkg, 0x66, "GOOGLE_C2DM", 2000);
+                                    if (s_addToTempAllowListMethod != null && s_powerExemptionManager != null) {
+                                        s_addToTempAllowListMethod.invoke(s_powerExemptionManager, targetPkg, 0x66, "GOOGLE_C2DM", 2000L);
                                         printLog("addToTemporaryAllowList: " + targetPkg);
                                     }
                                 } catch (Throwable t) {
-                                    // 静默
+                                    printLog("PowerExemption error: " + t.getMessage());
                                 }
                             }
                         }
                     });
                     printLog("hooked " + methodName + " for PowerExemption");
-                    break; // 只 hook 第一个匹配的
+                    break;
                 }
             }
         } catch (Throwable t) {
@@ -315,10 +266,6 @@ public class OplusProxyFix extends XposedModule {
     }
 
     // ==================== 新增：辅助方法 ====================
-
-    /**
-     * 通用方法：将指定类的所有同名方法替换为返回固定值
-     */
     private void hookReturnConstant(String className, String methodName, Object returnValue) {
         try {
             Class<?> clazz = XposedHelpers.findClass(className, classLoader);
@@ -327,32 +274,39 @@ public class OplusProxyFix extends XposedModule {
                     XposedBridge.hookMethod(m, XC_MethodReplacement.returnConstant(returnValue));
                 }
             }
-        } catch (Throwable t) {
-            // 找不到类说明不是 OPPO 设备，静默跳过
-        }
+        } catch (Throwable t) {}
     }
 
-    /**
-     * 从方法参数中查找 Intent 对象
-     */
     private Intent findIntentInArgs(Object[] args) {
         if (args == null) return null;
         for (Object arg : args) {
-            if (arg instanceof Intent) {
-                return (Intent) arg;
-            }
+            if (arg instanceof Intent) return (Intent) arg;
         }
         return null;
     }
 
-    /**
-     * 从 Intent 中获取目标包名
-     */
     private String getPackageFromIntent(Intent intent) {
         if (intent == null) return null;
-        if (intent.getComponent() != null) {
-            return intent.getComponent().getPackageName();
-        }
+        if (intent.getComponent() != null) return intent.getComponent().getPackageName();
         return intent.getPackage();
+    }
+    
+    // 补充获取 UID 的方法 (通过反射 AppGlobals，system_server 专用)
+    private static int getTargetUidFromPackageName(String pkgName) {
+        try {
+            Class<?> appGlobalsClass = XposedHelpers.findClass("com.android.server.pm.pkg.AppGlobals", null);
+            Object pm = XposedHelpers.callStaticMethod(appGlobalsClass, "getPackageManager");
+            if (pm != null) {
+                return (int) XposedHelpers.callMethod(pm, "getPackageUid", pkgName, 0);
+            }
+        } catch (Throwable t) {
+            // 降级尝试
+            try {
+                if (s_context != null) {
+                    return s_context.getPackageManager().getPackageUid(pkgName, 0);
+                }
+            } catch (Throwable ignored) {}
+        }
+        return -1;
     }
 }
