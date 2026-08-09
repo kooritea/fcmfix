@@ -8,9 +8,8 @@ import android.os.Build;
 import android.os.FileObserver;
 import android.os.PowerExemptionManager;
 import android.os.WorkSource;
-import io.github.libxposed.api.XposedInterface;
-import io.github.libxposed.api.XposedModule;
-import io.github.libxposed.api.XposedModuleInterface;
+
+import androidx.annotation.NonNull;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -23,19 +22,26 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
+import io.github.libxposed.api.XposedInterface;
+import io.github.libxposed.api.XposedModule;
+import io.github.libxposed.api.XposedModuleInterface;
+
 public class FcmFixModule extends XposedModule {
-    // 静态字段映射 (对应 smali 中的 static fields)
+
+    // ================= 静态字段 =================
     private static final Object LOCK = new Object();
     public static volatile Set<String> TARGET_PACKAGES = Collections.emptySet();
-    private static FileObserver observer1;
-    private static FileObserver observer2;
+    
+    private static ConfigFileObserver observer1;
+    private static ConfigFileObserver observer2;
+    
     private static final Set<Class<?>> NO_INTENT_CLASSES = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static final ConcurrentHashMap<Class<?>, Field> INTENT_FIELD_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Integer> UID_CACHE = new ConcurrentHashMap<>();
-    
+
     public static PowerExemptionManager powerExemptionManager;
     public static Context systemContext;
-    public static Object startupManager; // 对应 OplusAppStartupManager 等实例
+    public static Object startupManager;
     public static Method unfreezeMethod;
     public static int unfreezeParamCount;
 
@@ -43,8 +49,9 @@ public class FcmFixModule extends XposedModule {
         super();
     }
 
+    // ================= 生命周期 =================
     @Override
-    public void onSystemServerStarting(SystemServerStartingParam param) {
+    public void onSystemServerStarting(XposedModuleInterface.SystemServerStartingParam param) {
         ClassLoader classLoader = param.getClassLoader();
         loadConfig();
 
@@ -79,11 +86,11 @@ public class FcmFixModule extends XposedModule {
     }
 
     @Override
-    public void onPackageReady(PackageReadyParam param) {
+    public void onPackageReady(XposedModuleInterface.PackageReadyParam param) {
         // 空实现
     }
 
-    // 读取白名单配置
+    // ================= 核心逻辑方法 =================
     public static void loadConfig() {
         synchronized (LOCK) {
             File file = new File("/sdcard/Android/fcmfuck.txt");
@@ -116,7 +123,6 @@ public class FcmFixModule extends XposedModule {
         }
     }
 
-    // Hook ActivityManagerService (对应 d 方法)
     private void hookAms(ClassLoader classLoader) throws Exception {
         Class<?> amsClass = classLoader.loadClass("com.android.server.am.ActivityManagerService");
         Field mContextField = amsClass.getDeclaredField("mContext");
@@ -136,26 +142,25 @@ public class FcmFixModule extends XposedModule {
 
         Method broadcastMethod;
         if (Build.VERSION.SDK_INT >= 33) {
-            // Android 13+ 签名
-            broadcastMethod = amsClass.getDeclaredMethod("broadcastIntentWithFeature", 
-                iAppThreadClass, String.class, Intent.class, String.class, int.class, String.class, 
-                android.os.Bundle.class, String[].class, String[].class, String[].class, 
-                int.class, android.os.Bundle.class, boolean.class, int.class);
+            broadcastMethod = amsClass.getDeclaredMethod("broadcastIntentWithFeature",
+                    iAppThreadClass, String.class, Intent.class, String.class, int.class, String.class,
+                    android.os.Bundle.class, String[].class, String[].class, String[].class,
+                    int.class, android.os.Bundle.class, boolean.class, int.class);
         } else if (Build.VERSION.SDK_INT >= 31) {
             broadcastMethod = amsClass.getDeclaredMethod("broadcastIntentWithFeature",
-                iAppThreadClass, String.class, Intent.class, String.class, int.class, String.class, 
-                android.os.Bundle.class, String[].class, String[].class, 
-                int.class, android.os.Bundle.class, boolean.class, int.class);
+                    iAppThreadClass, String.class, Intent.class, String.class, int.class, String.class,
+                    android.os.Bundle.class, String[].class, String[].class,
+                    int.class, android.os.Bundle.class, boolean.class, int.class);
         } else if (Build.VERSION.SDK_INT >= 30) {
             broadcastMethod = amsClass.getDeclaredMethod("broadcastIntentWithFeature",
-                iAppThreadClass, String.class, Intent.class, String.class, int.class, String.class, 
-                android.os.Bundle.class, String[].class, String[].class, 
-                int.class, android.os.Bundle.class, boolean.class);
+                    iAppThreadClass, String.class, Intent.class, String.class, int.class, String.class,
+                    android.os.Bundle.class, String[].class, String[].class,
+                    int.class, android.os.Bundle.class, boolean.class);
         } else {
             broadcastMethod = amsClass.getDeclaredMethod("broadcastIntent",
-                iAppThreadClass, Intent.class, String.class, classLoader.loadClass("android.content.IIntentReceiver"), 
-                int.class, String.class, android.os.Bundle.class, String[].class, 
-                int.class, android.os.Bundle.class, boolean.class);
+                    iAppThreadClass, Intent.class, String.class, classLoader.loadClass("android.content.IIntentReceiver"),
+                    int.class, String.class, android.os.Bundle.class, String[].class,
+                    int.class, android.os.Bundle.class, boolean.class);
         }
 
         XposedInterface.Invoker invoker = getInvoker(getRecordMethod);
@@ -163,43 +168,36 @@ public class FcmFixModule extends XposedModule {
         deoptimize(broadcastMethod);
     }
 
-    // Hook 各种厂商拦截服务 (对应 e 方法)
     private void hookVendorServices(ClassLoader classLoader) {
-        // MIUI / HyperOS
         hookMethodBySignature(classLoader, "com.android.server.am.BroadcastQueueInjector", "checkApplicationAutoStart", 0, Boolean.TRUE);
         hookMethodBySignature(classLoader, "com.android.server.am.BroadcastQueueImpl", "checkApplicationAutoStart", 0, Boolean.TRUE);
         hookMethodBySignature(classLoader, "com.android.server.am.BroadcastQueueModernStubImpl", "checkApplicationAutoStart", 0, Boolean.TRUE);
         hookMethodBySignature(classLoader, "com.android.server.am.BroadcastQueueModernStubImpl", "checkReceiverIfRestricted", 1, Boolean.FALSE);
         hookMethodBySignature(classLoader, "com.android.server.am.AutoStartManagerServiceStubImpl", "isAllowStartService", 0, Boolean.TRUE);
-        
-        // OOS / ColorOS
         hookMethodBySignature(classLoader, "com.android.server.am.SmartPowerService", "shouldInterceptBroadcast", 1, Boolean.FALSE);
         hookMethodBySignature(classLoader, "com.android.server.am.OplusAppStartupManager", "shouldPreventSendReceiverReal", 1, Boolean.FALSE);
-        
-        // AOSP / 通用
         hookMethodBySignature(classLoader, "com.android.server.am.ActivityManagerService", "broadcastIntentLocked", 2, null);
         hookMethodBySignature(classLoader, "com.android.server.am.BroadcastController", "broadcastIntentLocked", 2, null);
 
-        // OplusProxyBroadcast
         try {
             Class<?> resultClass = classLoader.loadClass("com.android.server.am.OplusProxyBroadcast$RESULT");
             Field notIncludeField = resultClass.getDeclaredField("NOT_INCLUDE");
             notIncludeField.setAccessible(true);
             Object notIncludeVal = notIncludeField.get(null);
             hookMethodBySignature(classLoader, "com.android.server.am.OplusProxyBroadcast", "shouldProxy", 3, notIncludeVal);
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
 
-        // OplusProxyWakeLock
         try {
             Class<?> wakeLockClass = classLoader.loadClass("com.android.server.power.OplusProxyWakeLock");
             for (java.lang.reflect.Constructor<?> constructor : wakeLockClass.getDeclaredConstructors()) {
                 hook(constructor).intercept(new OplusProxyWakeLockHooker());
                 deoptimize(constructor);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
     }
 
-    // 通用 Hook 辅助方法 (对应 f 方法)
     private void hookMethodBySignature(ClassLoader classLoader, String className, String methodName, int type, Object returnValue) {
         try {
             Class<?> clazz = classLoader.loadClass(className);
@@ -256,11 +254,11 @@ public class FcmFixModule extends XposedModule {
                     deoptimize(method);
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
     }
 
-    // --- 以下为静态工具方法 ---
-
+    // ================= 静态工具方法 =================
     public static Field findIntentField(Class<?> clazz) {
         if (clazz == null || NO_INTENT_CLASSES.contains(clazz)) return null;
         Field cached = INTENT_FIELD_CACHE.get(clazz);
@@ -293,10 +291,10 @@ public class FcmFixModule extends XposedModule {
             Object arg = chain.getArg(idx);
             if (arg instanceof Intent) return (Intent) arg;
             if (arg == null) continue;
-            
+
             Class<?> argClass = arg.getClass();
             if (NO_INTENT_CLASSES.contains(argClass)) continue;
-            
+
             try {
                 Field field = findIntentField(argClass);
                 if (field == null) continue;
@@ -318,8 +316,8 @@ public class FcmFixModule extends XposedModule {
     public static boolean isFcmAction(String action) {
         if (action == null) return false;
         return action.endsWith(".android.c2dm.intent.RECEIVE") ||
-               "com.google.firebase.MESSAGING_EVENT".equals(action) ||
-               "com.google.firebase.INSTANCE_ID_EVENT".equals(action);
+                "com.google.firebase.MESSAGING_EVENT".equals(action) ||
+                "com.google.firebase.INSTANCE_ID_EVENT".equals(action);
     }
 
     public static boolean isGmsApp(Object processRecord, Field infoField) {
@@ -329,7 +327,8 @@ public class FcmFixModule extends XposedModule {
             if (appInfo instanceof ApplicationInfo) {
                 return "com.google.android.gms".equals(((ApplicationInfo) appInfo).packageName);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
         return false;
     }
 
@@ -337,8 +336,8 @@ public class FcmFixModule extends XposedModule {
         if (Intent.class.equals(clazz)) return true;
         if (findIntentField(clazz) != null) return true;
         if (clazz.isPrimitive() || clazz.isArray()) return false;
-        return !clazz.equals(String.class) && !clazz.equals(Integer.class) && 
-               !clazz.equals(Boolean.class) && !clazz.equals(android.os.Bundle.class);
+        return !clazz.equals(String.class) && !clazz.equals(Integer.class) &&
+                !clazz.equals(Boolean.class) && !clazz.equals(android.os.Bundle.class);
     }
 
     public static boolean isTargetFcmIntent(Intent intent) {
@@ -349,7 +348,6 @@ public class FcmFixModule extends XposedModule {
         return pkg != null && TARGET_PACKAGES.contains(pkg);
     }
 
-    // 对应 k 方法 (处理 AMS broadcastIntent 拦截)
     public static Object hookBroadcastIntent(int type, XposedInterface.Invoker invoker, Field infoField, Field contextField, XposedInterface.Chain chain) throws Throwable {
         Object arg0 = chain.getArg(0);
         if (arg0 instanceof Intent) {
@@ -358,7 +356,7 @@ public class FcmFixModule extends XposedModule {
                 Object thisObj = chain.getThisObject();
                 Object callerApp = chain.getArg(1);
                 Object record = invoker.invoke(thisObj, new Object[]{callerApp});
-                
+
                 if (isGmsApp(record, infoField)) {
                     if (Build.VERSION.SDK_INT >= 31) {
                         String pkg = intent.getPackage();
@@ -368,7 +366,6 @@ public class FcmFixModule extends XposedModule {
                             if (powerExemptionManager == null) {
                                 powerExemptionManager = new PowerExemptionManager(ctx);
                             }
-                            // 加入临时电源白名单，允许唤醒
                             powerExemptionManager.addToTemporaryAllowList(pkg, 102, "GOOGLE_C2DM", 2000L);
                         }
                     }
@@ -381,14 +378,13 @@ public class FcmFixModule extends XposedModule {
         return chain.proceed();
     }
 
-    // 对应 l 方法 (处理各类 BroadcastQueue 拦截)
     public static Object hookBroadcastQueue(int type, Object returnValue, int[] intentArgs, int[] intArgs, XposedInterface.Chain chain) throws Throwable {
         if (type == 3) {
             Object arg6 = chain.getArg(6);
             if (arg6 instanceof String && isFcmAction((String) arg6)) {
                 Object arg5 = chain.getArg(5);
                 if (arg5 instanceof String && !TARGET_PACKAGES.isEmpty() && TARGET_PACKAGES.contains((String) arg5)) {
-                    return returnValue; // 放行
+                    return returnValue;
                 }
             }
         } else if (type == 2) {
@@ -396,7 +392,7 @@ public class FcmFixModule extends XposedModule {
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                 String pkg = getPackageName(intent);
-                
+
                 if (pkg != null && systemContext != null && startupManager != null) {
                     try {
                         Integer uid = UID_CACHE.computeIfAbsent(pkg, new UidFunction());
@@ -423,10 +419,10 @@ public class FcmFixModule extends XposedModule {
                                 }
                             }
                         }
-                    } catch (Throwable ignored) {}
+                    } catch (Throwable ignored) {
+                    }
                 }
 
-                // 修改特定的 int 参数 (如将 -1 改为 11)
                 Object[] args = chain.getArgs().toArray();
                 for (int idx : intArgs) {
                     if (args[idx] instanceof Integer && (Integer) args[idx] == -1) {
@@ -438,19 +434,74 @@ public class FcmFixModule extends XposedModule {
         } else {
             Intent intent = findIntentInArgs(chain, intentArgs);
             if (intent != null && isTargetFcmIntent(intent)) {
-                return returnValue; // 放行
+                return returnValue;
             }
         }
         return chain.proceed();
     }
 
-    // 对应 m 方法
     public static Integer getPackageUid(String pkg) {
         try {
             PackageManager pm = systemContext.getPackageManager();
             return pm.getPackageUid(pkg, 0);
         } catch (Throwable e) {
             return -1;
+        }
+    }
+
+    // ================= 静态内部类 (原 2,3,4,5 号文件) =================
+
+    private static class BroadcastHooker implements XposedInterface.Hooker {
+        private final int mode;
+        private final Object returnValue;
+        private final Object field1;
+        private final Object field2;
+        private final int type;
+
+        public BroadcastHooker(int mode, Object returnValue, Object field1, Object field2, int type) {
+            this.mode = mode;
+            this.returnValue = returnValue;
+            this.field1 = field1;
+            this.field2 = field2;
+            this.type = type;
+        }
+
+        @Override
+        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+            if (mode == 0) {
+                return hookBroadcastIntent(type, (XposedInterface.Invoker) field1, (Field) field2, (Field) returnValue, chain);
+            } else {
+                return hookBroadcastQueue(type, returnValue, (int[]) field1, (int[]) field2, chain);
+            }
+        }
+    }
+
+    private static class OplusProxyWakeLockHooker implements XposedInterface.Hooker {
+        @Override
+        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+            Object result = chain.proceed();
+            startupManager = chain.getThisObject();
+            return result;
+        }
+    }
+
+    private static class ConfigFileObserver extends FileObserver {
+        public ConfigFileObserver(String path, int mask) {
+            super(path, mask);
+        }
+
+        @Override
+        public void onEvent(int event, String path) {
+            if (path != null && "fcmfuck.txt".equals(path)) {
+                loadConfig();
+            }
+        }
+    }
+
+    private static class UidFunction implements Function<String, Integer> {
+        @Override
+        public Integer apply(String pkg) {
+            return getPackageUid(pkg);
         }
     }
 }
