@@ -27,8 +27,5 @@
             </intent-filter>
         </activity>
 
-        <!-- ❌ 已删除 BootCompletedReceiver -->
-        <!-- 原 com.kooritea.fcmfix.BootCompletedReceiver 为空壳且包名错误 -->
-
     </application>
 </manifest>
