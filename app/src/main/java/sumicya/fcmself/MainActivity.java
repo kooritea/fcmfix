@@ -271,11 +271,7 @@ public class MainActivity extends AppCompatActivity {
 
         initXposedService();
 
-        try {
-            if (ContextCompat.checkSelfPermission(this, IceboxUtils.SDK_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{IceboxUtils.SDK_PERMISSION}, IceboxUtils.REQUEST_CODE);
-            }
-        } catch (Throwable ignored) {
+        try {} catch (Throwable ignored) {
         }
 
         new Handler().postDelayed(() -> {
