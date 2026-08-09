@@ -1,4 +1,4 @@
-package com.kooritea.fcmfix.xposed;
+package sumicya.fcmself.xposed;
 
 import android.content.Intent;
 
