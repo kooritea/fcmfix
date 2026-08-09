@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission
-        android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="com.catchingnow.icebox.SDK" />
-    <uses-permission android:name="web1n.stopapp.permission.disable_api" />
+    package="sumicya.fcmself">
 
     <application
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+        android:label="FcmSelf"
+        android:icon="@mipmap/ic_launcher">
+
+        <!-- Xposed 模块元数据 -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="让 FCM/GCM 唤醒已停止的应用 (Android 10-15)" />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="101" />
+
+        <!-- 主界面 -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -25,13 +26,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <receiver
-            android:name=".BootCompletedReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-    </application>
 
+        <!-- ❌ 已删除 BootCompletedReceiver -->
+        <!-- 原 com.kooritea.fcmfix.BootCompletedReceiver 为空壳且包名错误 -->
+
+    </application>
 </manifest>
