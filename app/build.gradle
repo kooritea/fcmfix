@@ -35,6 +35,6 @@ dependencies {
     implementation 'io.github.libxposed:interface:101.0.0'
     implementation 'io.github.libxposed:service:101.0.0'
     implementation fileTree(dir: "libs", include: ["*.jar"])
-    implementation 'androidx.appcompat:appcompat:1.5.1'
-    implementation 'androidx.recyclerview:recyclerview:1.2.1'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.recyclerview:recyclerview:1.4.0'
 }
