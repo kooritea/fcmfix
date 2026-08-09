@@ -1,13 +1,13 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.kooritea.fcmfix"
+    namespace = "sumicya.fcmself"
     compileSdkVersion 36
 
     defaultConfig {
-        applicationId "com.kooritea.fcmfix"
+        applicationId "sumicya.fcmself"
         minSdkVersion 29
-        targetSdkVersion 34
+        targetSdkVersion 37
         versionCode 53
         versionName "dev"
 
