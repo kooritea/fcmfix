@@ -46,8 +46,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import com.kooritea.fcmfix.util.IceboxUtils;
-
 public class MainActivity extends AppCompatActivity {
     private AppListAdapter appListAdapter;
     private static XposedService xposedService;
