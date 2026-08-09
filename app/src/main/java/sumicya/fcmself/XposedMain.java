@@ -1,4 +1,4 @@
-sumicya.fcmself.FcmFixModule
+package sumicya.fcmself.xposed;
 
 import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.xposed.AutoStartFix;
