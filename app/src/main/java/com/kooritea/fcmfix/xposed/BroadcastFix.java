@@ -8,6 +8,7 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.PowerExemptionManager;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -29,6 +30,12 @@ public class BroadcastFix extends XposedModule {
             this.startHookBroadcastIntentLocked();
         }catch (Throwable e) {
             printLog("hook error broadcastIntentLocked:" + e.getMessage());
+        }
+        // High-level broadcastIntent / broadcastIntentWithFeature fallback (from FcmFuck)
+        try{
+            this.startHookBroadcastIntentHighLevel();
+        }catch (Throwable e) {
+            printLog("hook error high-level broadcastIntent:" + e.getMessage());
         }
 //        try{
 //            this.startHookScheduleResultTo();
@@ -150,6 +157,15 @@ public class BroadcastFix extends XposedModule {
                             methodHookParam.args[finalAppOp_args_index] = 11;
                         }
                         intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+
+                        // From FcmFuck: FLAG_RECEIVER_FOREGROUND helps delivery on more ROMs
+                        if ((intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
+                            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                        }
+
+                        // From FcmFuck: temporary power exemption (Android 12+)
+                        applyTemporaryAllowList(target);
+
                         if (getBooleanConfig("includeIceBoxDisableApp",false) && !IceboxUtils.isAppEnabled(context, target)) {
                             printLog("Waiting for IceBox to activate the app: " + target, true);
                             methodHookParam.setResult(false);
@@ -186,6 +202,87 @@ public class BroadcastFix extends XposedModule {
                 }
             }
         });
+    }
+
+    /**
+     * Fallback: hook higher-level broadcastIntent / broadcastIntentWithFeature
+     * (ported from FcmFuck). Some ROMs may skip or alter broadcastIntentLocked.
+     */
+    protected void startHookBroadcastIntentHighLevel() {
+        String[] classNames = {
+                "com.android.server.am.ActivityManagerService",
+                "com.android.server.am.BroadcastController"
+        };
+        for (String className : classNames) {
+            Class<?> clazz = XposedHelpers.findClassIfExists(className, classLoader);
+            if (clazz == null) {
+                continue;
+            }
+            for (Method method : clazz.getDeclaredMethods()) {
+                String name = method.getName();
+                if (!"broadcastIntent".equals(name) && !"broadcastIntentWithFeature".equals(name)) {
+                    continue;
+                }
+                Class<?>[] params = method.getParameterTypes();
+                int intentIndex = -1;
+                for (int i = 0; i < params.length; i++) {
+                    if (Intent.class.equals(params[i])) {
+                        intentIndex = i;
+                        break;
+                    }
+                }
+                if (intentIndex < 0) {
+                    continue;
+                }
+                final int finalIntentIndex = intentIndex;
+                XposedBridge.hookMethod(method, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        if (!isBootComplete) {
+                            return;
+                        }
+                        Object arg = param.args[finalIntentIndex];
+                        if (!(arg instanceof Intent)) {
+                            return;
+                        }
+                        Intent intent = (Intent) arg;
+                        if (!isFCMIntent(intent)) {
+                            return;
+                        }
+                        String target = intent.getComponent() != null
+                                ? intent.getComponent().getPackageName()
+                                : intent.getPackage();
+                        if (!targetIsAllow(target)) {
+                            return;
+                        }
+                        intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                        if ((intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
+                            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                        }
+                        applyTemporaryAllowList(target);
+                    }
+                });
+                printLog("hooked high-level: " + className + "#" + name);
+            }
+        }
+    }
+
+    /**
+     * Android 12+ temporary allowlist (from FcmFuck).
+     * reasonCode 102 corresponds to GOOGLE_C2DM-style exemption used by FcmFuck.
+     */
+    private static void applyTemporaryAllowList(String packageName) {
+        if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
+            return;
+        }
+        try {
+            PowerExemptionManager pem = context.getSystemService(PowerExemptionManager.class);
+            if (pem != null) {
+                pem.addToTemporaryAllowList(packageName, 102, "GOOGLE_C2DM", 2000L);
+            }
+        } catch (Throwable t) {
+            printLog("PowerExemptionManager failed: " + t.getMessage(), true);
+        }
     }
 
     protected void startHookScheduleResultTo(){
