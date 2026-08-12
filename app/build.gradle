@@ -1,17 +1,17 @@
-apply plugin: 'com.android.application'
+plugins {
+    id 'com.android.application'
+}
 
 android {
-    namespace = "sumicya.fcmself"
-    compileSdkVersion 35
+    namespace 'sumicya.fcmself'
+    compileSdk 35
 
     defaultConfig {
         applicationId "sumicya.fcmself"
-        minSdkVersion 29
-        targetSdkVersion 34
+        minSdk 29
+        targetSdk 34
         versionCode 55
         versionName "1.0.0-fcmself"
-
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -37,8 +37,7 @@ dependencies {
     implementation 'io.github.libxposed:interface:102.0.0'
     implementation 'io.github.libxposed:service:102.0.0'
 
-    implementation fileTree(dir: "libs", include: ["*.jar"])
-
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
 }
