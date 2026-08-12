@@ -1,0 +1,69 @@
+name: Finish package rename
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/rename-package.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rename package com.kooritea.fcmfix -> sumicya.fcmself
+        run: |
+          set -euo pipefail
+
+          # Create destination tree
+          mkdir -p app/src/main/java/sumicya/fcmself
+
+          # Copy any remaining sources from old package if present
+          if [ -d app/src/main/java/com/kooritea/fcmfix ]; then
+            cp -a app/src/main/java/com/kooritea/fcmfix/. app/src/main/java/sumicya/fcmself/
+          fi
+
+          # Global replace in java/xml/list/gradle/yml/md
+          find app .github README.md -type f \( -name '*.java' -o -name '*.xml' -o -name '*.list' -o -name '*.gradle' -o -name '*.yml' -o -name '*.md' -o -name '*.prop' \) 2>/dev/null \
+            | while read -r f; do
+                if grep -q 'com\.kooritea\.fcmfix' "$f" 2>/dev/null; then
+                  sed -i 's/com\.kooritea\.fcmfix/sumicya.fcmself/g' "$f"
+                  echo "updated $f"
+                fi
+              done
+
+          # Ensure namespace/applicationId
+          if [ -f app/build.gradle ]; then
+            sed -i 's/namespace = ".*"/namespace = "sumicya.fcmself"/' app/build.gradle
+            sed -i 's/applicationId ".*"/applicationId "sumicya.fcmself"/' app/build.gradle
+          fi
+
+          # java_init
+          mkdir -p app/src/main/resources/META-INF/xposed
+          echo 'sumicya.fcmself.XposedMain' > app/src/main/resources/META-INF/xposed/java_init.list
+
+          # Remove old package tree
+          rm -rf app/src/main/java/com
+
+          # Show result
+          echo '=== remaining kooritea ==='
+          grep -rn 'kooritea' app .github README.md 2>/dev/null || echo '(none)'
+          echo '=== java packages ==='
+          find app/src/main/java -name '*.java' | head -30
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'refactor: complete package rename to sumicya.fcmself'
+          git push origin HEAD:master
