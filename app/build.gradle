@@ -2,7 +2,7 @@ apply plugin: 'com.android.application'
 
 android {
     namespace = "com.kooritea.fcmfix"
-    compileSdkVersion 36
+    compileSdkVersion 37
 
     defaultConfig {
         applicationId "com.kooritea.fcmfix"
