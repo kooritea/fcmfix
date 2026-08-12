@@ -68,7 +68,7 @@ public class AutoStartFix extends XposedModule {
         try{
             // hyperos
             Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernStubImpl",classLoader);
-            printLog("[fcmfix] start hook com.android.server.am.BroadcastQueueModernStubImpl.checkApplicationAutoStart");
+            printLog("[fcmself] start hook com.android.server.am.BroadcastQueueModernStubImpl.checkApplicationAutoStart");
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl,"checkApplicationAutoStart", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
@@ -81,7 +81,7 @@ public class AutoStartFix extends XposedModule {
                 }
             });
 
-            printLog("[fcmfix] start hook com.android.server.am.BroadcastQueueModernStubImpl.checkReceiverIfRestricted");
+            printLog("[fcmself] start hook com.android.server.am.BroadcastQueueModernStubImpl.checkReceiverIfRestricted");
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl,"checkReceiverIfRestricted", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
@@ -113,7 +113,7 @@ public class AutoStartFix extends XposedModule {
                 }
             };
 
-            printLog("[fcmfix] start hook com.android.server.am.AutoStartManagerServiceStubImpl.isAllowStartService");
+            printLog("[fcmself] start hook com.android.server.am.AutoStartManagerServiceStubImpl.isAllowStartService");
             XC_MethodHook.Unhook unhook1 = XposedUtils.tryFindAndHookMethod(AutoStartManagerServiceStubImpl, "isAllowStartService", 3, methodHook);
             XC_MethodHook.Unhook unhook2 = XposedUtils.tryFindAndHookMethod(AutoStartManagerServiceStubImpl, "isAllowStartService", 4, methodHook);
             if(unhook1 == null && unhook2 == null){
@@ -126,7 +126,7 @@ public class AutoStartFix extends XposedModule {
         try {
             Class<?> SmartPowerService = XposedHelpers.findClass("com.android.server.am.SmartPowerService", classLoader);
 
-            printLog("[fcmfix] start hook com.android.server.am.SmartPowerService.shouldInterceptBroadcast");
+            printLog("[fcmself] start hook com.android.server.am.SmartPowerService.shouldInterceptBroadcast");
             XposedUtils.findAndHookMethodAnyParam(SmartPowerService, "shouldInterceptBroadcast", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
