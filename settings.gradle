@@ -1,2 +1,2 @@
 include ':app'
-rootProject.name = "fcmfix"
+rootProject.name = "fcmself"
