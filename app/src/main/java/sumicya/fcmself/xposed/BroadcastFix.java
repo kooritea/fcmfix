@@ -120,7 +120,7 @@ public class BroadcastFix extends XposedModule {
         if(targetMethod != null && intent_args_index != 0 & appOp_args_index != 0 && targetMethod.getParameters()[intent_args_index].getType() == Intent.class && targetMethod.getParameters()[appOp_args_index].getType() == int.class){
             createBroadcastIntentLockedHooker(intent_args_index,appOp_args_index,targetMethod);
         } else {
-            printLog("broadcastIntentLocked hook 位置查找失败，fcmfix将不会工作。");
+            printLog("broadcastIntentLocked hook 位置查找失败，fcmself将不会工作。");
         }
     }
 
@@ -317,8 +317,8 @@ public class BroadcastFix extends XposedModule {
                             PendingIntent pendingIntent = PendingIntent.getActivity(
                                     context, 0, notifyIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                             NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-                            createFcmfixChannel(notificationManager);
-                            NotificationCompat.Builder notification = new NotificationCompat.Builder(context, "fcmfix")
+                            createFcmselfChannel(notificationManager);
+                            NotificationCompat.Builder notification = new NotificationCompat.Builder(context, "fcmself")
                                     .setSmallIcon(android.R.drawable.ic_dialog_info)
                                     .setContentTitle("FCM Message")
                                     .setPriority(NotificationCompat.PRIORITY_DEFAULT);
