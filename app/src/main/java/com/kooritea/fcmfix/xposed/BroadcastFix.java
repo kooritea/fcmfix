@@ -8,7 +8,6 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.os.PowerExemptionManager;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -269,6 +268,8 @@ public class BroadcastFix extends XposedModule {
 
     /**
      * Android 12+ temporary allowlist (from FcmFuck).
+     * PowerExemptionManager is a framework/system API not in the public SDK,
+     * so we resolve it via reflection (available in system_server at runtime).
      * reasonCode 102 corresponds to GOOGLE_C2DM-style exemption used by FcmFuck.
      */
     private static void applyTemporaryAllowList(String packageName) {
@@ -276,10 +277,19 @@ public class BroadcastFix extends XposedModule {
             return;
         }
         try {
-            PowerExemptionManager pem = context.getSystemService(PowerExemptionManager.class);
-            if (pem != null) {
-                pem.addToTemporaryAllowList(packageName, 102, "GOOGLE_C2DM", 2000L);
+            Class<?> pemClass = Class.forName("android.os.PowerExemptionManager");
+            Object pem = context.getSystemService(pemClass);
+            if (pem == null) {
+                return;
             }
+            Method add = pemClass.getMethod(
+                    "addToTemporaryAllowList",
+                    String.class,
+                    int.class,
+                    String.class,
+                    long.class
+            );
+            add.invoke(pem, packageName, 102, "GOOGLE_C2DM", 2000L);
         } catch (Throwable t) {
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
         }
