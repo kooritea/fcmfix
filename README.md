@@ -1,39 +1,33 @@
-# fcmfix / fcmself (Android 10-15)
+# fcmself (Android 10-15)
 
-让fcm/gcm唤醒未启动的应用进行发送通知  
+Package: **`sumicya.fcmself`**
 
-**Branch `merge-fcmfuck`**: 合并 FcmFuck 能力 + 升级 libxposed **API 102**
+让 FCM/GCM 唤醒未启动的应用并发送通知。基于 fcmfix，合并 FcmFuck 能力，升级 libxposed API 102。
 
-### 附加功能
+### 功能
 
-- 阻止Android系统在应用停止时自动移除通知栏的通知
-- 在miui/hyperos(?)/OxygenOS15(?)/ColorOS15(?)上动态解除来自fcm的自启动限制
-- 移除miui/hyperos对后台应用的通知限制
-- 没有预期唤醒目标应用时发送提示通知
-- **合并 FcmFuck**:
+- 阻止系统在应用停止时自动移除通知
+- MIUI/HyperOS/OxygenOS/ColorOS 上解除 FCM 相关自启动限制
+- 移除 MIUI/HyperOS 后台通知限制
+- 合并 FcmFuck：
   - `FLAG_RECEIVER_FOREGROUND`
-  - Android 12+ `PowerExemptionManager.addToTemporaryAllowList`
-  - 高层 `broadcastIntent` / `broadcastIntentWithFeature` 兜底
-  - 目标：单独启用即可无代理收消息（无需再开 FcmFuck）
+  - Android 12+ `PowerExemptionManager` 临时白名单（反射调用）
+  - 高层 `broadcastIntent` 兜底
+- 目标：单独启用即可无代理收消息
 
-### libxposed
-
-- `minApiVersion=100` / `targetApiVersion=102`
-- `autoHotReload=true`（API 102+）
-- 依赖：`io.github.libxposed:api/interface/service:102.0.0`
-
-### lsposed作用域
+### LSPosed 作用域
 
 - `system`
-- `com.miui.powerkeeper`（MIUI/HyperOS 电量和性能；推送正常可不勾选）
+- `com.miui.powerkeeper`（可选）
 
-### 关于fcm
+### 构建
 
-fcm是在Android中由google维护的一条介于google服务器与gms应用之间用于推送通知的长链接。  
-一般的工作流程为应用服务器将消息发送到google服务器，google服务器将消息推送给gms应用，gms应用通过广播传递给应用，应用通过接收到的fcm消息决定是否发送通知和通知内容。  
-其中gms通过fcm广播通知应用时，如果应用处于非运行状态，就会出现`Failed to broadcast to stopped app`，fcmfix主要就是解决这个问题。
+```bash
+./gradlew assembleRelease
+```
 
-### 已知问题
+CI 会在签名 Secrets 缺失时上传 **unsigned** APK artifact。
 
-- 非miui/hyperos/OxygenOS15/ColorOS15系统可能需要给予目标应用类似允许自启动的权限，以及电池选项设置为不优化。
-- 使用 API 102 需要较新的 LSPosed / Vector 框架；`minApiVersion=100` 仍兼容仅支持 100/101 的环境，但 102 专有能力（如 autoHotReload）不会生效。
+### 说明
+
+原包名 `com.kooritea.fcmfix` 已改为 `sumicya.fcmself`。安装前请卸载旧模块以免冲突。

@@ -40,6 +40,8 @@ jobs:
         echo Last build tool version is: $BUILD_TOOL_VERSION
 
     - name: Sign APK
+      id: sign
+      continue-on-error: true
       uses: r0adkll/sign-android-release@v1
       with:
         releaseDirectory: ${{ github.workspace }}/app/build/outputs/apk/release
@@ -50,40 +52,29 @@ jobs:
       env:
         BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOL_VERSION }}
 
-    - name: Renamae
-      run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned-signed.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
-    
+    - name: Prepare APK artifact (signed)
+      if: steps.sign.outcome == 'success'
+      run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned-signed.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}.apk
+
+    - name: Prepare APK artifact (unsigned fallback)
+      if: steps.sign.outcome != 'success'
+      run: |
+        echo "Signing skipped or failed; uploading unsigned APK"
+        mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}-unsigned.apk
+
     - name: Upload built apk
       uses: actions/upload-artifact@v4
       with:
         name: release
-        path: ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
+        path: ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-*.apk
 
     - name: Release
       if: github.ref == 'refs/heads/master'
+      continue-on-error: true
       uses: softprops/action-gh-release@v2
       with:
         name: "Auto Release ${{ env.VERSION_NAME }}"
         tag_name: ${{ env.VERSION_CODE }}-${{ env.VERSION_NAME }}
         token: "${{ secrets.TOKEN }}"
         files: |
-          ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
-    
-    - uses: dorny/paths-filter@v3
-      id: changes
-      if: github.ref == 'refs/heads/master'
-      with:
-        filters: |
-          src:
-            - 'app/build.gradle'
-
-    - name: Release lsposed module repository
-      if: github.ref == 'refs/heads/master' && steps.changes.outputs.src == 'true'
-      uses: softprops/action-gh-release@v2
-      with:
-        name: "Auto Release ${{ env.VERSION_NAME }}"
-        tag_name: ${{ env.VERSION_CODE }}-${{ env.VERSION_NAME }}
-        repository: Xposed-Modules-Repo/com.kooritea.fcmfix
-        token: "${{ secrets.TOKEN_CLASSIC }}"
-        files: |
-          ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
+          ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-*.apk
