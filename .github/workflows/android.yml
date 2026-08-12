@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "merge-fcmfuck" ]
 
 jobs:
   build:
@@ -60,6 +60,7 @@ jobs:
         path: ${{ github.workspace }}/app/build/outputs/apk/release/fcmfix-ci-${{ env.VERSION_NAME }}.apk
 
     - name: Release
+      if: github.ref == 'refs/heads/master'
       uses: softprops/action-gh-release@v2
       with:
         name: "Auto Release ${{ env.VERSION_NAME }}"
@@ -70,13 +71,14 @@ jobs:
     
     - uses: dorny/paths-filter@v3
       id: changes
+      if: github.ref == 'refs/heads/master'
       with:
         filters: |
           src:
             - 'app/build.gradle'
 
     - name: Release lsposed module repository
-      if: steps.changes.outputs.src == 'true'
+      if: github.ref == 'refs/heads/master' && steps.changes.outputs.src == 'true'
       uses: softprops/action-gh-release@v2
       with:
         name: "Auto Release ${{ env.VERSION_NAME }}"

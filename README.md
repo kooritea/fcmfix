@@ -1,8 +1,8 @@
 # fcmfix / fcmself (Android 10-15)
 
-[![Android CI](https://github.com/kooritea/fcmfix/workflows/Android%20CI/badge.svg)](https://github.com/kooritea/fcmfix/actions)
-
 让fcm/gcm唤醒未启动的应用进行发送通知  
+
+**Branch `merge-fcmfuck`**: 合并 FcmFuck 能力 + 升级 libxposed **API 102**
 
 ### 附加功能
 
@@ -10,14 +10,22 @@
 - 在miui/hyperos(?)/OxygenOS15(?)/ColorOS15(?)上动态解除来自fcm的自启动限制
 - 移除miui/hyperos对后台应用的通知限制
 - 没有预期唤醒目标应用时发送提示通知
-- **合并 FcmFuck 能力**（branch `merge-fcmfuck`）:
-  - 为 FCM 广播增加 `FLAG_RECEIVER_FOREGROUND`
-  - Android 12+ 使用 `PowerExemptionManager.addToTemporaryAllowList` 临时白名单
-  - 高层 `broadcastIntent` / `broadcastIntentWithFeature` 兜底 Hook
-  - 目标：单独启用本模块即可无代理接收（无需再同时开 FcmFuck）
+- **合并 FcmFuck**:
+  - `FLAG_RECEIVER_FOREGROUND`
+  - Android 12+ `PowerExemptionManager.addToTemporaryAllowList`
+  - 高层 `broadcastIntent` / `broadcastIntentWithFeature` 兜底
+  - 目标：单独启用即可无代理收消息（无需再开 FcmFuck）
+
+### libxposed
+
+- `minApiVersion=100` / `targetApiVersion=102`
+- `autoHotReload=true`（API 102+）
+- 依赖：`io.github.libxposed:api/interface/service:102.0.0`
 
 ### lsposed作用域
-- 在miui/hyperos上如果推送没有问题，就不需要勾选电量和性能
+
+- `system`
+- `com.miui.powerkeeper`（MIUI/HyperOS 电量和性能；推送正常可不勾选）
 
 ### 关于fcm
 
@@ -28,3 +36,4 @@ fcm是在Android中由google维护的一条介于google服务器与gms应用之�
 ### 已知问题
 
 - 非miui/hyperos/OxygenOS15/ColorOS15系统可能需要给予目标应用类似允许自启动的权限，以及电池选项设置为不优化。
+- 使用 API 102 需要较新的 LSPosed / Vector 框架；`minApiVersion=100` 仍兼容仅支持 100/101 的环境，但 102 专有能力（如 autoHotReload）不会生效。

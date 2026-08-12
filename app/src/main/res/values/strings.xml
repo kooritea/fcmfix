@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">fcmfix</string>
+    <string name="xposed_description">Allow FCM/GCM to wake stopped apps; includes FcmFuck FOREGROUND flag + PowerExemptionManager</string>
 </resources>
