@@ -1,4 +1,4 @@
-# fcmfix(Android 10-15 )
+# fcmfix / fcmself (Android 10-15)
 
 [![Android CI](https://github.com/kooritea/fcmfix/workflows/Android%20CI/badge.svg)](https://github.com/kooritea/fcmfix/actions)
 
@@ -10,6 +10,11 @@
 - 在miui/hyperos(?)/OxygenOS15(?)/ColorOS15(?)上动态解除来自fcm的自启动限制
 - 移除miui/hyperos对后台应用的通知限制
 - 没有预期唤醒目标应用时发送提示通知
+- **合并 FcmFuck 能力**（branch `merge-fcmfuck`）:
+  - 为 FCM 广播增加 `FLAG_RECEIVER_FOREGROUND`
+  - Android 12+ 使用 `PowerExemptionManager.addToTemporaryAllowList` 临时白名单
+  - 高层 `broadcastIntent` / `broadcastIntentWithFeature` 兜底 Hook
+  - 目标：单独启用本模块即可无代理接收（无需再同时开 FcmFuck）
 
 ### lsposed作用域
 - 在miui/hyperos上如果推送没有问题，就不需要勾选电量和性能
