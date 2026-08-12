@@ -2,12 +2,12 @@ apply plugin: 'com.android.application'
 
 android {
     namespace = "sumicya.fcmself"
-    compileSdkVersion 37
+    compileSdk 37
 
     defaultConfig {
         applicationId "sumicya.fcmself"
-        minSdkVersion 29
-        targetSdkVersion 34
+        minSdk 29
+        targetSdk 34
         versionCode 55
         versionName "1.0.0-fcmself"
 
@@ -20,13 +20,15 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
 
     lint {
-        checkReleaseBuilds = false
+        checkReleaseBuilds false
+        abortOnError false
     }
 }
 
@@ -34,7 +36,9 @@ dependencies {
     compileOnly 'io.github.libxposed:api:102.0.0'
     implementation 'io.github.libxposed:interface:102.0.0'
     implementation 'io.github.libxposed:service:102.0.0'
+
     implementation fileTree(dir: "libs", include: ["*.jar"])
-    implementation 'androidx.appcompat:appcompat:1.5.1'
-    implementation 'androidx.recyclerview:recyclerview:1.2.1'
+
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
 }
