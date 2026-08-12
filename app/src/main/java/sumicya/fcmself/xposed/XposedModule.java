@@ -33,7 +33,7 @@ public abstract class XposedModule {
 
     protected final ClassLoader classLoader;
     public static Set<String> allowList = null;
-    static final String TAG = "FcmFix";
+    static final String TAG = "fcmself";
     private static final HashMap<String, Object> config = new HashMap<>();
 
     @SuppressLint("StaticFieldLeak")
@@ -119,10 +119,10 @@ public abstract class XposedModule {
             try {
                 context.sendBroadcast(log);
             } catch (Throwable e) {
-                XposedBridge.log("[fcmfix] [" + getSelfPackageName() + "]" + text);
+                XposedBridge.log("[fcmself] [" + getSelfPackageName() + "]" + text);
             }
         } else {
-            XposedBridge.log("[fcmfix] [" + getSelfPackageName() + "]" + text);
+            XposedBridge.log("[fcmself] [" + getSelfPackageName() + "]" + text);
         }
     }
 
@@ -202,9 +202,9 @@ public abstract class XposedModule {
         }
     }
 
-    private static void onUninstallFcmfix() {
+    private static void onUninstallFcmself() {
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
-        NotificationChannel channel = notificationManager.getNotificationChannel("fcmfix");
+        NotificationChannel channel = notificationManager.getNotificationChannel("fcmself");
         if (channel != null) {
             notificationManager.deleteNotificationChannel(channel.getId());
         }
@@ -248,9 +248,9 @@ public abstract class XposedModule {
                         if (extras.containsKey(Intent.EXTRA_REPLACING) && extras.getBoolean(Intent.EXTRA_REPLACING)) {
                             return;
                         }
-                        onUninstallFcmfix();
+                        onUninstallFcmself();
                         if ("android".equals(getSelfPackageName())) {
-                            printLog("Fcmfix已卸载，重启后停止生效。");
+                            printLog("fcmself已卸载，重启后停止生效。");
                         }
                     }
                 }
@@ -270,10 +270,10 @@ public abstract class XposedModule {
     @SuppressLint("MissingPermission")
     protected void sendNotification(String title, String content, PendingIntent pendingIntent) {
         printLog(title, false);
-        title = "[fcmfix]" + title;
+        title = "[fcmself]" + title;
         NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-        this.createFcmfixChannel(notificationManager);
-        NotificationCompat.Builder notification = new NotificationCompat.Builder(context, "fcmfix")
+        this.createFcmselfChannel(notificationManager);
+        NotificationCompat.Builder notification = new NotificationCompat.Builder(context, "fcmself")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(title)
                 .setContentText(content)
@@ -284,10 +284,10 @@ public abstract class XposedModule {
         notificationManager.notify((int) System.currentTimeMillis(), notification.build());
     }
 
-    protected void createFcmfixChannel(NotificationManagerCompat notificationManager) {
-        if (notificationManager.getNotificationChannel("fcmfix") == null) {
-            NotificationChannel channel = new NotificationChannel("fcmfix", "fcmfix", NotificationManager.IMPORTANCE_HIGH);
-            channel.setDescription("[xposed] fcmfix");
+    protected void createFcmselfChannel(NotificationManagerCompat notificationManager) {
+        if (notificationManager.getNotificationChannel("fcmself") == null) {
+            NotificationChannel channel = new NotificationChannel("fcmself", "fcmself", NotificationManager.IMPORTANCE_HIGH);
+            channel.setDescription("[xposed] fcmself");
             notificationManager.createNotificationChannel(channel);
         }
     }
