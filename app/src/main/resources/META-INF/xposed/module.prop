@@ -1,4 +1,5 @@
 minApiVersion=100
-targetApiVersion=101
+targetApiVersion=102
 staticScope=false
 exceptionMode=protective
+autoHotReload=true
