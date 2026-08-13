@@ -7,6 +7,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -40,14 +43,14 @@ jobs:
         mv app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}-unsigned.apk
 
     - name: Upload unsigned APK
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: release-unsigned
         path: app/build/outputs/apk/release/fcmself-ci-*-unsigned.apk
 
     - name: Release unsigned APK
       if: github.ref == 'refs/heads/master'
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         name: "Auto Release ${{ env.VERSION_NAME }}"
         tag_name: ${{ env.VERSION_CODE }}-${{ env.VERSION_NAME }}
