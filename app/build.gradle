@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId "sumicya.fcmself"
         minSdk 29
-        targetSdk 34
+        targetSdk 37
         versionCode 55
         versionName "1.0.0-fcmself"
     }
