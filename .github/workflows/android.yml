@@ -30,7 +30,7 @@ jobs:
       run: sed -i "s/versionName \".*\"/versionName \"${{ env.VERSION_NAME }}\"/" ${{ github.workspace }}/app/build.gradle
 
     - name: Build with Gradle
-      run: ./gradlew assembleRelease --stacktrace
+      run: ./gradlew assembleRelease --stacktrace --warning-mode all
 
     - name: Setup build tool version variable
       shell: bash
