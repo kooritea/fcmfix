@@ -46,8 +46,16 @@
                 tools:text="sumicya.fcmself"/>
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/includeFcm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="FCM"
+            android:visibility="gone" />
+
         <CheckBox
-            android:id="@+id/allow"
+            android:id="@+id/isAllow"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />
     </LinearLayout>
