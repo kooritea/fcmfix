@@ -19,7 +19,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -28,7 +27,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import io.github.libxposed.service.XposedService;
@@ -143,16 +142,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private class AppListAdapter  extends RecyclerView.Adapter<AppListAdapter.ViewHolder> {
-
+    private class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.ViewHolder> {
         private final List<AppInfo> mAppList;
+
         class ViewHolder extends RecyclerView.ViewHolder {
             View appView;
             ImageView icon;
             TextView name;
             TextView packageName;
-            TextView includeFcm;
-            CheckBox isAllow;
+            TextView status;
 
             public ViewHolder(View view) {
                 super(view);
@@ -160,50 +158,49 @@ public class MainActivity extends AppCompatActivity {
                 icon = view.findViewById(R.id.icon);
                 name = view.findViewById(R.id.name);
                 packageName = view.findViewById(R.id.packageName);
-                includeFcm = view.findViewById(R.id.includeFcm);
-                isAllow = view.findViewById(R.id.isAllow);
+                status = view.findViewById(R.id.status);
             }
         }
 
-        public AppListAdapter(){
+        public AppListAdapter() {
             Set<String> allowListSet = new HashSet<>(allowList);
-            allowListSet.containsAll(allowList);
             List<AppInfo> _allowList = new ArrayList<>();
             List<AppInfo> _notAllowList = new ArrayList<>();
             List<AppInfo> _notFoundFcm = new ArrayList<>();
             PackageManager packageManager = getPackageManager();
-            for(PackageInfo packageInfo : packageManager.getInstalledPackages(PackageManager.GET_RECEIVERS | PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES)) {
+            for (PackageInfo packageInfo : packageManager.getInstalledPackages(PackageManager.GET_RECEIVERS | PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES)) {
                 boolean flag = false;
                 AppInfo appInfo = new AppInfo(packageInfo);
                 if (packageInfo.receivers != null) {
-                    for (ActivityInfo  receiverInfo : packageInfo.receivers ){
-                        if(receiverInfo.name.equals("com.google.firebase.iid.FirebaseInstanceIdReceiver") || receiverInfo.name.equals("com.google.android.gms.measurement.AppMeasurementReceiver")){
+                    for (ActivityInfo receiverInfo : packageInfo.receivers) {
+                        if (receiverInfo.name.equals("com.google.firebase.iid.FirebaseInstanceIdReceiver") || receiverInfo.name.equals("com.google.android.gms.measurement.AppMeasurementReceiver")) {
                             flag = true;
                             appInfo.includeFcm = true;
                             break;
                         }
                     }
-                }else{
+                } else {
                     continue;
                 }
-                if(allowListSet.contains(appInfo.packageName)){
+                if (allowListSet.contains(appInfo.packageName)) {
                     appInfo.isAllow = true;
                     _allowList.add(appInfo);
-                }else{
-                    if(flag){
+                } else {
+                    if (flag) {
                         _notAllowList.add(appInfo);
-                    }else{
+                    } else {
                         _notFoundFcm.add(appInfo);
                     }
                 }
             }
             class SortName implements Comparator<AppInfo> {
                 final Collator localCompare = Collator.getInstance(Locale.getDefault());
+
                 @Override
                 public int compare(AppInfo a1, AppInfo a2) {
-                    if(localCompare.compare(a1.name,a2.name)>0){
+                    if (localCompare.compare(a1.name, a2.name) > 0) {
                         return 1;
-                    }else if (localCompare.compare(a1.name, a2.name) < 0) {
+                    } else if (localCompare.compare(a1.name, a2.name) < 0) {
                         return -1;
                     }
                     return 0;
@@ -216,7 +213,7 @@ public class MainActivity extends AppCompatActivity {
             _allowList.addAll(_notAllowList);
             _allowList.addAll(_notFoundFcm);
             this.mAppList = _allowList;
-            if(_allowList.size() == 0 || _allowList.isEmpty() ||(_allowList.size() == 1 && "sumicya.fcmself".equals(_allowList.get(0).packageName))){
+            if (_allowList.size() == 0 || _allowList.isEmpty() || (_allowList.size() == 1 && "sumicya.fcmself".equals(_allowList.get(0).packageName))) {
                 new AlertDialog.Builder(MainActivity.this)
                         .setTitle("请在系统设置中授予读取应用列表权限")
                         .setMessage("或直接编辑" + getApplicationContext().getFilesDir().getAbsolutePath() + "/config.json(需重启生效)")
@@ -225,20 +222,21 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-
         @SuppressLint("NotifyDataSetChanged")
         @NonNull
         @Override
         public AppListAdapter.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.app_item, parent, false);
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.app_item, parent, false);
             final ViewHolder holder = new ViewHolder(view);
             holder.appView.setOnClickListener(v -> {
                 int position = holder.getBindingAdapterPosition();
+                if (position == RecyclerView.NO_POSITION) {
+                    return;
+                }
                 AppInfo appInfo = mAppList.get(position);
-                if(appInfo.isAllow){
+                if (appInfo.isAllow) {
                     deleteAppInAllowList(appInfo.packageName);
-                }else{
+                } else {
                     addAppInAllowList(appInfo.packageName);
                 }
                 appInfo.isAllow = !appInfo.isAllow;
@@ -253,8 +251,12 @@ public class MainActivity extends AppCompatActivity {
             holder.icon.setImageDrawable(appInfo.icon);
             holder.name.setText(appInfo.name);
             holder.packageName.setText(appInfo.packageName);
-            holder.includeFcm.setVisibility(appInfo.includeFcm ? View.VISIBLE : View.GONE);
-            holder.isAllow.setChecked(appInfo.isAllow);
+            if (appInfo.includeFcm) {
+                holder.status.setText(appInfo.isAllow ? "FCM · 已启用" : "FCM · 未启用");
+            } else {
+                holder.status.setText("未检测到 FCM");
+            }
+            holder.status.setSelected(appInfo.isAllow);
         }
 
         @Override
@@ -263,13 +265,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setLayoutManager(new GridLayoutManager(this, 2));
 
         initXposedService();
 
@@ -294,16 +295,17 @@ public class MainActivity extends AppCompatActivity {
         return super.onCreateView(parent, name, context, attrs);
     }
 
-    private void addAppInAllowList(String packageName){
+    private void addAppInAllowList(String packageName) {
         this.allowList.add(packageName);
         this.updateConfig();
     }
-    private void deleteAppInAllowList(String packageName){
+
+    private void deleteAppInAllowList(String packageName) {
         this.allowList.remove(packageName);
         this.updateConfig();
     }
 
-    private void updateConfig(){
+    private void updateConfig() {
         try {
             SharedPreferences pref = getRemotePreferencesOrNull();
             if (pref == null) {
@@ -322,23 +324,16 @@ public class MainActivity extends AppCompatActivity {
             }
             this.sendBroadcast(new Intent("sumicya.fcmself.update.config"));
         } catch (Throwable e) {
-            Log.e("updateConfig",e.toString());
+            Log.e("updateConfig", e.toString());
             new AlertDialog.Builder(this).setTitle("更新配置文件失败").setMessage(e.getMessage()).show();
         }
     }
 
     @Override
-    public boolean onCreateOptionsMenu (Menu menu){
-//      menu.add("隐藏启动器图标").setCheckable(true);
-
+    public boolean onCreateOptionsMenu(Menu menu) {
         menu.add("阻止应用停止时自动清除通知").setCheckable(true);
-
         menu.add("允许唤醒被冰箱冻结的应用").setCheckable(true);
-
-//        menu.add("目标无响应时代发提示通知").setCheckable(true);
-
         menu.add("全选包含 FCM 的应用");
-
         menu.add("打开FCM Diagnostics");
         return true;
     }
@@ -348,35 +343,35 @@ public class MainActivity extends AppCompatActivity {
     public final boolean onPrepareOptionsMenu(Menu menu) {
         for (int i = 0; i < menu.size(); i++) {
             MenuItem item = menu.getItem(i);
-            if("隐藏启动器图标".equals(item.getTitle())){
+            if ("隐藏启动器图标".equals(item.getTitle())) {
                 PackageManager packageManager = getPackageManager();
                 item.setChecked(packageManager.getComponentEnabledSetting(new ComponentName("sumicya.fcmself", "sumicya.fcmself.Home")) == PackageManager.COMPONENT_ENABLED_STATE_DISABLED);
             }
-            if("阻止应用停止时自动清除通知".equals(item.getTitle())){
+            if ("阻止应用停止时自动清除通知".equals(item.getTitle())) {
                 try {
                     item.setChecked(this.config.getBoolean("disableAutoCleanNotification"));
                 } catch (JSONException e) {
                     item.setChecked(false);
                 }
             }
-            if("允许唤醒被冰箱冻结的应用".equals(item.getTitle())){
+            if ("允许唤醒被冰箱冻结的应用".equals(item.getTitle())) {
                 try {
                     item.setChecked(this.config.getBoolean("includeIceBoxDisableApp"));
                 } catch (JSONException e) {
                     item.setChecked(false);
                 }
             }
-            if("目标无响应时代发提示通知".equals(item.getTitle())){
+            if ("目标无响应时代发提示通知".equals(item.getTitle())) {
                 try {
                     item.setChecked(this.config.getBoolean("noResponseNotification"));
                 } catch (JSONException e) {
                     item.setChecked(false);
                 }
             }
-            if("全选包含 FCM 的应用".equals(item.getTitle())){
+            if ("全选包含 FCM 的应用".equals(item.getTitle())) {
                 item.setOnMenuItemClickListener(menuItem -> {
-                    for(AppInfo appInfo : appListAdapter.mAppList){
-                        if(appInfo.includeFcm){
+                    for (AppInfo appInfo : appListAdapter.mAppList) {
+                        if (appInfo.includeFcm) {
                             addAppInAllowList(appInfo.packageName);
                             appInfo.isAllow = true;
                         }
@@ -385,12 +380,12 @@ public class MainActivity extends AppCompatActivity {
                     return false;
                 });
             }
-            if("打开FCM Diagnostics".equals(item.getTitle())){
+            if ("打开FCM Diagnostics".equals(item.getTitle())) {
                 item.setOnMenuItemClickListener(menuItem -> {
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     intent.setPackage("com.google.android.gms");
-                    intent.setComponent(new ComponentName("com.google.android.gms","com.google.android.gms.gcm.GcmDiagnostics"));
+                    intent.setComponent(new ComponentName("com.google.android.gms", "com.google.android.gms.gcm.GcmDiagnostics"));
                     startActivity(intent);
                     return false;
                 });
@@ -401,7 +396,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public final boolean onOptionsItemSelected(MenuItem menuItem) {
-        if(menuItem.getTitle().equals("隐藏启动器图标")){
+        if (menuItem.getTitle().equals("隐藏启动器图标")) {
             PackageManager packageManager = getPackageManager();
             packageManager.setComponentEnabledSetting(
                     new ComponentName("sumicya.fcmself", "sumicya.fcmself.Home"),
@@ -409,28 +404,28 @@ public class MainActivity extends AppCompatActivity {
                     PackageManager.DONT_KILL_APP
             );
         }
-        if(menuItem.getTitle().equals("阻止应用停止时自动清除通知")){
+        if (menuItem.getTitle().equals("阻止应用停止时自动清除通知")) {
             try {
                 this.config.put("disableAutoCleanNotification", !menuItem.isChecked());
                 this.updateConfig();
             } catch (JSONException e) {
-                Log.e("onOptionsItemSelected",e.toString());
+                Log.e("onOptionsItemSelected", e.toString());
             }
         }
-        if(menuItem.getTitle().equals("允许唤醒被冰箱冻结的应用")){
+        if (menuItem.getTitle().equals("允许唤醒被冰箱冻结的应用")) {
             try {
                 this.config.put("includeIceBoxDisableApp", !menuItem.isChecked());
                 this.updateConfig();
             } catch (JSONException e) {
-                Log.e("onOptionsItemSelected",e.toString());
+                Log.e("onOptionsItemSelected", e.toString());
             }
         }
-        if(menuItem.getTitle().equals("目标无响应时代发提示通知")){
+        if (menuItem.getTitle().equals("目标无响应时代发提示通知")) {
             try {
                 this.config.put("noResponseNotification", !menuItem.isChecked());
                 this.updateConfig();
             } catch (JSONException e) {
-                Log.e("onOptionsItemSelected",e.toString());
+                Log.e("onOptionsItemSelected", e.toString());
             }
         }
         return true;
