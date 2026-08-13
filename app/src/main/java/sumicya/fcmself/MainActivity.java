@@ -18,6 +18,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -196,19 +197,25 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    /** 毛玻璃感：半透明 surface，无描边；不自模糊文字 */
+    /** 渐变模糊：使用 header_gradient_blur 底部渐隐 + API 31+ 窗口背景模糊 */
     private void applyHeaderBlur() {
         if (headerSafe == null) {
             return;
         }
         try {
-            int base = ContextCompat.getColor(this, android.R.color.transparent);
-            // 取 surface 色并加 alpha，形成叠在列表上的磨砂条
+            // 根据主题 surface 色动态调整渐变起点（深色模式用深色半透明）
             android.util.TypedValue tv = new android.util.TypedValue();
             getTheme().resolveAttribute(com.google.android.material.R.attr.colorSurfaceContainer, tv, true);
             int surface = tv.data;
-            int withAlpha = Color.argb(0xE6, Color.red(surface), Color.green(surface), Color.blue(surface));
-            headerSafe.setBackground(new ColorDrawable(withAlpha));
+            int start = Color.argb(0xE6, Color.red(surface), Color.green(surface), Color.blue(surface));
+            int mid = Color.argb(0x99, Color.red(surface), Color.green(surface), Color.blue(surface));
+            int end = Color.argb(0x00, Color.red(surface), Color.green(surface), Color.blue(surface));
+
+            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{start, mid, end});
+            gd.setGradientType(android.graphics.drawable.GradientDrawable.LINEAR_GRADIENT);
+            headerSafe.setBackground(gd);
             headerSafe.setElevation(0f);
         } catch (Throwable t) {
             headerSafe.setAlpha(0.94f);
@@ -216,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
         // API 31+ 窗口级背景模糊（系统支持时生效）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
-                getWindow().setBackgroundBlurRadius(24);
+                getWindow().setBackgroundBlurRadius(28);
             } catch (Throwable ignored) {
             }
         }
@@ -236,14 +243,16 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
-        statsView.setText(enabled + " - " + totalFcm);
+        statsView.setText(enabled + " · " + totalFcm);
     }
 
     private void showFabMenu() {
         if (mainFab == null) {
             return;
         }
-        PopupMenu popup = new PopupMenu(this, mainFab);
+        // 使用圆角 PopupMenu 样式
+        Context themed = new ContextThemeWrapper(this, R.style.RoundedPopupMenu);
+        PopupMenu popup = new PopupMenu(themed, mainFab);
         popup.getMenu().add(0, 1, 0, "阻止应用停止时自动清除通知").setCheckable(true);
         popup.getMenu().add(0, 2, 1, "允许唤醒被冰箱冻结的应用").setCheckable(true);
         popup.getMenu().add(0, 3, 2, "目标无响应时代发提示通知").setCheckable(true);
@@ -440,7 +449,7 @@ public class MainActivity extends AppCompatActivity {
             AppInfo appInfo = mAppList.get(position);
             holder.icon.setImageDrawable(appInfo.icon);
             holder.name.setText(appInfo.name);
-            // ✓ 已启用 · × 有 FCM 未启用 · - 未检测到 FCM
+            // 符号：✓ 已启用 · × 有 FCM 未启用 · - 未检测到 FCM（非 emoji）
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
                     holder.status.setText("✓");

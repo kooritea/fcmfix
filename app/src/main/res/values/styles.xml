@@ -2,5 +2,10 @@
     <style name="AppTheme" parent="Theme.Material3Expressive.DynamicColors.DayNight">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
+        <item name="popupMenuStyle">@style/RoundedPopupMenu</item>
+    </style>
+
+    <style name="RoundedPopupMenu" parent="Widget.Material3.PopupMenu">
+        <item name="android:popupBackground">@drawable/popup_menu_bg</item>
     </style>
 </resources>

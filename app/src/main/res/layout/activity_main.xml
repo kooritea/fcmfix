@@ -22,45 +22,36 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:paddingStart="8dp"
-            android:paddingTop="88dp"
+            android:paddingTop="72dp"
             android:paddingEnd="8dp"
-            android:paddingBottom="96dp"
+            android:paddingBottom="112dp"
             android:visibility="gone" />
     </FrameLayout>
 
-    <!-- 上部毛玻璃安全区（叠在列表上方，无描边） -->
+    <!-- 上部渐变模糊安全区（叠在列表上方，底部渐隐） -->
     <LinearLayout
         android:id="@+id/header_safe"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:background="?attr/colorSurfaceContainer"
+        android:background="@drawable/header_gradient_blur"
         android:elevation="0dp"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingTop="16dp"
-        android:paddingBottom="12dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="16dp"
         android:paddingStart="16dp"
         android:paddingEnd="16dp">
-
-        <TextView
-            android:id="@+id/title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="fcmself"
-            android:textAppearance="?attr/textAppearanceHeadlineSmall"
-            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/stats"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
             android:gravity="center"
             android:text="0 - 0"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="?attr/colorOnSurfaceVariant" />
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textColor="?attr/colorOnSurface"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -68,7 +59,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="20dp"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="36dp"
         android:contentDescription="功能与状态"
         app:elevation="6dp"
         app:fabSize="normal"
