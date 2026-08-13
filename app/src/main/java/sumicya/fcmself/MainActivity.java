@@ -10,8 +10,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.RenderEffect;
-import android.graphics.Shader;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -32,7 +31,6 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -198,16 +196,27 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    /** 毛玻璃感：半透明 surface，无描边；不自模糊文字 */
     private void applyHeaderBlur() {
         if (headerSafe == null) {
             return;
         }
-        // 半透明表面 + API 31+ 轻微模糊，无描边
-        headerSafe.setAlpha(0.92f);
+        try {
+            int base = ContextCompat.getColor(this, android.R.color.transparent);
+            // 取 surface 色并加 alpha，形成叠在列表上的磨砂条
+            android.util.TypedValue tv = new android.util.TypedValue();
+            getTheme().resolveAttribute(com.google.android.material.R.attr.colorSurfaceContainer, tv, true);
+            int surface = tv.data;
+            int withAlpha = Color.argb(0xE6, Color.red(surface), Color.green(surface), Color.blue(surface));
+            headerSafe.setBackground(new ColorDrawable(withAlpha));
+            headerSafe.setElevation(0f);
+        } catch (Throwable t) {
+            headerSafe.setAlpha(0.94f);
+        }
+        // API 31+ 窗口级背景模糊（系统支持时生效）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
-                headerSafe.setRenderEffect(
-                        RenderEffect.createBlurEffect(18f, 18f, Shader.TileMode.CLAMP));
+                getWindow().setBackgroundBlurRadius(24);
             } catch (Throwable ignored) {
             }
         }
@@ -462,7 +471,6 @@ public class MainActivity extends AppCompatActivity {
         mainFab = findViewById(R.id.main_fab);
         applyHeaderBlur();
 
-        // FAB 默认图标：三点/菜单感用系统更多图标不可靠，用简单文字感 drawable 或默认
         try {
             mainFab.setImageResource(android.R.drawable.ic_menu_manage);
         } catch (Throwable ignored) {
