@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="150dp"
-    android:layout_margin="6dp"
+    android:layout_height="96dp"
+    android:layout_margin="3dp"
     android:background="?attr/selectableItemBackground"
-    android:padding="8dp">
+    android:padding="6dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -14,44 +14,30 @@
 
         <ImageView
             android:id="@+id/icon"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:contentDescription="@null" />
-
-        <TextView
-            android:id="@+id/packageName"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:ellipsize="end"
-            android:gravity="center"
-            android:maxLines="1"
-            android:textSize="10sp" />
 
         <TextView
             android:id="@+id/name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
             android:gravity="center"
             android:maxLines="1"
-            android:textSize="15sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:textSize="12sp" />
+            android:layout_marginTop="2dp"
+            android:gravity="center"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
-
-    <View
-        android:id="@+id/status_dot"
-        android:layout_width="10dp"
-        android:layout_height="10dp"
-        android:layout_gravity="end|center_vertical"
-        android:layout_marginEnd="2dp"
-        android:background="@drawable/status_dot" />
 
 </FrameLayout>
