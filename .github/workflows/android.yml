@@ -4,13 +4,16 @@ on:
   push:
     branches: [ "master", "merge-fcmfuck" ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
 
-    - name: set up JDK 21
+    - name: Set up JDK 21
       uses: actions/setup-java@v5
       with:
         java-version: '21'
@@ -34,13 +37,13 @@ jobs:
 
     - name: Rename unsigned APK
       run: |
-        mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}-unsigned.apk
+        mv app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}-unsigned.apk
 
     - name: Upload unsigned APK
       uses: actions/upload-artifact@v4
       with:
         name: release-unsigned
-        path: ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-*-unsigned.apk
+        path: app/build/outputs/apk/release/fcmself-ci-*-unsigned.apk
 
     - name: Release unsigned APK
       if: github.ref == 'refs/heads/master'
@@ -48,6 +51,4 @@ jobs:
       with:
         name: "Auto Release ${{ env.VERSION_NAME }}"
         tag_name: ${{ env.VERSION_CODE }}-${{ env.VERSION_NAME }}
-        token: "${{ secrets.TOKEN }}"
-        files: |
-          ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-*-unsigned.apk
+        files: app/build/outputs/apk/release/fcmself-ci-*-unsigned.apk
