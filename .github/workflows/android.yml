@@ -35,13 +35,24 @@ jobs:
     - name: Setup build tool version variable
       shell: bash
       run: |
-        BUILD_TOOL_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | tail -n 1)
+        BUILD_TOOL_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | sort -V | tail -n 1)
         echo "BUILD_TOOL_VERSION=$BUILD_TOOL_VERSION" >> $GITHUB_ENV
         echo Last build tool version is: $BUILD_TOOL_VERSION
 
+    - name: Check signing secrets
+      env:
+        SIGNINGKEYBASE64: ${{ secrets.SIGNINGKEYBASE64 }}
+        ALIAS: ${{ secrets.ALIAS }}
+        KEYSTOREPASSWORD: ${{ secrets.KEYSTOREPASSWORD }}
+        KEYPASSWORD: ${{ secrets.KEYPASSWORD }}
+      run: |
+        test -n "$SIGNINGKEYBASE64" || { echo "Missing SIGNINGKEYBASE64"; exit 1; }
+        test -n "$ALIAS" || { echo "Missing ALIAS"; exit 1; }
+        test -n "$KEYSTOREPASSWORD" || { echo "Missing KEYSTOREPASSWORD"; exit 1; }
+        test -n "$KEYPASSWORD" || { echo "Missing KEYPASSWORD"; exit 1; }
+        echo "All signing secrets are configured."
+
     - name: Sign APK
-      id: sign
-      continue-on-error: true
       uses: r0adkll/sign-android-release@v1
       with:
         releaseDirectory: ${{ github.workspace }}/app/build/outputs/apk/release
@@ -52,15 +63,14 @@ jobs:
       env:
         BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOL_VERSION }}
 
-    - name: Prepare APK artifact (signed)
-      if: steps.sign.outcome == 'success'
+    - name: Prepare APK artifact
       run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned-signed.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}.apk
 
-    - name: Prepare APK artifact (unsigned fallback)
-      if: steps.sign.outcome != 'success'
+    - name: Verify APK signature
       run: |
-        echo "Signing skipped or failed; uploading unsigned APK"
-        mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release-unsigned.apk ${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}-unsigned.apk
+        APK=${{ github.workspace }}/app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}.apk
+        apksigner verify --verbose "$APK"
+        echo "APK signature verification passed."
 
     - name: Upload built apk
       uses: actions/upload-artifact@v4
@@ -70,7 +80,6 @@ jobs:
 
     - name: Release
       if: github.ref == 'refs/heads/master'
-      continue-on-error: true
       uses: softprops/action-gh-release@v2
       with:
         name: "Auto Release ${{ env.VERSION_NAME }}"
