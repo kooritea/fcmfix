@@ -2,5 +2,8 @@
     <color name="colorPrimary">#6750A4</color>
     <color name="colorPrimaryDark">#4F378B</color>
     <color name="colorAccent">#7D5260</color>
-    <color name="cardStroke">#1F000000</color>
+    <!-- FAB / 连接状态：绿已连接 · 黄有报错码 · 灰未连接 -->
+    <color name="status_connected">#2E7D32</color>
+    <color name="status_error">#F9A825</color>
+    <color name="status_disconnected">#757575</color>
 </resources>
