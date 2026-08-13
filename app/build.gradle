@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace 'sumicya.fcmself'
+    namespace = 'sumicya.fcmself'
     compileSdk 37
 
     defaultConfig {
@@ -27,8 +27,8 @@ android {
     }
 
     lint {
-        checkReleaseBuilds false
-        abortOnError false
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 
