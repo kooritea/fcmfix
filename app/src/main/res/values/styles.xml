@@ -2,6 +2,8 @@
     <style name="AppTheme" parent="Theme.Material3Expressive.DynamicColors.DayNight">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="popupMenuStyle">@style/RoundedPopupMenu</item>
     </style>
 
