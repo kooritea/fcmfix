@@ -15,6 +15,11 @@ import androidx.core.app.NotificationManagerCompat;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
@@ -28,6 +33,24 @@ public class BroadcastFix extends XposedModule {
     private static volatile Class<?> sPemClass;
     private static volatile Method sPemAddMethod;
     private static volatile boolean sPemResolved;
+
+    /** Single-thread executor for IceBox activation — avoids unbounded threads under FCM storms. */
+    private static final ExecutorService ICEBOX_EXEC = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "fcmself-icebox");
+        t.setDaemon(true);
+        return t;
+    });
+    /** Packages currently being activated; prevents duplicate concurrent activations. */
+    private static final Set<String> iceboxInFlight = ConcurrentHashMap.newKeySet();
+
+    // Cached boolean config keys read once into volatiles for the absolute hottest path
+    private static volatile boolean sIncludeIceBox = false;
+    private static volatile boolean sIceBoxConfigCached = false;
+
+    /** Call when remote config is refreshed so IceBox flag is re-read. */
+    public static void onConfigUpdated() {
+        sIceBoxConfigCached = false;
+    }
 
     public BroadcastFix(ClassLoader classLoader) {
         super(classLoader);
@@ -133,7 +156,8 @@ public class BroadcastFix extends XposedModule {
                 }
                 Intent intent = (Intent) intentArg;
                 // Skip already-flagged intents; only care about FCM
-                if ((intent.getFlags() & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) != 0) {
+                final int flags = intent.getFlags();
+                if ((flags & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) != 0) {
                     return;
                 }
                 if (!isFCMIntent(intent)) {
@@ -150,43 +174,61 @@ public class BroadcastFix extends XposedModule {
                 if (appOpArg instanceof Integer && ((Integer) appOpArg) == -1) {
                     methodHookParam.args[finalAppOp_args_index] = 11;
                 }
-                intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-
-                // From FcmFuck: FLAG_RECEIVER_FOREGROUND helps delivery on more ROMs
-                if ((intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
-                    intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                // Combine flag adds to avoid two separate getFlags/setFlags cycles
+                int newFlags = Intent.FLAG_INCLUDE_STOPPED_PACKAGES;
+                if ((flags & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
+                    newFlags |= Intent.FLAG_RECEIVER_FOREGROUND;
                 }
+                intent.addFlags(newFlags);
 
                 // From FcmFuck: temporary power exemption (Android 12+)
                 applyTemporaryAllowList(target);
 
-                if (getBooleanConfig("includeIceBoxDisableApp", false) && !IceboxUtils.isAppEnabled(context, target)) {
+                // Prefer cached IceBox config flag to avoid HashMap lookup on every FCM
+                if (!sIceBoxConfigCached) {
+                    sIncludeIceBox = getBooleanConfig("includeIceBoxDisableApp", false);
+                    sIceBoxConfigCached = true;
+                }
+                if (sIncludeIceBox && !IceboxUtils.isAppEnabled(context, target)) {
                     printLog("Waiting for IceBox to activate the app: " + target, true);
                     methodHookParam.setResult(false);
-                    new Thread(() -> {
-                        IceboxUtils.activeApp(context, target);
-                        for (int i1 = 0; i1 < 300; i1++) {
-                            if (IceboxUtils.isAppEnabled(context, target)) {
-                                break;
-                            }
+                    // Dedup + single worker: avoid spawning a thread per FCM under storm
+                    if (iceboxInFlight.add(target)) {
+                        final Object thisObject = methodHookParam.thisObject;
+                        final Object[] args = methodHookParam.args;
+                        final Method originalMethod = methodHookParam.method;
+                        final String pkg = target;
+                        ICEBOX_EXEC.execute(() -> {
                             try {
-                                Thread.sleep(100);
-                            } catch (Throwable e) {
-                                printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
+                                IceboxUtils.activeApp(context, pkg);
+                                for (int i1 = 0; i1 < 300; i1++) {
+                                    if (IceboxUtils.isAppEnabled(context, pkg)) {
+                                        break;
+                                    }
+                                    try {
+                                        Thread.sleep(100);
+                                    } catch (Throwable e) {
+                                        printLog("Send Forced Start Broadcast Error: " + pkg + " " + e.getMessage(), true);
+                                        break;
+                                    }
+                                }
+                                try {
+                                    if (IceboxUtils.isAppEnabled(context, pkg)) {
+                                        printLog("Send Forced Start Broadcast: " + pkg, true);
+                                    } else {
+                                        printLog("Waiting for IceBox to activate the app timed out: " + pkg, true);
+                                    }
+                                    XposedBridge.invokeOriginalMethod(originalMethod, thisObject, args);
+                                } catch (Throwable e) {
+                                    printLog("Send Forced Start Broadcast Error: " + pkg + " " + e.getMessage(), true);
+                                }
+                            } finally {
+                                iceboxInFlight.remove(pkg);
                             }
-                        }
-                        try {
-                            if (IceboxUtils.isAppEnabled(context, target)) {
-                                printLog("Send Forced Start Broadcast: " + target, true);
-                            } else {
-                                printLog("Waiting for IceBox to activate the app timed out: " + target, true);
-                            }
-                            XposedBridge.invokeOriginalMethod(methodHookParam.method, methodHookParam.thisObject, methodHookParam.args);
-                        } catch (Throwable e) {
-                            printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
-                        }
-                    }).start();
+                        });
+                    }
                 } else {
+                    // Success path: diagnostics-only (throttled)
                     printLog("Send Forced Start Broadcast: " + target, true);
                 }
                 // cos15 unfreeze
@@ -246,10 +288,12 @@ public class BroadcastFix extends XposedModule {
                         if (target == null || !targetIsAllow(target)) {
                             return;
                         }
-                        intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                        if ((intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
-                            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                        int f = intent.getFlags();
+                        int nf = Intent.FLAG_INCLUDE_STOPPED_PACKAGES;
+                        if ((f & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
+                            nf |= Intent.FLAG_RECEIVER_FOREGROUND;
                         }
+                        intent.addFlags(nf);
                         applyTemporaryAllowList(target);
                     }
                 });

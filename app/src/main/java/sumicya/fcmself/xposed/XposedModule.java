@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static android.content.Context.NOTIFICATION_SERVICE;
@@ -42,11 +43,14 @@ public abstract class XposedModule {
     private static final long DIAG_LOG_MIN_INTERVAL_MS = 200L;
     private static final AtomicLong lastDiagLogElapsed = new AtomicLong(0);
 
+    /** Fast-path flag: config has been loaded at least once. Avoids work on every broadcast. */
+    private static final AtomicBoolean configReady = new AtomicBoolean(false);
+
     @SuppressLint("StaticFieldLeak")
     protected static Context context = null;
     private static final ArrayList<XposedModule> instances = new ArrayList<>();
-    private static Boolean isInitReceiver = false;
-    public static Boolean isBootComplete = false;
+    private static volatile boolean isInitReceiver = false;
+    public static volatile boolean isBootComplete = false;
     private static Thread loadConfigThread = null;
 
     protected XposedModule(final ClassLoader classLoader) {
@@ -90,7 +94,8 @@ public abstract class XposedModule {
         if ("android".equals(getSelfPackageName())) {
             new Thread(() -> {
                 try {
-                    Thread.sleep(60000);
+                    // Short settle window after unlock; previous 60s left FCM fix inactive too long.
+                    Thread.sleep(5_000);
                     isBootComplete = true;
                     printLog("Boot Complete");
                 } catch (Throwable e) {
@@ -180,7 +185,8 @@ public abstract class XposedModule {
         if ("sumicya.fcmself".equals(packageName)) {
             return true;
         }
-        if (config.get("init") == null) {
+        // Fast path once config has been loaded; avoid HashMap/init work on every broadcast
+        if (!configReady.get() && config.get("init") == null) {
             this.checkUserDeviceUnlockAndUpdateConfig();
         }
         Set<String> list = allowList;
@@ -188,10 +194,12 @@ public abstract class XposedModule {
     }
 
     protected boolean getBooleanConfig(String key, boolean defaultValue) {
-        if (config.get("init") == null) {
-            this.checkUserDeviceUnlockAndUpdateConfig();
+        if (!configReady.get()) {
             if (config.get("init") == null) {
-                return defaultValue;
+                this.checkUserDeviceUnlockAndUpdateConfig();
+                if (config.get("init") == null) {
+                    return defaultValue;
+                }
             }
         }
         Object value = config.get(key);
@@ -220,6 +228,11 @@ public abstract class XposedModule {
                     config.put("includeIceBoxDisableApp", remotePreferences.getBoolean("includeIceBoxDisableApp", false));
                     config.put("noResponseNotification", remotePreferences.getBoolean("noResponseNotification", false));
                     config.put("init", true);
+                    configReady.set(true);
+                    try {
+                        BroadcastFix.onConfigUpdated();
+                    } catch (Throwable ignored) {
+                    }
                 } catch (Throwable e) {
                     printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
                 } finally {
@@ -316,9 +329,15 @@ public abstract class XposedModule {
     }
 
     protected boolean isFCMAction(String action) {
-        return action != null && (action.endsWith(".android.c2dm.intent.RECEIVE")
-                || "com.google.firebase.MESSAGING_EVENT".equals(action)
-                || "com.google.firebase.INSTANCE_ID_EVENT".equals(action));
+        if (action == null) {
+            return false;
+        }
+        // equals first for fixed actions (cheaper than endsWith on long strings)
+        if ("com.google.firebase.MESSAGING_EVENT".equals(action)
+                || "com.google.firebase.INSTANCE_ID_EVENT".equals(action)) {
+            return true;
+        }
+        return action.endsWith(".android.c2dm.intent.RECEIVE");
     }
 
     protected boolean isFCMIntent(Intent intent) {
