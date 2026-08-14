@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -29,7 +30,6 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -77,9 +77,6 @@ public class MainActivity extends AppCompatActivity {
     private int colorError;
     private int colorDisconnected;
     private int colorPrimary;
-    private Drawable iconCheck;
-    private Drawable iconClose;
-    private Drawable iconDash;
 
     private Boolean cachedDiagIssue;
     private long diagCacheAtMs;
@@ -191,7 +188,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             color = colorConnected;
         }
-        mainFab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(color));
+        mainFab.setBackgroundTintList(ColorStateList.valueOf(color));
     }
 
     private boolean hasFcmDiagnosticsIssueCached() {
@@ -509,16 +506,15 @@ public class MainActivity extends AppCompatActivity {
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
-                    // Same material check glyph as Chip filter selected mark
-                    holder.status.setImageDrawable(iconCheck);
-                    holder.status.setColorFilter(colorPrimary);
+                    holder.status.setImageResource(R.drawable.ic_status_check);
+                    holder.status.setImageTintList(ColorStateList.valueOf(colorPrimary));
                 } else {
-                    holder.status.setImageDrawable(iconClose);
-                    holder.status.setColorFilter(colorError);
+                    holder.status.setImageResource(R.drawable.ic_status_close);
+                    holder.status.setImageTintList(ColorStateList.valueOf(colorError));
                 }
             } else {
-                holder.status.setImageDrawable(iconDash);
-                holder.status.setColorFilter(colorDisconnected);
+                holder.status.setImageResource(R.drawable.ic_status_dash);
+                holder.status.setImageTintList(ColorStateList.valueOf(colorDisconnected));
             }
         }
 
@@ -554,10 +550,13 @@ public class MainActivity extends AppCompatActivity {
             boolean hasFcm = false;
             for (ActivityInfo receiverInfo : packageInfo.receivers) {
                 String n = receiverInfo.name;
+                if (n == null) {
+                    continue;
+                }
                 if ("com.google.firebase.iid.FirebaseInstanceIdReceiver".equals(n)
                         || "com.google.android.gms.measurement.AppMeasurementReceiver".equals(n)
-                        || (n != null && n.contains("FirebaseMessaging"))
-                        || (n != null && n.endsWith(".FirebaseInstanceIdReceiver"))) {
+                        || n.contains("FirebaseMessaging")
+                        || n.endsWith(".FirebaseInstanceIdReceiver")) {
                     hasFcm = true;
                     break;
                 }
@@ -569,7 +568,6 @@ public class MainActivity extends AppCompatActivity {
             } catch (Throwable t) {
                 label = packageInfo.packageName;
             }
-            // Always load real icons
             Drawable icon;
             try {
                 icon = packageInfo.applicationInfo.loadIcon(pm);
@@ -629,20 +627,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void prepareStatusIcons() {
-        iconCheck = ContextCompat.getDrawable(this, R.drawable.ic_status_check);
-        iconClose = ContextCompat.getDrawable(this, R.drawable.ic_status_close);
-        iconDash = ContextCompat.getDrawable(this, R.drawable.ic_status_dash);
-        if (iconCheck != null) {
-            iconCheck = DrawableCompat.wrap(iconCheck.mutate());
-        }
-        if (iconClose != null) {
-            iconClose = DrawableCompat.wrap(iconClose.mutate());
-        }
-        if (iconDash != null) {
-            iconDash = DrawableCompat.wrap(iconDash.mutate());
-        }
-
+    private void resolvePrimaryColor() {
         TypedValue tv = new TypedValue();
         if (getTheme().resolveAttribute(com.google.android.material.R.attr.colorPrimary, tv, true)) {
             colorPrimary = tv.data;
@@ -654,7 +639,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Extra safety: theme already disables ActionBar
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
@@ -663,7 +647,7 @@ public class MainActivity extends AppCompatActivity {
         colorConnected = ContextCompat.getColor(this, R.color.status_connected);
         colorError = ContextCompat.getColor(this, R.color.status_error);
         colorDisconnected = ContextCompat.getColor(this, R.color.status_disconnected);
-        prepareStatusIcons();
+        resolvePrimaryColor();
 
         headerSafe = findViewById(R.id.header_safe);
         statsView = findViewById(R.id.stats);
