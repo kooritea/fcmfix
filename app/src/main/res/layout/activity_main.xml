@@ -14,17 +14,20 @@
             android:id="@+id/progress_bar"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_gravity="center" />
+            android:layout_gravity="center"
+            android:indeterminate="true" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:paddingStart="8dp"
+            android:overScrollMode="ifContentScrolls"
+            android:paddingStart="6dp"
             android:paddingTop="72dp"
-            android:paddingEnd="8dp"
+            android:paddingEnd="6dp"
             android:paddingBottom="112dp"
+            android:scrollbars="none"
             android:visibility="gone" />
     </FrameLayout>
 
@@ -35,20 +38,22 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top"
         android:background="@drawable/header_gradient_blur"
+        android:clickable="false"
         android:elevation="0dp"
+        android:focusable="false"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingTop="20dp"
-        android:paddingBottom="16dp"
         android:paddingStart="16dp"
-        android:paddingEnd="16dp">
+        android:paddingTop="20dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="16dp">
 
         <TextView
             android:id="@+id/stats"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="0 - 0"
+            android:text="0 · 0"
             android:textAppearance="?attr/textAppearanceTitleMedium"
             android:textColor="?attr/colorOnSurface"
             android:textStyle="bold" />

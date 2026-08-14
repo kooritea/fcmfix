@@ -1,11 +1,8 @@
 package sumicya.fcmself.libxposed;
 
 import android.content.SharedPreferences;
-import android.util.Log;
 
-import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
@@ -13,7 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
 
 import io.github.libxposed.api.XposedInterface;
 
@@ -51,7 +47,9 @@ public final class XposedBridge {
                     XC_MethodHook.MethodHookParam param = new XC_MethodHook.MethodHookParam();
                     param.method = (Member) chain.getExecutable();
                     param.thisObject = chain.getThisObject();
-                    param.args = chain.getArgs().toArray(new Object[0]);
+                    // Prefer sized array to reduce growth churn
+                    List<?> argList = chain.getArgs();
+                    param.args = argList.toArray(new Object[argList.size()]);
 
                     List<XC_MethodHook> callbacks = HOOKS.get(member);
                     if (callbacks == null || callbacks.isEmpty()) {
@@ -60,7 +58,11 @@ public final class XposedBridge {
 
                     int beforeCount = 0;
                     for (XC_MethodHook hook : callbacks) {
-                        hook.beforeHookedMethod(param);
+                        try {
+                            hook.beforeHookedMethod(param);
+                        } catch (Throwable t) {
+                            android.util.Log.w("fcmself", "beforeHookedMethod error: " + t.getMessage());
+                        }
                         beforeCount++;
                         if (param.isReturnEarly()) {
                             break;
@@ -77,7 +79,11 @@ public final class XposedBridge {
                     }
 
                     for (int i = beforeCount - 1; i >= 0; i--) {
-                        callbacks.get(i).afterHookedMethod(param);
+                        try {
+                            callbacks.get(i).afterHookedMethod(param);
+                        } catch (Throwable t) {
+                            android.util.Log.w("fcmself", "afterHookedMethod error: " + t.getMessage());
+                        }
                     }
 
                     if (param.hasThrowable()) {
@@ -98,7 +104,7 @@ public final class XposedBridge {
             try {
                 return invoker.invoke(thisObject, args);
             } catch (InvocationTargetException e) {
-                throw e.getCause();
+                throw e.getCause() != null ? e.getCause() : e;
             }
         }
         if (method instanceof Constructor<?>) {
@@ -107,7 +113,7 @@ public final class XposedBridge {
             try {
                 return invoker.newInstance(args);
             } catch (InvocationTargetException e) {
-                throw e.getCause();
+                throw e.getCause() != null ? e.getCause() : e;
             }
         }
         throw new IllegalArgumentException("Unsupported member type: " + method);

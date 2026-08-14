@@ -15,7 +15,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.AttributeSet;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -27,7 +26,6 @@ import android.widget.PopupMenu;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -60,6 +58,8 @@ public class MainActivity extends AppCompatActivity {
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final ExecutorService BG = Executors.newSingleThreadExecutor();
 
+    private static final Object PAYLOAD_STATUS = new Object();
+
     private AppListAdapter appListAdapter;
     private static XposedService xposedService;
     private FloatingActionButton mainFab;
@@ -67,6 +67,14 @@ public class MainActivity extends AppCompatActivity {
     private View headerSafe;
     private RecyclerView recyclerView;
     private boolean lastConfigError = false;
+
+    // Cached colors / diagnostics (avoid repeated resource + PM queries)
+    private int colorConnected;
+    private int colorError;
+    private int colorDisconnected;
+    private Boolean cachedDiagIssue;
+    private long diagCacheAtMs;
+    private static final long DIAG_CACHE_MS = 15_000L;
 
     Set<String> allowList = new HashSet<>();
     JSONObject config = new JSONObject();
@@ -91,11 +99,16 @@ public class MainActivity extends AppCompatActivity {
                 public void onServiceBind(@NonNull XposedService service) {
                     xposedService = service;
                     lastConfigError = false;
+                    cachedDiagIssue = null;
                     runOnUiThread(() -> {
                         loadConfigFromRemotePreferences();
                         refreshFabStatus();
                         if (appListAdapter != null) {
-                            appListAdapter.notifyDataSetChanged();
+                            // Refresh allow flags from remote config
+                            for (AppInfo info : appListAdapter.mAppList) {
+                                info.isAllow = allowList.contains(info.packageName);
+                            }
+                            appListAdapter.notifyItemRangeChanged(0, appListAdapter.getItemCount(), PAYLOAD_STATUS);
                             updateStats();
                         }
                     });
@@ -140,7 +153,10 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         this.allowList.clear();
-        this.allowList.addAll(pref.getStringSet("allowList", new HashSet<>()));
+        Set<String> remote = pref.getStringSet("allowList", null);
+        if (remote != null) {
+            this.allowList.addAll(remote);
+        }
         try {
             this.config.put("allowList", new JSONArray(this.allowList));
             this.config.put("disableAutoCleanNotification", pref.getBoolean("disableAutoCleanNotification", false));
@@ -160,13 +176,24 @@ public class MainActivity extends AppCompatActivity {
         }
         int color;
         if (xposedService == null) {
-            color = ContextCompat.getColor(this, R.color.status_disconnected);
-        } else if (lastConfigError || hasFcmDiagnosticsIssue()) {
-            color = ContextCompat.getColor(this, R.color.status_error);
+            color = colorDisconnected;
+        } else if (lastConfigError || hasFcmDiagnosticsIssueCached()) {
+            color = colorError;
         } else {
-            color = ContextCompat.getColor(this, R.color.status_connected);
+            color = colorConnected;
         }
         mainFab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(color));
+    }
+
+    private boolean hasFcmDiagnosticsIssueCached() {
+        long now = System.currentTimeMillis();
+        if (cachedDiagIssue != null && (now - diagCacheAtMs) < DIAG_CACHE_MS) {
+            return cachedDiagIssue;
+        }
+        boolean issue = hasFcmDiagnosticsIssue();
+        cachedDiagIssue = issue;
+        diagCacheAtMs = now;
+        return issue;
     }
 
     /**
@@ -201,7 +228,6 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    /** 渐变模糊：使用 header_gradient_blur 底部渐隐 + API 31+ 窗口背景模糊 */
     private void applyHeaderBlur() {
         if (headerSafe == null) {
             return;
@@ -271,7 +297,6 @@ public class MainActivity extends AppCompatActivity {
         popup.show();
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     private boolean onFabMenuItemClick(MenuItem item) {
         int id = item.getItemId();
         try {
@@ -292,13 +317,15 @@ public class MainActivity extends AppCompatActivity {
             }
             if (id == 4) {
                 if (appListAdapter != null) {
+                    // Batch: mutate list + single config write
                     for (AppInfo appInfo : appListAdapter.mAppList) {
                         if (appInfo.includeFcm) {
-                            addAppInAllowList(appInfo.packageName);
+                            allowList.add(appInfo.packageName);
                             appInfo.isAllow = true;
                         }
                     }
-                    appListAdapter.notifyDataSetChanged();
+                    updateConfig();
+                    appListAdapter.notifyItemRangeChanged(0, appListAdapter.getItemCount(), PAYLOAD_STATUS);
                     updateStats();
                 }
                 return true;
@@ -314,6 +341,7 @@ public class MainActivity extends AppCompatActivity {
                     startActivity(intent);
                 } catch (Throwable e) {
                     lastConfigError = true;
+                    cachedDiagIssue = true;
                     refreshFabStatus();
                     new AlertDialog.Builder(this)
                             .setTitle("无法打开 FCM Diagnostics")
@@ -329,11 +357,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private static class AppInfo {
-        public String name;
-        public String packageName;
-        public Drawable icon;
-        public boolean isAllow;
-        public boolean includeFcm;
+        final String name;
+        final String packageName;
+        final Drawable icon;
+        boolean isAllow;
+        final boolean includeFcm;
 
         AppInfo(String name, String packageName, Drawable icon, boolean includeFcm, boolean isAllow) {
             this.name = name;
@@ -364,9 +392,14 @@ public class MainActivity extends AppCompatActivity {
 
         AppListAdapter(List<AppInfo> list) {
             this.mAppList = list;
+            setHasStableIds(true);
         }
 
-        @SuppressLint("NotifyDataSetChanged")
+        @Override
+        public long getItemId(int position) {
+            return mAppList.get(position).packageName.hashCode();
+        }
+
         @NonNull
         @Override
         public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -384,8 +417,7 @@ public class MainActivity extends AppCompatActivity {
                     addAppInAllowList(appInfo.packageName);
                 }
                 appInfo.isAllow = !appInfo.isAllow;
-                // Only the status glyph changes
-                notifyItemChanged(position);
+                notifyItemChanged(position, PAYLOAD_STATUS);
                 updateStats();
             });
             return holder;
@@ -396,17 +428,31 @@ public class MainActivity extends AppCompatActivity {
             AppInfo appInfo = mAppList.get(position);
             holder.icon.setImageDrawable(appInfo.icon);
             holder.name.setText(appInfo.name);
+            bindStatus(holder, appInfo);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position, @NonNull List<Object> payloads) {
+            if (payloads.isEmpty()) {
+                onBindViewHolder(holder, position);
+                return;
+            }
+            // Status-only update — skip icon/name rebind
+            bindStatus(holder, mAppList.get(position));
+        }
+
+        private void bindStatus(ViewHolder holder, AppInfo appInfo) {
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
                     holder.status.setText("✓");
-                    holder.status.setTextColor(ContextCompat.getColor(MainActivity.this, R.color.status_connected));
+                    holder.status.setTextColor(colorConnected);
                 } else {
                     holder.status.setText("×");
-                    holder.status.setTextColor(ContextCompat.getColor(MainActivity.this, R.color.status_error));
+                    holder.status.setTextColor(colorError);
                 }
             } else {
                 holder.status.setText("-");
-                holder.status.setTextColor(ContextCompat.getColor(MainActivity.this, R.color.status_disconnected));
+                holder.status.setTextColor(colorDisconnected);
             }
         }
 
@@ -423,6 +469,7 @@ public class MainActivity extends AppCompatActivity {
         List<AppInfo> notAllow = new ArrayList<>();
         List<AppInfo> noFcm = new ArrayList<>();
         PackageManager pm = getPackageManager();
+        Drawable defaultIcon = pm.getDefaultActivityIcon();
 
         List<PackageInfo> packages;
         try {
@@ -448,15 +495,25 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
             }
+
             String label;
             Drawable icon;
             try {
                 label = packageInfo.applicationInfo.loadLabel(pm).toString();
-                icon = packageInfo.applicationInfo.loadIcon(pm);
             } catch (Throwable t) {
                 label = packageInfo.packageName;
-                icon = null;
             }
+            // Only load real icons for FCM apps (majority of list cost)
+            if (hasFcm) {
+                try {
+                    icon = packageInfo.applicationInfo.loadIcon(pm);
+                } catch (Throwable t) {
+                    icon = defaultIcon;
+                }
+            } else {
+                icon = defaultIcon;
+            }
+
             boolean isAllow = allowListSet.contains(packageInfo.packageName);
             AppInfo info = new AppInfo(label, packageInfo.packageName, icon, hasFcm, isAllow);
             if (isAllow) {
@@ -473,15 +530,14 @@ public class MainActivity extends AppCompatActivity {
         allow.sort(byName);
         notAllow.sort(byName);
         noFcm.sort(byName);
+        // Prioritize actionable items: allowed → FCM not allowed → rest
         allow.addAll(notAllow);
         allow.addAll(noFcm);
         return allow;
     }
 
     private void loadAppListAsync() {
-        final Set<String> snapshot = new HashSet<>(allowList);
         BG.execute(() -> {
-            // allowList may change; use snapshot captured above via field read in buildAppList
             List<AppInfo> list = buildAppList();
             MAIN_HANDLER.post(() -> {
                 if (isFinishing() || isDestroyed()) {
@@ -512,6 +568,10 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        colorConnected = ContextCompat.getColor(this, R.color.status_connected);
+        colorError = ContextCompat.getColor(this, R.color.status_error);
+        colorDisconnected = ContextCompat.getColor(this, R.color.status_disconnected);
+
         headerSafe = findViewById(R.id.header_safe);
         statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
@@ -526,9 +586,10 @@ public class MainActivity extends AppCompatActivity {
 
         recyclerView = findViewById(R.id.recycler_view);
         recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
-        // Improves scroll when icons are large
         recyclerView.setHasFixedSize(true);
         recyclerView.setItemViewCacheSize(24);
+        // Avoid nested layout thrash while scrolling under translucent header
+        recyclerView.setClipToPadding(false);
 
         initXposedService();
 
@@ -541,21 +602,13 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable ignored) {
         }
 
-        // Small delay so XposedService bind can race in; scan runs off UI thread
-        MAIN_HANDLER.postDelayed(this::loadAppListAsync, 300);
+        MAIN_HANDLER.postDelayed(this::loadAppListAsync, 200);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         refreshFabStatus();
-    }
-
-    @Nullable
-    @Override
-    public View onCreateView(@Nullable View parent, @NonNull String name,
-                             @NonNull Context context, @NonNull AttributeSet attrs) {
-        return super.onCreateView(parent, name, context, attrs);
     }
 
     private void addAppInAllowList(String packageName) {

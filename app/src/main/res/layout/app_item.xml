@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="96dp"
+    android:layout_height="100dp"
     android:layout_margin="3dp"
-    android:background="?attr/selectableItemBackground"
+    android:background="?attr/selectableItemBackgroundBorderless"
+    android:foreground="?attr/selectableItemBackground"
     android:padding="6dp">
 
     <LinearLayout
@@ -16,7 +17,8 @@
             android:id="@+id/icon"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:contentDescription="@null" />
+            android:contentDescription="@null"
+            android:scaleType="fitCenter" />
 
         <TextView
             android:id="@+id/name"
@@ -24,9 +26,11 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:ellipsize="end"
-            android:gravity="center"
+            android:gravity="center_horizontal"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textSize="12sp"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textSize="11sp"
             android:textStyle="bold" />
 
         <TextView
@@ -35,7 +39,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:gravity="center"
-            android:textSize="14sp"
+            android:includeFontPadding="false"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
     </LinearLayout>
