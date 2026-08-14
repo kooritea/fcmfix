@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="100dp"
-    android:layout_margin="3dp"
+    android:layout_height="108dp"
+    android:layout_marginHorizontal="2dp"
+    android:layout_marginVertical="2dp"
     android:background="?attr/selectableItemBackgroundBorderless"
     android:foreground="?attr/selectableItemBackground"
-    android:padding="6dp">
+    android:paddingHorizontal="4dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="4dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center"
+        android:gravity="center_horizontal"
         android:orientation="vertical">
 
         <ImageView
@@ -24,24 +27,34 @@
             android:id="@+id/name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="3dp"
             android:ellipsize="end"
             android:gravity="center_horizontal"
             android:includeFontPadding="false"
             android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="11sp"
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/status"
-            android:layout_width="wrap_content"
+            android:id="@+id/package_name"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:gravity="center"
+            android:layout_marginTop="1dp"
+            android:ellipsize="middle"
+            android:gravity="center_horizontal"
             android:includeFontPadding="false"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:maxLines="1"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="9sp" />
+
+        <ImageView
+            android:id="@+id/status"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginTop="2dp"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter" />
 
     </LinearLayout>
 

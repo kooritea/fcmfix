@@ -29,10 +29,10 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
@@ -76,11 +76,15 @@ public class MainActivity extends AppCompatActivity {
     private int colorConnected;
     private int colorError;
     private int colorDisconnected;
+    private int colorPrimary;
+    private Drawable iconCheck;
+    private Drawable iconClose;
+    private Drawable iconDash;
+
     private Boolean cachedDiagIssue;
     private long diagCacheAtMs;
     private static final long DIAG_CACHE_MS = 15_000L;
 
-    /** Full list from scan; adapter shows a filtered view of this. */
     private List<AppInfo> fullAppList = new ArrayList<>();
 
     Set<String> allowList = new HashSet<>();
@@ -230,18 +234,12 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    /**
-     * Soft multi-stop scrim (no hard box). Uses theme surface color so light/dark both look intentional.
-     * True content-blur behind the header needs continuous capture and is expensive; a tuned scrim
-     * is the usual Material approach for list underlays.
-     */
     private void applyHeaderScrim() {
         if (headerSafe == null) {
             return;
         }
         try {
             TypedValue tv = new TypedValue();
-            // Prefer surface for readability over list icons
             int attr = com.google.android.material.R.attr.colorSurface;
             if (!getTheme().resolveAttribute(attr, tv, true)) {
                 getTheme().resolveAttribute(android.R.attr.colorBackground, tv, true);
@@ -251,13 +249,12 @@ public class MainActivity extends AppCompatActivity {
             int g = Color.green(surface);
             int b = Color.blue(surface);
 
-            // Longer, softer falloff — avoids a visible rectangular “panel”
             int[] colors = new int[]{
-                    Color.argb(0xF2, r, g, b), // ~95%
-                    Color.argb(0xE6, r, g, b), // ~90%
-                    Color.argb(0xB3, r, g, b), // ~70%
-                    Color.argb(0x59, r, g, b), // ~35%
-                    Color.argb(0x00, r, g, b)  // 0%
+                    Color.argb(0xF2, r, g, b),
+                    Color.argb(0xE6, r, g, b),
+                    Color.argb(0xB3, r, g, b),
+                    Color.argb(0x59, r, g, b),
+                    Color.argb(0x00, r, g, b)
             };
             GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors);
             gd.setGradientType(GradientDrawable.LINEAR_GRADIENT);
@@ -436,13 +433,15 @@ public class MainActivity extends AppCompatActivity {
             final View appView;
             final ImageView icon;
             final TextView name;
-            final TextView status;
+            final TextView packageName;
+            final ImageView status;
 
             ViewHolder(View view) {
                 super(view);
                 appView = view;
                 icon = view.findViewById(R.id.icon);
                 name = view.findViewById(R.id.name);
+                packageName = view.findViewById(R.id.package_name);
                 status = view.findViewById(R.id.status);
             }
         }
@@ -479,7 +478,6 @@ public class MainActivity extends AppCompatActivity {
                     addAppInAllowList(appInfo.packageName);
                 }
                 appInfo.isAllow = !appInfo.isAllow;
-                // If filtering by enabled, item may leave the list
                 if (filterMode == FilterMode.ENABLED && !appInfo.isAllow) {
                     applyFilter();
                 } else {
@@ -495,6 +493,7 @@ public class MainActivity extends AppCompatActivity {
             AppInfo appInfo = mAppList.get(position);
             holder.icon.setImageDrawable(appInfo.icon);
             holder.name.setText(appInfo.name);
+            holder.packageName.setText(appInfo.packageName);
             bindStatus(holder, appInfo);
         }
 
@@ -510,15 +509,16 @@ public class MainActivity extends AppCompatActivity {
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
-                    holder.status.setText("✓");
-                    holder.status.setTextColor(colorConnected);
+                    // Same material check glyph as Chip filter selected mark
+                    holder.status.setImageDrawable(iconCheck);
+                    holder.status.setColorFilter(colorPrimary);
                 } else {
-                    holder.status.setText("×");
-                    holder.status.setTextColor(colorError);
+                    holder.status.setImageDrawable(iconClose);
+                    holder.status.setColorFilter(colorError);
                 }
             } else {
-                holder.status.setText("-");
-                holder.status.setTextColor(colorDisconnected);
+                holder.status.setImageDrawable(iconDash);
+                holder.status.setColorFilter(colorDisconnected);
             }
         }
 
@@ -555,7 +555,9 @@ public class MainActivity extends AppCompatActivity {
             for (ActivityInfo receiverInfo : packageInfo.receivers) {
                 String n = receiverInfo.name;
                 if ("com.google.firebase.iid.FirebaseInstanceIdReceiver".equals(n)
-                        || "com.google.android.gms.measurement.AppMeasurementReceiver".equals(n)) {
+                        || "com.google.android.gms.measurement.AppMeasurementReceiver".equals(n)
+                        || (n != null && n.contains("FirebaseMessaging"))
+                        || (n != null && n.endsWith(".FirebaseInstanceIdReceiver"))) {
                     hasFcm = true;
                     break;
                 }
@@ -567,14 +569,11 @@ public class MainActivity extends AppCompatActivity {
             } catch (Throwable t) {
                 label = packageInfo.packageName;
             }
+            // Always load real icons
             Drawable icon;
-            if (hasFcm) {
-                try {
-                    icon = packageInfo.applicationInfo.loadIcon(pm);
-                } catch (Throwable t) {
-                    icon = defaultIcon;
-                }
-            } else {
+            try {
+                icon = packageInfo.applicationInfo.loadIcon(pm);
+            } catch (Throwable t) {
                 icon = defaultIcon;
             }
 
@@ -630,14 +629,41 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void prepareStatusIcons() {
+        iconCheck = ContextCompat.getDrawable(this, R.drawable.ic_status_check);
+        iconClose = ContextCompat.getDrawable(this, R.drawable.ic_status_close);
+        iconDash = ContextCompat.getDrawable(this, R.drawable.ic_status_dash);
+        if (iconCheck != null) {
+            iconCheck = DrawableCompat.wrap(iconCheck.mutate());
+        }
+        if (iconClose != null) {
+            iconClose = DrawableCompat.wrap(iconClose.mutate());
+        }
+        if (iconDash != null) {
+            iconDash = DrawableCompat.wrap(iconDash.mutate());
+        }
+
+        TypedValue tv = new TypedValue();
+        if (getTheme().resolveAttribute(com.google.android.material.R.attr.colorPrimary, tv, true)) {
+            colorPrimary = tv.data;
+        } else {
+            colorPrimary = colorConnected;
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Extra safety: theme already disables ActionBar
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
         setContentView(R.layout.activity_main);
 
         colorConnected = ContextCompat.getColor(this, R.color.status_connected);
         colorError = ContextCompat.getColor(this, R.color.status_error);
         colorDisconnected = ContextCompat.getColor(this, R.color.status_disconnected);
+        prepareStatusIcons();
 
         headerSafe = findViewById(R.id.header_safe);
         statsView = findViewById(R.id.stats);
