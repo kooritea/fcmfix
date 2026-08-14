@@ -231,17 +231,23 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    private int resolveThemeColor(int attr, int fallback) {
+        TypedValue tv = new TypedValue();
+        if (getTheme().resolveAttribute(attr, tv, true)) {
+            if (tv.resourceId != 0) {
+                return ContextCompat.getColor(this, tv.resourceId);
+            }
+            return tv.data;
+        }
+        return fallback;
+    }
+
     private void applyHeaderScrim() {
         if (headerSafe == null) {
             return;
         }
         try {
-            TypedValue tv = new TypedValue();
-            int attr = com.google.android.material.R.attr.colorSurface;
-            if (!getTheme().resolveAttribute(attr, tv, true)) {
-                getTheme().resolveAttribute(android.R.attr.colorBackground, tv, true);
-            }
-            int surface = tv.data;
+            int surface = resolveThemeColor(android.R.attr.colorBackground, Color.WHITE);
             int r = Color.red(surface);
             int g = Color.green(surface);
             int b = Color.blue(surface);
@@ -430,7 +436,7 @@ public class MainActivity extends AppCompatActivity {
             final View appView;
             final ImageView icon;
             final TextView name;
-            final TextView packageName;
+            final TextView appPkg;
             final TextView status;
 
             ViewHolder(View view) {
@@ -438,7 +444,7 @@ public class MainActivity extends AppCompatActivity {
                 appView = view;
                 icon = view.findViewById(R.id.icon);
                 name = view.findViewById(R.id.name);
-                packageName = view.findViewById(R.id.package_name);
+                appPkg = view.findViewById(R.id.app_pkg);
                 status = view.findViewById(R.id.status);
             }
         }
@@ -490,7 +496,7 @@ public class MainActivity extends AppCompatActivity {
             AppInfo appInfo = mAppList.get(position);
             holder.icon.setImageDrawable(appInfo.icon);
             holder.name.setText(appInfo.name);
-            holder.packageName.setText(appInfo.packageName);
+            holder.appPkg.setText(appInfo.packageName);
             bindStatus(holder, appInfo);
         }
 
@@ -504,7 +510,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
-            // Use same visual family as Material Chip check (✓) with theme primary
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
                     holder.status.setText("\u2713");
@@ -639,12 +644,7 @@ public class MainActivity extends AppCompatActivity {
         colorConnected = ContextCompat.getColor(this, R.color.status_connected);
         colorError = ContextCompat.getColor(this, R.color.status_error);
         colorDisconnected = ContextCompat.getColor(this, R.color.status_disconnected);
-        TypedValue tv = new TypedValue();
-        if (getTheme().resolveAttribute(com.google.android.material.R.attr.colorPrimary, tv, true)) {
-            colorPrimary = tv.data;
-        } else {
-            colorPrimary = colorConnected;
-        }
+        colorPrimary = resolveThemeColor(android.R.attr.colorPrimary, colorConnected);
 
         headerSafe = findViewById(R.id.header_safe);
         statsView = findViewById(R.id.stats);

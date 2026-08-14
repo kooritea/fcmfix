@@ -35,12 +35,12 @@
             android:gravity="center_horizontal"
             android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="?attr/colorOnSurface"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="11sp"
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/package_name"
+            android:id="@+id/app_pkg"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="1dp"
@@ -48,7 +48,7 @@
             android:gravity="center_horizontal"
             android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textColor="?android:attr/textColorSecondary"
             android:textSize="9sp" />
 
         <TextView
