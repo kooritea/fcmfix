@@ -3,55 +3,37 @@ name: Android CI
 on:
   push:
     branches: [ "master", "merge-fcmfuck" ]
+  pull_request:
+    branches: [ "master" ]
 
 permissions:
   contents: write
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v5
 
-    - name: Set up JDK 21
-      uses: actions/setup-java@v5
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: gradle
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      - name: Grant execute permission
+        run: chmod +x gradlew
 
-    - name: Retrieve version name
-      run: echo VERSION_NAME=$(date "+%Y%m%d")_$(echo ${{ github.event.head_commit.id }} | head -c 7) >> $GITHUB_ENV
+      - name: Build release
+        run: ./gradlew assembleRelease --stacktrace --warning-mode all
 
-    - name: Retrieve version code
-      run: echo VERSION_CODE=$(grep -Eo 'versionCode[[:space:]]+[0-9]+' ${{ github.workspace }}/app/build.gradle | grep -Eo '[0-9]+') >> $GITHUB_ENV
+      - name: Run lint
+        run: ./gradlew lint
 
-    - name: Set version name
-      run: sed -i "s/versionName \".*\"/versionName \"${{ env.VERSION_NAME }}\"/" ${{ github.workspace }}/app/build.gradle
-
-    - name: Build with Gradle
-      run: ./gradlew assembleRelease --stacktrace --warning-mode all
-
-    - name: Rename unsigned APK
-      run: |
-        mv app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/fcmself-ci-${{ env.VERSION_NAME }}-unsigned.apk
-
-    - name: Upload unsigned APK
-      uses: actions/upload-artifact@v6
-      with:
-        name: release-unsigned
-        path: app/build/outputs/apk/release/fcmself-ci-*-unsigned.apk
-
-    - name: Release unsigned APK
-      if: github.ref == 'refs/heads/master'
-      uses: softprops/action-gh-release@v3
-      with:
-        name: "Auto Release ${{ env.VERSION_NAME }}"
-        tag_name: ${{ env.VERSION_CODE }}-${{ env.VERSION_NAME }}
-        files: app/build/outputs/apk/release/fcmself-ci-*-unsigned.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-apk
+          path: app/build/outputs/apk/release/*.apk
