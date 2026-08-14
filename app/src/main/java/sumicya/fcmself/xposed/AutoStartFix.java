@@ -33,11 +33,13 @@ public class AutoStartFix extends XposedModule {
 
     protected void startHook() {
         try {
-            // miui12
             Class<?> BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueInjector", classLoader);
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueInjector, "checkApplicationAutoStart", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if (!isBootComplete) {
+                        return;
+                    }
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[2], "intent");
                     if (!isFCMIntent(intent)) {
                         return;
@@ -55,11 +57,13 @@ public class AutoStartFix extends XposedModule {
             printLog("No Such Method com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
         }
         try {
-            // miui13
             Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueImpl", classLoader);
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl, "checkApplicationAutoStart", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if (!isBootComplete) {
+                        return;
+                    }
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     if (!isFCMIntent(intent)) {
                         return;
@@ -77,12 +81,14 @@ public class AutoStartFix extends XposedModule {
         }
 
         try {
-            // hyperos
             Class<?> BroadcastQueueImpl = XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernStubImpl", classLoader);
             printLog("[fcmself] start hook com.android.server.am.BroadcastQueueModernStubImpl.checkApplicationAutoStart");
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl, "checkApplicationAutoStart", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if (!isBootComplete) {
+                        return;
+                    }
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     if (!isFCMIntent(intent)) {
                         return;
@@ -99,6 +105,9 @@ public class AutoStartFix extends XposedModule {
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueImpl, "checkReceiverIfRestricted", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if (!isBootComplete) {
+                        return;
+                    }
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     if (!isFCMIntent(intent)) {
                         return;
@@ -119,6 +128,9 @@ public class AutoStartFix extends XposedModule {
             XC_MethodHook methodHook = new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if (!isBootComplete) {
+                        return;
+                    }
                     Intent intent = (Intent) methodHookParam.args[1];
                     if (!isFCMIntent(intent)) {
                         return;
@@ -148,6 +160,9 @@ public class AutoStartFix extends XposedModule {
             XposedUtils.findAndHookMethodAnyParam(SmartPowerService, "shouldInterceptBroadcast", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if (!isBootComplete) {
+                        return;
+                    }
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
                     if (!isFCMIntent(intent)) {
                         return;
@@ -164,13 +179,15 @@ public class AutoStartFix extends XposedModule {
         }
 
         try {
-            // oos15/cos15
             Method method = XposedUtils.findMethod(
                     XposedHelpers.findClass("com.android.server.am.OplusAppStartupManager", classLoader),
                     "shouldPreventSendReceiverReal", 4);
             XposedBridge.hookMethod(method, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                    if (!isBootComplete) {
+                        return;
+                    }
                     if (methodHookParam.args[0] == null) {
                         return;
                     }
@@ -191,7 +208,6 @@ public class AutoStartFix extends XposedModule {
 
     protected void startHookRemovePowerPolicy() {
         try {
-            // MIUI13
             Class<?> AutoStartManagerService = XposedHelpers.findClass("com.miui.server.smartpower.SmartPowerPolicyManager", classLoader);
             XposedUtils.findAndHookMethodAnyParam(AutoStartManagerService, "shouldInterceptService", new XC_MethodHook() {
                 @Override
