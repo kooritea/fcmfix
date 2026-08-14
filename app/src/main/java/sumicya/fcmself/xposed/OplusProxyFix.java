@@ -3,6 +3,8 @@ package sumicya.fcmself.xposed;
 import android.content.pm.PackageManager;
 import android.os.WorkSource;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 import sumicya.fcmself.util.XposedUtils;
 
 import sumicya.fcmself.libxposed.XC_MethodHook;
@@ -14,6 +16,11 @@ public class OplusProxyFix extends XposedModule {
     private static Object s_oplusProxyWakeLock = null;
     private static volatile boolean s_useFourParams = false;
     private static volatile boolean s_signatureDetected = false;
+
+    /** UID cache — PackageManager lookup is relatively expensive on the broadcast hot path. */
+    private static final ConcurrentHashMap<String, Integer> sUidCache = new ConcurrentHashMap<>();
+    /** Reusable empty WorkSource to avoid allocation on every unfreeze. */
+    private static final WorkSource EMPTY_WS = new WorkSource();
 
     public OplusProxyFix(ClassLoader classLoader) {
         super(classLoader);
@@ -52,7 +59,8 @@ public class OplusProxyFix extends XposedModule {
                 String pkgName = (String) param.args[5];
                 String action = (String) param.args[6];
                 if (isFCMAction(action) && targetIsAllow(pkgName)) {
-                    printLog("shouldProxy: bypass pkg=" + pkgName + ", caller=" + callingPkg + ", action=" + action);
+                    // diagnostics-only (throttled) — ColorOS path can be very frequent
+                    printLog("shouldProxy: bypass pkg=" + pkgName + ", caller=" + callingPkg, true);
                     param.setResult(notIncludeValue);
                 }
             }
@@ -75,15 +83,22 @@ public class OplusProxyFix extends XposedModule {
     }
 
     private static int getTargetUidFromPackageName(String packageName) {
-        if (packageName != null) {
-            try {
-                PackageManager pm = context.getPackageManager();
-                return pm.getPackageUid(packageName, 0);
-            } catch (PackageManager.NameNotFoundException e) {
-                printLog("error: Package not found: " + packageName);
-            }
+        if (packageName == null || context == null) {
+            return -1;
         }
-        return -1;
+        Integer cached = sUidCache.get(packageName);
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            int uid = context.getPackageManager().getPackageUid(packageName, 0);
+            sUidCache.put(packageName, uid);
+            return uid;
+        } catch (PackageManager.NameNotFoundException e) {
+            return -1;
+        } catch (Throwable t) {
+            return -1;
+        }
     }
 
     public static void unfreeze(String target) {
@@ -96,8 +111,9 @@ public class OplusProxyFix extends XposedModule {
             return;
         }
 
-        WorkSource ws = new WorkSource();
-        String tag = "FCMXX";
+        // Reuse empty WorkSource — allocation-free on the FCM hot path
+        final WorkSource ws = EMPTY_WS;
+        final String tag = "FCMXX";
 
         if (!s_signatureDetected) {
             try {
@@ -108,15 +124,15 @@ public class OplusProxyFix extends XposedModule {
                 s_useFourParams = false;
             }
             s_signatureDetected = true;
+            printLog("unfreeze signature detected, fourParams=" + s_useFourParams, true);
         } else {
             try {
                 if (s_useFourParams) {
                     XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
-                    printLog("unfreeze " + target + ", uid=" + uid);
                 } else {
                     XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
-                    printLog("unfreeze " + target + ", uid=" + uid);
                 }
+                // No per-call log — runs on every allowed FCM on ColorOS
             } catch (Throwable ignored) {
             }
         }
