@@ -2,12 +2,15 @@ package sumicya.fcmself.util;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.util.concurrent.ConcurrentHashMap;
 
 import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
 
 public class XposedUtils {
+
+    private static final ConcurrentHashMap<String, String[]> FIELD_PATH_CACHE = new ConcurrentHashMap<>();
 
     public static XC_MethodHook.Unhook findAndHookConstructorAnyParam(String className, ClassLoader classLoader, XC_MethodHook callbacks, Class<?>... parameterTypes) {
         Class<?> clazz = XposedHelpers.findClass(className, classLoader);
@@ -141,11 +144,16 @@ public class XposedUtils {
     }
 
     public static Object getObjectFieldByPath(Object obj, String pathFieldName) {
-        String[] paths = pathFieldName.split("\\.");
+        String[] fields = FIELD_PATH_CACHE.get(pathFieldName);
+        if (fields == null) {
+            String[] parsed = pathFieldName.split("\\.");
+            String[] existing = FIELD_PATH_CACHE.putIfAbsent(pathFieldName, parsed);
+            fields = existing != null ? existing : parsed;
+        }
         Object tmp = obj;
         try {
-            for (String fieldName : paths) {
-                tmp = XposedHelpers.getObjectField(tmp, fieldName);
+            for (String field : fields) {
+                tmp = XposedHelpers.getObjectField(tmp, field);
             }
         } catch (Throwable e) {
             throw new NoSuchFieldError(obj.getClass().getName() + "#" + pathFieldName);
