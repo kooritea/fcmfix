@@ -10,6 +10,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -30,6 +31,10 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -58,8 +63,29 @@ import sumicya.fcmself.util.IceboxUtils;
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
-    private static final ExecutorService BG = Executors.newSingleThreadExecutor();
+    private static final ExecutorService BG = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "fcmself-apps");
+        t.setPriority(Thread.NORM_PRIORITY - 1);
+        return t;
+    });
+    /** Parallel icon decode — does not block the app-list scan thread. */
+    private static final ExecutorService ICON_EXEC = Executors.newFixedThreadPool(
+            Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors())),
+            r -> {
+                Thread t = new Thread(r, "fcmself-icon");
+                t.setPriority(Thread.NORM_PRIORITY - 1);
+                return t;
+            });
     private static final Object PAYLOAD_STATUS = new Object();
+    private static final Object PAYLOAD_ICON = new Object();
+
+    /** Text-presentation (U+FE0E) so OEM emoji fonts do not restyle these. */
+    private static final String STATUS_OK = "\u2713\uFE0E"; // ✓
+    private static final String STATUS_NO = "\u2717\uFE0E"; // ✗
+    private static final String STATUS_NA = "\u2013";       // – en dash
+    private static final Typeface STATUS_TYPEFACE = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+
+    private Drawable defaultAppIcon;
 
     private enum FilterMode { ALL, FCM_ONLY, ENABLED }
 
@@ -416,9 +442,11 @@ public class MainActivity extends AppCompatActivity {
     private static class AppInfo {
         final String name;
         final String packageName;
-        final Drawable icon;
+        /** Lazily loaded; null until first bind requests it. */
+        volatile Drawable icon;
         boolean isAllow;
         final boolean includeFcm;
+        volatile boolean iconLoading;
 
         AppInfo(String name, String packageName, Drawable icon, boolean includeFcm, boolean isAllow) {
             this.name = name;
@@ -494,10 +522,10 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             AppInfo appInfo = mAppList.get(position);
-            holder.icon.setImageDrawable(appInfo.icon);
             holder.name.setText(appInfo.name);
             holder.appPkg.setText(appInfo.packageName);
             bindStatus(holder, appInfo);
+            bindIcon(holder, appInfo);
         }
 
         @Override
@@ -506,22 +534,81 @@ public class MainActivity extends AppCompatActivity {
                 onBindViewHolder(holder, position);
                 return;
             }
-            bindStatus(holder, mAppList.get(position));
+            AppInfo appInfo = mAppList.get(position);
+            holder.icon.setTag(appInfo.packageName);
+            for (Object payload : payloads) {
+                if (payload == PAYLOAD_ICON) {
+                    if (appInfo.icon != null
+                            && appInfo.packageName.equals(holder.icon.getTag())) {
+                        holder.icon.setImageDrawable(appInfo.icon);
+                    }
+                } else if (payload == PAYLOAD_STATUS) {
+                    bindStatus(holder, appInfo);
+                }
+            }
+        }
+
+        private void bindIcon(ViewHolder holder, AppInfo appInfo) {
+            // Tag guards against recycled view showing wrong icon
+            holder.icon.setTag(appInfo.packageName);
+            Drawable cached = appInfo.icon;
+            if (cached != null) {
+                holder.icon.setImageDrawable(cached);
+                return;
+            }
+            holder.icon.setImageDrawable(defaultAppIcon != null
+                    ? defaultAppIcon
+                    : getPackageManager().getDefaultActivityIcon());
+            if (appInfo.iconLoading) {
+                return;
+            }
+            appInfo.iconLoading = true;
+            final String pkg = appInfo.packageName;
+            ICON_EXEC.execute(() -> {
+                Drawable d;
+                try {
+                    d = getPackageManager().getApplicationIcon(pkg);
+                } catch (Throwable t) {
+                    d = defaultAppIcon;
+                }
+                appInfo.icon = d;
+                appInfo.iconLoading = false;
+                MAIN_HANDLER.post(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    // Find current index (list may have been filtered)
+                    for (int i = 0, n = mAppList.size(); i < n; i++) {
+                        if (pkg.equals(mAppList.get(i).packageName)) {
+                            notifyItemChanged(i, PAYLOAD_ICON);
+                            break;
+                        }
+                    }
+                });
+            });
         }
 
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
+            holder.status.setTypeface(STATUS_TYPEFACE);
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
-                    holder.status.setText("\u2713");
+                    holder.status.setText(STATUS_OK);
                     holder.status.setTextColor(colorPrimary);
                 } else {
-                    holder.status.setText("\u2717");
+                    holder.status.setText(STATUS_NO);
                     holder.status.setTextColor(colorError);
                 }
             } else {
-                holder.status.setText("\u2013");
+                holder.status.setText(STATUS_NA);
                 holder.status.setTextColor(colorDisconnected);
             }
+        }
+
+        @Override
+        public void onViewRecycled(@NonNull ViewHolder holder) {
+            super.onViewRecycled(holder);
+            holder.icon.setTag(null);
+            holder.icon.setImageDrawable(defaultAppIcon);
         }
 
         @Override
@@ -536,7 +623,6 @@ public class MainActivity extends AppCompatActivity {
         List<AppInfo> notAllow = new ArrayList<>();
         List<AppInfo> noFcm = new ArrayList<>();
         PackageManager pm = getPackageManager();
-        Drawable defaultIcon = pm.getDefaultActivityIcon();
 
         List<PackageInfo> packages;
         try {
@@ -574,15 +660,9 @@ public class MainActivity extends AppCompatActivity {
             } catch (Throwable t) {
                 label = packageInfo.packageName;
             }
-            Drawable icon;
-            try {
-                icon = packageInfo.applicationInfo.loadIcon(pm);
-            } catch (Throwable t) {
-                icon = defaultIcon;
-            }
-
+            // Icon loaded lazily on bind — scanning hundreds of packages stays fast
             boolean isAllow = allowListSet.contains(packageInfo.packageName);
-            AppInfo info = new AppInfo(label, packageInfo.packageName, icon, hasFcm, isAllow);
+            AppInfo info = new AppInfo(label, packageInfo.packageName, null, hasFcm, isAllow);
             if (isAllow) {
                 allow.add(info);
             } else if (hasFcm) {
@@ -615,7 +695,12 @@ public class MainActivity extends AppCompatActivity {
                     recyclerView.setAdapter(appListAdapter);
                 }
                 applyFilter();
-                findViewById(R.id.progress_bar).setVisibility(View.GONE);
+                View loading = findViewById(R.id.loading_container);
+                if (loading != null) {
+                    loading.setVisibility(View.GONE);
+                } else {
+                    findViewById(R.id.progress_bar).setVisibility(View.GONE);
+                }
                 recyclerView.setVisibility(View.VISIBLE);
                 updateStats();
                 refreshFabStatus();
@@ -633,12 +718,66 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+
+    /**
+     * Header extends into the status-bar region (fills the former empty strip).
+     * Recycler top padding tracks real header height so content is not clipped.
+     */
+    private void setupEdgeToEdgeInsets() {
+        if (headerSafe == null) {
+            return;
+        }
+        final int basePadStart = headerSafe.getPaddingStart();
+        final int basePadEnd = headerSafe.getPaddingEnd();
+        final int basePadBottom = headerSafe.getPaddingBottom();
+        final int extraTop = (int) (8 * getResources().getDisplayMetrics().density + 0.5f);
+
+        ViewCompat.setOnApplyWindowInsetsListener(headerSafe, (v, windowInsets) -> {
+            Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars());
+            v.setPaddingRelative(basePadStart, bars.top + extraTop, basePadEnd, basePadBottom);
+            return windowInsets;
+        });
+        ViewCompat.requestApplyInsets(headerSafe);
+
+        headerSafe.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (recyclerView == null) {
+                return;
+            }
+            int h = v.getHeight();
+            if (h <= 0) {
+                return;
+            }
+            int pl = recyclerView.getPaddingLeft();
+            int pr = recyclerView.getPaddingRight();
+            int pb = recyclerView.getPaddingBottom();
+            if (recyclerView.getPaddingTop() != h) {
+                recyclerView.setPadding(pl, h, pr, pb);
+            }
+        });
+
+        if (mainFab != null) {
+            final int fabEnd = (int) (36 * getResources().getDisplayMetrics().density + 0.5f);
+            final int fabBottom = (int) (24 * getResources().getDisplayMetrics().density + 0.5f);
+            ViewCompat.setOnApplyWindowInsetsListener(mainFab, (v, windowInsets) -> {
+                Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+                lp.rightMargin = fabEnd + bars.right;
+                lp.bottomMargin = fabBottom + bars.bottom;
+                v.setLayoutParams(lp);
+                return windowInsets;
+            });
+            ViewCompat.requestApplyInsets(mainFab);
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
+        // Draw under status bar so the header scrim fills the top gap
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);
 
         colorConnected = ContextCompat.getColor(this, R.color.status_connected);
@@ -652,6 +791,7 @@ public class MainActivity extends AppCompatActivity {
         filterChips = findViewById(R.id.filter_chips);
         applyHeaderScrim();
         setupFilterChips();
+        setupEdgeToEdgeInsets();
 
         try {
             mainFab.setImageResource(android.R.drawable.ic_menu_manage);
@@ -661,10 +801,20 @@ public class MainActivity extends AppCompatActivity {
         refreshFabStatus();
 
         recyclerView = findViewById(R.id.recycler_view);
+        defaultAppIcon = getPackageManager().getDefaultActivityIcon();
         recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
         recyclerView.setHasFixedSize(true);
-        recyclerView.setItemViewCacheSize(24);
+        recyclerView.setItemViewCacheSize(32);
+        recyclerView.setDrawingCacheEnabled(false);
         recyclerView.setClipToPadding(false);
+        // Prefetch a row ahead while flinging
+        RecyclerView.RecycledViewPool pool = new RecyclerView.RecycledViewPool();
+        pool.setMaxRecycledViews(0, 24);
+        recyclerView.setRecycledViewPool(pool);
+        GridLayoutManager glm = (GridLayoutManager) recyclerView.getLayoutManager();
+        if (glm != null) {
+            glm.setInitialPrefetchItemCount(6);
+        }
 
         initXposedService();
 
@@ -677,7 +827,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable ignored) {
         }
 
-        MAIN_HANDLER.postDelayed(this::loadAppListAsync, 200);
+        MAIN_HANDLER.post(this::loadAppListAsync);
     }
 
     @Override
