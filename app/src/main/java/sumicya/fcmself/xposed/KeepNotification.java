@@ -11,6 +11,9 @@ import sumicya.fcmself.libxposed.XposedHelpers;
 
 public class KeepNotification extends XposedModule {
 
+    private static volatile boolean sDisableAutoClean = false;
+    private static volatile boolean sConfigCached = false;
+
     public KeepNotification(ClassLoader classLoader) {
         super(classLoader);
         try {
@@ -78,7 +81,11 @@ public class KeepNotification extends XposedModule {
                     if (!isBootComplete) {
                         return;
                     }
-                    if (getBooleanConfig("disableAutoCleanNotification", false) && targetIsAllow((String) param.args[finalPkg_args_index])) {
+                    if (!sConfigCached) {
+                        sDisableAutoClean = getBooleanConfig("disableAutoCleanNotification", false);
+                        sConfigCached = true;
+                    }
+                    if (sDisableAutoClean && targetIsAllow((String) param.args[finalPkg_args_index])) {
                         int reason = (int) param.args[finalReason_args_index];
                         if (reason == NotificationListenerService.REASON_PACKAGE_CHANGED) {
                             param.setResult(null);
