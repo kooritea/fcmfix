@@ -39,6 +39,7 @@ public class ReconnectManagerFix extends XposedModule {
 
     // Cached from SharedPreferences after successful resolution
     private String cachedAlarmTypePath;
+    private String[] cachedAlarmTypePathParts;
     private long cachedHbInterval;
     private long cachedConnInterval;
     private Field cachedMaxLongField;
@@ -158,12 +159,12 @@ public class ReconnectManagerFix extends XposedModule {
             SharedPreferences prefs = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
             cachedHbInterval = prefs.getLong("heartbeatInterval", 0L);
             cachedConnInterval = prefs.getLong("reconnInterval", 0L);
-            cachedAlarmTypePath = prefs.getString("timer_alarm_type_property", "");
+            updateCachedAlarmTypePath(prefs.getString("timer_alarm_type_property", ""));
             return;
         }
 
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
-        cachedAlarmTypePath = sharedPreferences.getString("timer_alarm_type_property", "");
+        updateCachedAlarmTypePath(sharedPreferences.getString("timer_alarm_type_property", ""));
         cachedHbInterval = sharedPreferences.getLong("heartbeatInterval", 0L);
         cachedConnInterval = sharedPreferences.getLong("reconnInterval", 0L);
 
@@ -181,7 +182,7 @@ public class ReconnectManagerFix extends XposedModule {
                 if (cachedHbInterval <= 1000 && cachedConnInterval <= 1000) {
                     return;
                 }
-                String alarmType = (String) XposedUtils.getObjectFieldByPath(param.thisObject, cachedAlarmTypePath);
+                String alarmType = getCachedAlarmType(param.thisObject);
                 if ("GCM_HB_ALARM".equals(alarmType) || "GCM_CONN_ALARM".equals(alarmType)) {
                     param.setResult(param.getResult() + "[fcmfix locked]");
                 }
@@ -191,7 +192,7 @@ public class ReconnectManagerFix extends XposedModule {
         XposedHelpers.findAndHookMethod(timerClazz, setTimeoutMethod, long.class, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(final MethodHookParam param) {
-                String alarmType = (String) XposedUtils.getObjectFieldByPath(param.thisObject, cachedAlarmTypePath);
+                String alarmType = getCachedAlarmType(param.thisObject);
                 if ("GCM_HB_ALARM".equals(alarmType)) {
                     if (cachedHbInterval > 1000) {
                         param.args[0] = cachedHbInterval;
@@ -205,7 +206,7 @@ public class ReconnectManagerFix extends XposedModule {
 
             @Override
             protected void afterHookedMethod(final MethodHookParam param) {
-                String alarmType = (String) XposedUtils.getObjectFieldByPath(param.thisObject, cachedAlarmTypePath);
+                String alarmType = getCachedAlarmType(param.thisObject);
                 if (!"GCM_HB_ALARM".equals(alarmType) && !"GCM_CONN_ALARM".equals(alarmType)) {
                     return;
                 }
@@ -246,6 +247,27 @@ public class ReconnectManagerFix extends XposedModule {
         });
 
         hooksInstalled = true;
+    }
+
+    private void updateCachedAlarmTypePath(String path) {
+        cachedAlarmTypePath = path;
+        cachedAlarmTypePathParts = path.isEmpty() ? null : path.split("\\.");
+    }
+
+    private String getCachedAlarmType(Object timerObject) {
+        String[] pathParts = cachedAlarmTypePathParts;
+        if (pathParts == null) {
+            return null;
+        }
+        Object value = timerObject;
+        try {
+            for (String fieldName : pathParts) {
+                value = XposedHelpers.getObjectField(value, fieldName);
+            }
+            return value instanceof String ? (String) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private final BroadcastReceiver logBroadcastReceive = new BroadcastReceiver() {
@@ -313,7 +335,7 @@ public class ReconnectManagerFix extends XposedModule {
                                                 .putString("timer_alarm_type_property", path)
                                                 .putBoolean("enable", true)
                                                 .apply();
-                                        cachedAlarmTypePath = path;
+                                        updateCachedAlarmTypePath(path);
                                         isFinish[0] = true;
                                         printLog("更新hook位置成功", true);
                                         sendNotification("自动更新配置文件成功");
