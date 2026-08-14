@@ -1,6 +1,5 @@
 package sumicya.fcmself;
 
-import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
@@ -11,11 +10,12 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -32,6 +32,8 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import io.github.libxposed.service.XposedService;
@@ -57,8 +59,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final ExecutorService BG = Executors.newSingleThreadExecutor();
-
     private static final Object PAYLOAD_STATUS = new Object();
+
+    private enum FilterMode { ALL, FCM_ONLY, ENABLED }
 
     private AppListAdapter appListAdapter;
     private static XposedService xposedService;
@@ -66,15 +69,19 @@ public class MainActivity extends AppCompatActivity {
     private TextView statsView;
     private View headerSafe;
     private RecyclerView recyclerView;
+    private ChipGroup filterChips;
     private boolean lastConfigError = false;
+    private FilterMode filterMode = FilterMode.ALL;
 
-    // Cached colors / diagnostics (avoid repeated resource + PM queries)
     private int colorConnected;
     private int colorError;
     private int colorDisconnected;
     private Boolean cachedDiagIssue;
     private long diagCacheAtMs;
     private static final long DIAG_CACHE_MS = 15_000L;
+
+    /** Full list from scan; adapter shows a filtered view of this. */
+    private List<AppInfo> fullAppList = new ArrayList<>();
 
     Set<String> allowList = new HashSet<>();
     JSONObject config = new JSONObject();
@@ -104,11 +111,10 @@ public class MainActivity extends AppCompatActivity {
                         loadConfigFromRemotePreferences();
                         refreshFabStatus();
                         if (appListAdapter != null) {
-                            // Refresh allow flags from remote config
-                            for (AppInfo info : appListAdapter.mAppList) {
+                            for (AppInfo info : fullAppList) {
                                 info.isAllow = allowList.contains(info.packageName);
                             }
-                            appListAdapter.notifyItemRangeChanged(0, appListAdapter.getItemCount(), PAYLOAD_STATUS);
+                            applyFilter();
                             updateStats();
                         }
                     });
@@ -169,7 +175,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** 绿=已连接 · 黄=有报错码/诊断异常 · 灰=未连接 */
     private void refreshFabStatus() {
         if (mainFab == null) {
             return;
@@ -196,9 +201,6 @@ public class MainActivity extends AppCompatActivity {
         return issue;
     }
 
-    /**
-     * FCM 诊断相关：GMS 缺失、Diagnostics 组件不可用、或远程配置记录了错误码时视为黄。
-     */
     private boolean hasFcmDiagnosticsIssue() {
         try {
             PackageManager pm = getPackageManager();
@@ -228,42 +230,54 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private void applyHeaderBlur() {
+    /**
+     * Soft multi-stop scrim (no hard box). Uses theme surface color so light/dark both look intentional.
+     * True content-blur behind the header needs continuous capture and is expensive; a tuned scrim
+     * is the usual Material approach for list underlays.
+     */
+    private void applyHeaderScrim() {
         if (headerSafe == null) {
             return;
         }
         try {
-            android.util.TypedValue tv = new android.util.TypedValue();
-            getTheme().resolveAttribute(com.google.android.material.R.attr.colorSurfaceContainer, tv, true);
+            TypedValue tv = new TypedValue();
+            // Prefer surface for readability over list icons
+            int attr = com.google.android.material.R.attr.colorSurface;
+            if (!getTheme().resolveAttribute(attr, tv, true)) {
+                getTheme().resolveAttribute(android.R.attr.colorBackground, tv, true);
+            }
             int surface = tv.data;
-            int start = Color.argb(0xE6, Color.red(surface), Color.green(surface), Color.blue(surface));
-            int mid = Color.argb(0x99, Color.red(surface), Color.green(surface), Color.blue(surface));
-            int end = Color.argb(0x00, Color.red(surface), Color.green(surface), Color.blue(surface));
+            int r = Color.red(surface);
+            int g = Color.green(surface);
+            int b = Color.blue(surface);
 
-            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[]{start, mid, end});
-            gd.setGradientType(android.graphics.drawable.GradientDrawable.LINEAR_GRADIENT);
+            // Longer, softer falloff — avoids a visible rectangular “panel”
+            int[] colors = new int[]{
+                    Color.argb(0xF2, r, g, b), // ~95%
+                    Color.argb(0xE6, r, g, b), // ~90%
+                    Color.argb(0xB3, r, g, b), // ~70%
+                    Color.argb(0x59, r, g, b), // ~35%
+                    Color.argb(0x00, r, g, b)  // 0%
+            };
+            GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors);
+            gd.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+            gd.setShape(GradientDrawable.RECTANGLE);
             headerSafe.setBackground(gd);
             headerSafe.setElevation(0f);
+            headerSafe.setOutlineProvider(null);
+            headerSafe.setClipToOutline(false);
         } catch (Throwable t) {
-            headerSafe.setAlpha(0.94f);
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                getWindow().setBackgroundBlurRadius(28);
-            } catch (Throwable ignored) {
-            }
+            headerSafe.setAlpha(0.96f);
         }
     }
 
     private void updateStats() {
-        if (statsView == null || appListAdapter == null) {
+        if (statsView == null) {
             return;
         }
         int enabled = 0;
         int totalFcm = 0;
-        for (AppInfo info : appListAdapter.mAppList) {
+        for (AppInfo info : fullAppList) {
             if (info.includeFcm) {
                 totalFcm++;
                 if (info.isAllow) {
@@ -271,7 +285,53 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
-        statsView.setText(enabled + " · " + totalFcm);
+        statsView.setText("已启用 " + enabled + " / FCM " + totalFcm);
+    }
+
+    private void applyFilter() {
+        if (appListAdapter == null) {
+            return;
+        }
+        List<AppInfo> filtered = new ArrayList<>();
+        for (AppInfo info : fullAppList) {
+            switch (filterMode) {
+                case FCM_ONLY:
+                    if (info.includeFcm) {
+                        filtered.add(info);
+                    }
+                    break;
+                case ENABLED:
+                    if (info.isAllow) {
+                        filtered.add(info);
+                    }
+                    break;
+                case ALL:
+                default:
+                    filtered.add(info);
+                    break;
+            }
+        }
+        appListAdapter.replaceList(filtered);
+    }
+
+    private void setupFilterChips() {
+        if (filterChips == null) {
+            return;
+        }
+        filterChips.setOnCheckedStateChangeListener((group, checkedIds) -> {
+            if (checkedIds.isEmpty()) {
+                return;
+            }
+            int id = checkedIds.get(0);
+            if (id == R.id.chip_fcm) {
+                filterMode = FilterMode.FCM_ONLY;
+            } else if (id == R.id.chip_enabled) {
+                filterMode = FilterMode.ENABLED;
+            } else {
+                filterMode = FilterMode.ALL;
+            }
+            applyFilter();
+        });
     }
 
     private void showFabMenu() {
@@ -316,18 +376,15 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
             if (id == 4) {
-                if (appListAdapter != null) {
-                    // Batch: mutate list + single config write
-                    for (AppInfo appInfo : appListAdapter.mAppList) {
-                        if (appInfo.includeFcm) {
-                            allowList.add(appInfo.packageName);
-                            appInfo.isAllow = true;
-                        }
+                for (AppInfo appInfo : fullAppList) {
+                    if (appInfo.includeFcm) {
+                        allowList.add(appInfo.packageName);
+                        appInfo.isAllow = true;
                     }
-                    updateConfig();
-                    appListAdapter.notifyItemRangeChanged(0, appListAdapter.getItemCount(), PAYLOAD_STATUS);
-                    updateStats();
                 }
+                updateConfig();
+                applyFilter();
+                updateStats();
                 return true;
             }
             if (id == 5) {
@@ -373,7 +430,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.ViewHolder> {
-        private final List<AppInfo> mAppList;
+        private final List<AppInfo> mAppList = new ArrayList<>();
 
         class ViewHolder extends RecyclerView.ViewHolder {
             final View appView;
@@ -390,9 +447,14 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        AppListAdapter(List<AppInfo> list) {
-            this.mAppList = list;
+        AppListAdapter() {
             setHasStableIds(true);
+        }
+
+        void replaceList(List<AppInfo> list) {
+            mAppList.clear();
+            mAppList.addAll(list);
+            notifyDataSetChanged();
         }
 
         @Override
@@ -417,7 +479,12 @@ public class MainActivity extends AppCompatActivity {
                     addAppInAllowList(appInfo.packageName);
                 }
                 appInfo.isAllow = !appInfo.isAllow;
-                notifyItemChanged(position, PAYLOAD_STATUS);
+                // If filtering by enabled, item may leave the list
+                if (filterMode == FilterMode.ENABLED && !appInfo.isAllow) {
+                    applyFilter();
+                } else {
+                    notifyItemChanged(position, PAYLOAD_STATUS);
+                }
                 updateStats();
             });
             return holder;
@@ -437,7 +504,6 @@ public class MainActivity extends AppCompatActivity {
                 onBindViewHolder(holder, position);
                 return;
             }
-            // Status-only update — skip icon/name rebind
             bindStatus(holder, mAppList.get(position));
         }
 
@@ -462,7 +528,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Heavy work: package scan + label/icon load — must not run on UI thread. */
     private List<AppInfo> buildAppList() {
         Set<String> allowListSet = new HashSet<>(allowList);
         List<AppInfo> allow = new ArrayList<>();
@@ -497,13 +562,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
             String label;
-            Drawable icon;
             try {
                 label = packageInfo.applicationInfo.loadLabel(pm).toString();
             } catch (Throwable t) {
                 label = packageInfo.packageName;
             }
-            // Only load real icons for FCM apps (majority of list cost)
+            Drawable icon;
             if (hasFcm) {
                 try {
                     icon = packageInfo.applicationInfo.loadIcon(pm);
@@ -530,7 +594,6 @@ public class MainActivity extends AppCompatActivity {
         allow.sort(byName);
         notAllow.sort(byName);
         noFcm.sort(byName);
-        // Prioritize actionable items: allowed → FCM not allowed → rest
         allow.addAll(notAllow);
         allow.addAll(noFcm);
         return allow;
@@ -543,8 +606,12 @@ public class MainActivity extends AppCompatActivity {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
-                appListAdapter = new AppListAdapter(list);
-                recyclerView.setAdapter(appListAdapter);
+                fullAppList = list;
+                if (appListAdapter == null) {
+                    appListAdapter = new AppListAdapter();
+                    recyclerView.setAdapter(appListAdapter);
+                }
+                applyFilter();
                 findViewById(R.id.progress_bar).setVisibility(View.GONE);
                 recyclerView.setVisibility(View.VISIBLE);
                 updateStats();
@@ -575,7 +642,9 @@ public class MainActivity extends AppCompatActivity {
         headerSafe = findViewById(R.id.header_safe);
         statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
-        applyHeaderBlur();
+        filterChips = findViewById(R.id.filter_chips);
+        applyHeaderScrim();
+        setupFilterChips();
 
         try {
             mainFab.setImageResource(android.R.drawable.ic_menu_manage);
@@ -588,7 +657,6 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
         recyclerView.setHasFixedSize(true);
         recyclerView.setItemViewCacheSize(24);
-        // Avoid nested layout thrash while scrolling under translucent header
         recyclerView.setClipToPadding(false);
 
         initXposedService();
