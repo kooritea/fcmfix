@@ -51,13 +51,15 @@
             android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="9sp" />
 
-        <ImageView
+        <TextView
             android:id="@+id/status"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:contentDescription="@null"
-            android:scaleType="fitCenter" />
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 

@@ -431,7 +431,7 @@ public class MainActivity extends AppCompatActivity {
             final ImageView icon;
             final TextView name;
             final TextView packageName;
-            final ImageView status;
+            final TextView status;
 
             ViewHolder(View view) {
                 super(view);
@@ -504,17 +504,18 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
+            // Use same visual family as Material Chip check (✓) with theme primary
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
-                    holder.status.setImageResource(R.drawable.ic_status_check);
-                    holder.status.setImageTintList(ColorStateList.valueOf(colorPrimary));
+                    holder.status.setText("\u2713");
+                    holder.status.setTextColor(colorPrimary);
                 } else {
-                    holder.status.setImageResource(R.drawable.ic_status_close);
-                    holder.status.setImageTintList(ColorStateList.valueOf(colorError));
+                    holder.status.setText("\u2717");
+                    holder.status.setTextColor(colorError);
                 }
             } else {
-                holder.status.setImageResource(R.drawable.ic_status_dash);
-                holder.status.setImageTintList(ColorStateList.valueOf(colorDisconnected));
+                holder.status.setText("\u2013");
+                holder.status.setTextColor(colorDisconnected);
             }
         }
 
@@ -627,15 +628,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void resolvePrimaryColor() {
-        TypedValue tv = new TypedValue();
-        if (getTheme().resolveAttribute(com.google.android.material.R.attr.colorPrimary, tv, true)) {
-            colorPrimary = tv.data;
-        } else {
-            colorPrimary = colorConnected;
-        }
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -647,7 +639,12 @@ public class MainActivity extends AppCompatActivity {
         colorConnected = ContextCompat.getColor(this, R.color.status_connected);
         colorError = ContextCompat.getColor(this, R.color.status_error);
         colorDisconnected = ContextCompat.getColor(this, R.color.status_disconnected);
-        resolvePrimaryColor();
+        TypedValue tv = new TypedValue();
+        if (getTheme().resolveAttribute(com.google.android.material.R.attr.colorPrimary, tv, true)) {
+            colorPrimary = tv.data;
+        } else {
+            colorPrimary = colorConnected;
+        }
 
         headerSafe = findViewById(R.id.header_safe);
         statsView = findViewById(R.id.stats);
