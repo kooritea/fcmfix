@@ -10,7 +10,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -51,17 +50,22 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import sumicya.fcmself.util.IceboxUtils;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
+    private static final ExecutorService BG = Executors.newSingleThreadExecutor();
 
     private AppListAdapter appListAdapter;
     private static XposedService xposedService;
     private FloatingActionButton mainFab;
     private TextView statsView;
     private View headerSafe;
+    private RecyclerView recyclerView;
     private boolean lastConfigError = false;
 
     Set<String> allowList = new HashSet<>();
@@ -203,7 +207,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         try {
-            // 根据主题 surface 色动态调整渐变起点（深色模式用深色半透明）
             android.util.TypedValue tv = new android.util.TypedValue();
             getTheme().resolveAttribute(com.google.android.material.R.attr.colorSurfaceContainer, tv, true);
             int surface = tv.data;
@@ -220,7 +223,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable t) {
             headerSafe.setAlpha(0.94f);
         }
-        // API 31+ 窗口级背景模糊（系统支持时生效）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
                 getWindow().setBackgroundBlurRadius(28);
@@ -250,7 +252,6 @@ public class MainActivity extends AppCompatActivity {
         if (mainFab == null) {
             return;
         }
-        // 使用圆角 PopupMenu 样式
         Context themed = new ContextThemeWrapper(this, R.style.RoundedPopupMenu);
         PopupMenu popup = new PopupMenu(themed, mainFab);
         popup.getMenu().add(0, 1, 0, "阻止应用停止时自动清除通知").setCheckable(true);
@@ -327,17 +328,19 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private class AppInfo {
+    private static class AppInfo {
         public String name;
         public String packageName;
         public Drawable icon;
-        public Boolean isAllow = false;
-        public Boolean includeFcm = false;
+        public boolean isAllow;
+        public boolean includeFcm;
 
-        public AppInfo(PackageInfo packageInfo) {
-            this.name = packageInfo.applicationInfo.loadLabel(getPackageManager()).toString();
-            this.packageName = packageInfo.packageName;
-            this.icon = packageInfo.applicationInfo.loadIcon(getPackageManager());
+        AppInfo(String name, String packageName, Drawable icon, boolean includeFcm, boolean isAllow) {
+            this.name = name;
+            this.packageName = packageName;
+            this.icon = icon;
+            this.includeFcm = includeFcm;
+            this.isAllow = isAllow;
         }
     }
 
@@ -345,12 +348,12 @@ public class MainActivity extends AppCompatActivity {
         private final List<AppInfo> mAppList;
 
         class ViewHolder extends RecyclerView.ViewHolder {
-            View appView;
-            ImageView icon;
-            TextView name;
-            TextView status;
+            final View appView;
+            final ImageView icon;
+            final TextView name;
+            final TextView status;
 
-            public ViewHolder(View view) {
+            ViewHolder(View view) {
                 super(view);
                 appView = view;
                 icon = view.findViewById(R.id.icon);
@@ -359,71 +362,14 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        public AppListAdapter() {
-            Set<String> allowListSet = new HashSet<>(allowList);
-            List<AppInfo> _allowList = new ArrayList<>();
-            List<AppInfo> _notAllowList = new ArrayList<>();
-            List<AppInfo> _notFoundFcm = new ArrayList<>();
-            PackageManager packageManager = getPackageManager();
-            for (PackageInfo packageInfo : packageManager.getInstalledPackages(
-                    PackageManager.GET_RECEIVERS
-                            | PackageManager.MATCH_DISABLED_COMPONENTS
-                            | PackageManager.MATCH_UNINSTALLED_PACKAGES)) {
-                boolean flag = false;
-                AppInfo appInfo = new AppInfo(packageInfo);
-                if (packageInfo.receivers != null) {
-                    for (ActivityInfo receiverInfo : packageInfo.receivers) {
-                        if (receiverInfo.name.equals("com.google.firebase.iid.FirebaseInstanceIdReceiver")
-                                || receiverInfo.name.equals("com.google.android.gms.measurement.AppMeasurementReceiver")) {
-                            flag = true;
-                            appInfo.includeFcm = true;
-                            break;
-                        }
-                    }
-                } else {
-                    continue;
-                }
-                if (allowListSet.contains(appInfo.packageName)) {
-                    appInfo.isAllow = true;
-                    _allowList.add(appInfo);
-                } else {
-                    if (flag) {
-                        _notAllowList.add(appInfo);
-                    } else {
-                        _notFoundFcm.add(appInfo);
-                    }
-                }
-            }
-            class SortName implements Comparator<AppInfo> {
-                final Collator localCompare = Collator.getInstance(Locale.getDefault());
-
-                @Override
-                public int compare(AppInfo a1, AppInfo a2) {
-                    return localCompare.compare(a1.name, a2.name);
-                }
-            }
-            final SortName sortName = new SortName();
-            _allowList.sort(sortName);
-            _notAllowList.sort(sortName);
-            _notFoundFcm.sort(sortName);
-            _allowList.addAll(_notAllowList);
-            _allowList.addAll(_notFoundFcm);
-            this.mAppList = _allowList;
-            if (_allowList.isEmpty()
-                    || (_allowList.size() == 1 && "sumicya.fcmself".equals(_allowList.get(0).packageName))) {
-                new AlertDialog.Builder(MainActivity.this)
-                        .setTitle("请在系统设置中授予读取应用列表权限")
-                        .setMessage("或直接编辑" + getApplicationContext().getFilesDir().getAbsolutePath()
-                                + "/config.json(需重启生效)")
-                        .setPositiveButton("确定", (dialog, which) -> {})
-                        .show();
-            }
+        AppListAdapter(List<AppInfo> list) {
+            this.mAppList = list;
         }
 
         @SuppressLint("NotifyDataSetChanged")
         @NonNull
         @Override
-        public AppListAdapter.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.app_item, parent, false);
             final ViewHolder holder = new ViewHolder(view);
             holder.appView.setOnClickListener(v -> {
@@ -438,18 +384,18 @@ public class MainActivity extends AppCompatActivity {
                     addAppInAllowList(appInfo.packageName);
                 }
                 appInfo.isAllow = !appInfo.isAllow;
-                appListAdapter.notifyDataSetChanged();
+                // Only the status glyph changes
+                notifyItemChanged(position);
                 updateStats();
             });
             return holder;
         }
 
         @Override
-        public void onBindViewHolder(@NonNull AppListAdapter.ViewHolder holder, int position) {
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             AppInfo appInfo = mAppList.get(position);
             holder.icon.setImageDrawable(appInfo.icon);
             holder.name.setText(appInfo.name);
-            // 符号：✓ 已启用 · × 有 FCM 未启用 · - 未检测到 FCM（非 emoji）
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
                     holder.status.setText("✓");
@@ -470,6 +416,97 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** Heavy work: package scan + label/icon load — must not run on UI thread. */
+    private List<AppInfo> buildAppList() {
+        Set<String> allowListSet = new HashSet<>(allowList);
+        List<AppInfo> allow = new ArrayList<>();
+        List<AppInfo> notAllow = new ArrayList<>();
+        List<AppInfo> noFcm = new ArrayList<>();
+        PackageManager pm = getPackageManager();
+
+        List<PackageInfo> packages;
+        try {
+            packages = pm.getInstalledPackages(
+                    PackageManager.GET_RECEIVERS
+                            | PackageManager.MATCH_DISABLED_COMPONENTS
+                            | PackageManager.MATCH_UNINSTALLED_PACKAGES);
+        } catch (Throwable t) {
+            Log.e(TAG, "getInstalledPackages: " + t);
+            return new ArrayList<>();
+        }
+
+        for (PackageInfo packageInfo : packages) {
+            if (packageInfo.receivers == null || packageInfo.applicationInfo == null) {
+                continue;
+            }
+            boolean hasFcm = false;
+            for (ActivityInfo receiverInfo : packageInfo.receivers) {
+                String n = receiverInfo.name;
+                if ("com.google.firebase.iid.FirebaseInstanceIdReceiver".equals(n)
+                        || "com.google.android.gms.measurement.AppMeasurementReceiver".equals(n)) {
+                    hasFcm = true;
+                    break;
+                }
+            }
+            String label;
+            Drawable icon;
+            try {
+                label = packageInfo.applicationInfo.loadLabel(pm).toString();
+                icon = packageInfo.applicationInfo.loadIcon(pm);
+            } catch (Throwable t) {
+                label = packageInfo.packageName;
+                icon = null;
+            }
+            boolean isAllow = allowListSet.contains(packageInfo.packageName);
+            AppInfo info = new AppInfo(label, packageInfo.packageName, icon, hasFcm, isAllow);
+            if (isAllow) {
+                allow.add(info);
+            } else if (hasFcm) {
+                notAllow.add(info);
+            } else {
+                noFcm.add(info);
+            }
+        }
+
+        final Collator collator = Collator.getInstance(Locale.getDefault());
+        Comparator<AppInfo> byName = (a, b) -> collator.compare(a.name, b.name);
+        allow.sort(byName);
+        notAllow.sort(byName);
+        noFcm.sort(byName);
+        allow.addAll(notAllow);
+        allow.addAll(noFcm);
+        return allow;
+    }
+
+    private void loadAppListAsync() {
+        final Set<String> snapshot = new HashSet<>(allowList);
+        BG.execute(() -> {
+            // allowList may change; use snapshot captured above via field read in buildAppList
+            List<AppInfo> list = buildAppList();
+            MAIN_HANDLER.post(() -> {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                appListAdapter = new AppListAdapter(list);
+                recyclerView.setAdapter(appListAdapter);
+                findViewById(R.id.progress_bar).setVisibility(View.GONE);
+                recyclerView.setVisibility(View.VISIBLE);
+                updateStats();
+                refreshFabStatus();
+
+                if (list.isEmpty()
+                        || (list.size() == 1 && "sumicya.fcmself".equals(list.get(0).packageName))) {
+                    new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("请在系统设置中授予读取应用列表权限")
+                            .setMessage("或直接编辑" + getApplicationContext().getFilesDir().getAbsolutePath()
+                                    + "/config.json(需重启生效)")
+                            .setPositiveButton("确定", (dialog, which) -> {})
+                            .show();
+                }
+            });
+        });
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -487,8 +524,11 @@ public class MainActivity extends AppCompatActivity {
         mainFab.setOnClickListener(v -> showFabMenu());
         refreshFabStatus();
 
-        RecyclerView recyclerView = findViewById(R.id.recycler_view);
+        recyclerView = findViewById(R.id.recycler_view);
         recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
+        // Improves scroll when icons are large
+        recyclerView.setHasFixedSize(true);
+        recyclerView.setItemViewCacheSize(24);
 
         initXposedService();
 
@@ -501,14 +541,8 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable ignored) {
         }
 
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            appListAdapter = new AppListAdapter();
-            recyclerView.setAdapter(appListAdapter);
-            findViewById(R.id.progress_bar).setVisibility(View.GONE);
-            recyclerView.setVisibility(View.VISIBLE);
-            updateStats();
-            refreshFabStatus();
-        }, 1000);
+        // Small delay so XposedService bind can race in; scan runs off UI thread
+        MAIN_HANDLER.postDelayed(this::loadAppListAsync, 300);
     }
 
     @Override
