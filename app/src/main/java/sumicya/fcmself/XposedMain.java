@@ -14,26 +14,27 @@ import io.github.libxposed.api.XposedModuleInterface;
 
 public class XposedMain extends io.github.libxposed.api.XposedModule {
 
+    private void safeHook(String name, Runnable hook) {
+        try {
+            hook.run();
+            XposedBridge.log("[fcmself] loaded " + name);
+        } catch (Throwable t) {
+            XposedBridge.log("[fcmself] failed " + name + ": " + t);
+        }
+    }
+
     @Override
     public void onSystemServerStarting(SystemServerStartingParam param) {
         XposedBridge.init(this);
         XposedModule.setSelfPackageName("android");
 
         ClassLoader classLoader = param.getClassLoader();
-        XposedBridge.log("[fcmself] start hook com.android.server.am.ActivityManagerService/com.android.server.am.BroadcastController");
-        new BroadcastFix(classLoader);
 
-        XposedBridge.log("[fcmself] start hook com.android.server.notification.NotificationManagerServiceInjector");
-        new MiuiLocalNotificationFix(classLoader);
-
-        XposedBridge.log("[fcmself] com.android.server.am.BroadcastQueueInjector.checkApplicationAutoStart");
-        new AutoStartFix(classLoader);
-
-        XposedBridge.log("[fcmself] com.android.server.notification.NotificationManagerService");
-        new KeepNotification(classLoader);
-
-        XposedBridge.log("[fcmself] start hook com.android.server.power.OplusProxyWakeLock");
-        new OplusProxyFix(classLoader);
+        safeHook("BroadcastFix", () -> new BroadcastFix(classLoader));
+        safeHook("MiuiLocalNotificationFix", () -> new MiuiLocalNotificationFix(classLoader));
+        safeHook("AutoStartFix", () -> new AutoStartFix(classLoader));
+        safeHook("KeepNotification", () -> new KeepNotification(classLoader));
+        safeHook("OplusProxyFix", () -> new OplusProxyFix(classLoader));
     }
 
     @Override
@@ -42,14 +43,12 @@ public class XposedMain extends io.github.libxposed.api.XposedModule {
 
         if ("com.google.android.gms".equals(param.getPackageName()) && param.isFirstPackage()) {
             XposedModule.setSelfPackageName("com.google.android.gms");
-            XposedBridge.log("[fcmself] start hook com.google.android.gms");
-            new ReconnectManagerFix(param.getClassLoader());
+            safeHook("ReconnectManagerFix", () -> new ReconnectManagerFix(param.getClassLoader()));
         }
 
         if ("com.miui.powerkeeper".equals(param.getPackageName()) && param.isFirstPackage()) {
             XposedModule.setSelfPackageName("com.miui.powerkeeper");
-            XposedBridge.log("[fcmself] start hook com.miui.powerkeeper");
-            new PowerkeeperFix(param.getClassLoader());
+            safeHook("PowerkeeperFix", () -> new PowerkeeperFix(param.getClassLoader()));
         }
     }
 }
