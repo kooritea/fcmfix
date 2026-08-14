@@ -11,6 +11,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.UserManager;
 import android.util.Log;
 
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static android.content.Context.NOTIFICATION_SERVICE;
 
@@ -35,6 +37,10 @@ public abstract class XposedModule {
     public static Set<String> allowList = null;
     static final String TAG = "fcmself";
     private static final HashMap<String, Object> config = new HashMap<>();
+
+    /** Min interval between diagnostic broadcast logs (ms) — reduces IPC storm */
+    private static final long DIAG_LOG_MIN_INTERVAL_MS = 200L;
+    private static final AtomicLong lastDiagLogElapsed = new AtomicLong(0);
 
     @SuppressLint("StaticFieldLeak")
     protected static Context context = null;
@@ -90,7 +96,7 @@ public abstract class XposedModule {
                 } catch (Throwable e) {
                     printLog(e.getMessage());
                 }
-            }).start();
+            }, "fcmself-boot").start();
         } else {
             isBootComplete = true;
         }
@@ -110,18 +116,36 @@ public abstract class XposedModule {
         printLog(text, false);
     }
 
+    /**
+     * @param isDiagnosticsLog when true, also mirrors to GMS diagnostics via broadcast (throttled).
+     */
     protected static void printLog(String text, Boolean isDiagnosticsLog) {
-        Log.d(TAG, text);
-        if (isDiagnosticsLog) {
-            Intent log = new Intent("sumicya.fcmself.log");
-            log.putExtra("text", "[" + getSelfPackageName() + "]" + text);
-
-            try {
-                context.sendBroadcast(log);
-            } catch (Throwable e) {
-                XposedBridge.log("[fcmself] [" + getSelfPackageName() + "]" + text);
+        if (text == null) {
+            return;
+        }
+        if (Boolean.TRUE.equals(isDiagnosticsLog)) {
+            // Diagnostics path: throttle IPC; still keep a local log line
+            long now = SystemClock.elapsedRealtime();
+            long prev = lastDiagLogElapsed.get();
+            if (now - prev >= DIAG_LOG_MIN_INTERVAL_MS && lastDiagLogElapsed.compareAndSet(prev, now)) {
+                String msg = "[" + getSelfPackageName() + "]" + text;
+                Log.d(TAG, msg);
+                if (context != null) {
+                    try {
+                        Intent log = new Intent("sumicya.fcmself.log");
+                        log.putExtra("text", msg);
+                        context.sendBroadcast(log);
+                        return;
+                    } catch (Throwable ignored) {
+                    }
+                }
+                XposedBridge.log("[fcmself] " + msg);
+            } else {
+                // Dropped by throttle — still log locally at verbose level only
+                Log.v(TAG, text);
             }
         } else {
+            Log.d(TAG, text);
             XposedBridge.log("[fcmself] [" + getSelfPackageName() + "]" + text);
         }
     }
@@ -153,7 +177,6 @@ public abstract class XposedModule {
         if (packageName == null) {
             return false;
         }
-        // Fast path: self package always allowed
         if ("sumicya.fcmself".equals(packageName)) {
             return true;
         }
@@ -183,8 +206,14 @@ public abstract class XposedModule {
                     if (remotePreferences == null) {
                         throw new IllegalStateException("remotePreferences 不可用");
                     }
-                    allowList = remotePreferences.getStringSet("allowList", allowList == null ? new HashSet<>() : allowList);
-                    if (allowList != null && "android".equals(getSelfPackageName())) {
+                    Set<String> loaded = remotePreferences.getStringSet("allowList", null);
+                    if (loaded != null) {
+                        // Snapshot into a new HashSet so callers see a stable, non-shared instance
+                        allowList = new HashSet<>(loaded);
+                    } else if (allowList == null) {
+                        allowList = new HashSet<>();
+                    }
+                    if ("android".equals(getSelfPackageName())) {
                         printLog("[Modern Xposed API]onUpdateConfig allowList size: " + allowList.size());
                     }
                     config.put("disableAutoCleanNotification", remotePreferences.getBoolean("disableAutoCleanNotification", false));
@@ -196,7 +225,7 @@ public abstract class XposedModule {
                 } finally {
                     loadConfigThread = null;
                 }
-            });
+            }, "fcmself-config");
             loadConfigThread.start();
         }
     }
@@ -293,7 +322,7 @@ public abstract class XposedModule {
     }
 
     protected boolean isFCMIntent(Intent intent) {
-        return isFCMAction(intent.getAction());
+        return intent != null && isFCMAction(intent.getAction());
     }
 
     protected static String getSelfPackageName() {
