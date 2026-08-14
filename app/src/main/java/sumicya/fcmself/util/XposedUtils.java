@@ -141,11 +141,17 @@ public class XposedUtils {
     }
 
     public static Object getObjectFieldByPath(Object obj, String pathFieldName) {
-        String[] paths = pathFieldName.split("\\.");
         Object tmp = obj;
+        int start = 0;
         try {
-            for (String fieldName : paths) {
-                tmp = XposedHelpers.getObjectField(tmp, fieldName);
+            while (true) {
+                int end = pathFieldName.indexOf('.', start);
+                if (end < 0) {
+                    tmp = XposedHelpers.getObjectField(tmp, pathFieldName.substring(start));
+                    break;
+                }
+                tmp = XposedHelpers.getObjectField(tmp, pathFieldName.substring(start, end));
+                start = end + 1;
             }
         } catch (Throwable e) {
             throw new NoSuchFieldError(obj.getClass().getName() + "#" + pathFieldName);
