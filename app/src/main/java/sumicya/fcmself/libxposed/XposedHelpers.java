@@ -3,12 +3,13 @@ package sumicya.fcmself.libxposed;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class XposedHelpers {
+
+    /** Cache key: className + '#' + fieldName */
+    private static final ConcurrentHashMap<String, Field> FIELD_CACHE = new ConcurrentHashMap<>();
 
     private XposedHelpers() {
     }
@@ -75,8 +76,7 @@ public final class XposedHelpers {
 
     public static Object getObjectField(Object obj, String fieldName) {
         try {
-            Field field = findField(obj.getClass(), fieldName);
-            return field.get(obj);
+            return findField(obj.getClass(), fieldName).get(obj);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -84,8 +84,7 @@ public final class XposedHelpers {
 
     public static void setObjectField(Object obj, String fieldName, Object value) {
         try {
-            Field field = findField(obj.getClass(), fieldName);
-            field.set(obj, value);
+            findField(obj.getClass(), fieldName).set(obj, value);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -93,8 +92,7 @@ public final class XposedHelpers {
 
     public static long getLongField(Object obj, String fieldName) {
         try {
-            Field field = findField(obj.getClass(), fieldName);
-            return field.getLong(obj);
+            return findField(obj.getClass(), fieldName).getLong(obj);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -102,8 +100,7 @@ public final class XposedHelpers {
 
     public static Object getStaticObjectField(Class<?> clazz, String fieldName) {
         try {
-            Field field = findField(clazz, fieldName);
-            return field.get(null);
+            return findField(clazz, fieldName).get(null);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -111,8 +108,7 @@ public final class XposedHelpers {
 
     public static void setStaticBooleanField(Class<?> clazz, String fieldName, boolean value) {
         try {
-            Field field = findField(clazz, fieldName);
-            field.setBoolean(null, value);
+            findField(clazz, fieldName).setBoolean(null, value);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -167,11 +163,17 @@ public final class XposedHelpers {
     }
 
     private static Field findField(Class<?> clazz, String fieldName) {
+        String key = clazz.getName() + '#' + fieldName;
+        Field cached = FIELD_CACHE.get(key);
+        if (cached != null) {
+            return cached;
+        }
         Class<?> current = clazz;
         while (current != null) {
             try {
                 Field field = current.getDeclaredField(fieldName);
                 field.setAccessible(true);
+                FIELD_CACHE.put(key, field);
                 return field;
             } catch (NoSuchFieldException ignored) {
                 current = current.getSuperclass();

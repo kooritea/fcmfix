@@ -24,6 +24,11 @@ import sumicya.fcmself.util.XposedUtils;
 
 public class BroadcastFix extends XposedModule {
 
+    // Cached reflection for PowerExemptionManager (hot path on Android 12+)
+    private static volatile Class<?> sPemClass;
+    private static volatile Method sPemAddMethod;
+    private static volatile boolean sPemResolved;
+
     public BroadcastFix(ClassLoader classLoader) {
         super(classLoader);
         try {
@@ -51,10 +56,8 @@ public class BroadcastFix extends XposedModule {
         if (Build.VERSION.SDK_INT >= 35) {
             targetMethod = XposedUtils.tryFindMethodMostParam(classLoader, "com.android.server.am.BroadcastController", "broadcastIntentLocked");
             if (targetMethod != null) {
-                if (Build.VERSION.SDK_INT >= 35) {
-                    intent_args_index = 3;
-                    appOp_args_index = 13;
-                }
+                intent_args_index = 3;
+                appOp_args_index = 13;
             }
         }
         if (targetMethod == null) {
@@ -67,40 +70,22 @@ public class BroadcastFix extends XposedModule {
                 } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.R) {
                     intent_args_index = 3;
                     appOp_args_index = 10;
-                } else if (Build.VERSION.SDK_INT == 31) {
+                } else if (Build.VERSION.SDK_INT == 31 || Build.VERSION.SDK_INT == 32) {
                     intent_args_index = 3;
-                    if (parameters[11].getType() == int.class) {
-                        appOp_args_index = 11;
-                    }
-                    if (parameters[12].getType() == int.class) {
+                    if (parameters.length > 12 && parameters[12].getType() == int.class) {
                         appOp_args_index = 12;
-                    }
-                } else if (Build.VERSION.SDK_INT == 32) {
-                    intent_args_index = 3;
-                    if (parameters[11].getType() == int.class) {
+                    } else if (parameters.length > 11 && parameters[11].getType() == int.class) {
                         appOp_args_index = 11;
-                    }
-                    if (parameters[12].getType() == int.class) {
-                        appOp_args_index = 12;
                     }
                 } else if (Build.VERSION.SDK_INT == 33) {
                     intent_args_index = 3;
                     appOp_args_index = 12;
-                } else if (Build.VERSION.SDK_INT == 34) {
+                } else if (Build.VERSION.SDK_INT >= 34) {
                     intent_args_index = 3;
-                    if (parameters[12].getType() == int.class) {
-                        appOp_args_index = 12;
-                    }
-                    if (parameters[13].getType() == int.class) {
+                    if (parameters.length > 13 && parameters[13].getType() == int.class) {
                         appOp_args_index = 13;
-                    }
-                } else if (Build.VERSION.SDK_INT >= 35) {
-                    intent_args_index = 3;
-                    if (parameters[12].getType() == int.class) {
+                    } else if (parameters.length > 12 && parameters[12].getType() == int.class) {
                         appOp_args_index = 12;
-                    }
-                    if (parameters[13].getType() == int.class) {
-                        appOp_args_index = 13;
                     }
                 }
                 if (intent_args_index == 0 || appOp_args_index == 0) {
@@ -138,70 +123,74 @@ public class BroadcastFix extends XposedModule {
         XposedBridge.hookMethod(method, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                // Cheapest guards first — this runs on every system broadcast
                 if (!isBootComplete) {
                     return;
                 }
-                if (methodHookParam.args[finalIntent_args_index] == null) {
+                Object intentArg = methodHookParam.args[finalIntent_args_index];
+                if (!(intentArg instanceof Intent)) {
                     return;
                 }
-                Intent intent = (Intent) methodHookParam.args[finalIntent_args_index];
-                // 介入条件：Intent未包含唤醒停止的pkg 且 Intent是FCM
-                if ((intent.getFlags() & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) == 0 && isFCMIntent(intent)) {
-                    String target;
-                    if (intent.getComponent() != null) {
-                        target = intent.getComponent().getPackageName();
-                    } else {
-                        target = intent.getPackage();
-                    }
-                    if (targetIsAllow(target)) {
-                        int i = (Integer) methodHookParam.args[finalAppOp_args_index];
-                        if (i == -1) {
-                            methodHookParam.args[finalAppOp_args_index] = 11;
-                        }
-                        intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-
-                        // From FcmFuck: FLAG_RECEIVER_FOREGROUND helps delivery on more ROMs
-                        if ((intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
-                            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-                        }
-
-                        // From FcmFuck: temporary power exemption (Android 12+)
-                        applyTemporaryAllowList(target);
-
-                        if (getBooleanConfig("includeIceBoxDisableApp", false) && !IceboxUtils.isAppEnabled(context, target)) {
-                            printLog("Waiting for IceBox to activate the app: " + target, true);
-                            methodHookParam.setResult(false);
-                            new Thread(() -> {
-                                IceboxUtils.activeApp(context, target);
-                                for (int i1 = 0; i1 < 300; i1++) {
-                                    if (!IceboxUtils.isAppEnabled(context, target)) {
-                                        try {
-                                            Thread.sleep(100);
-                                        } catch (Throwable e) {
-                                            printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
-                                        }
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                try {
-                                    if (IceboxUtils.isAppEnabled(context, target)) {
-                                        printLog("Send Forced Start Broadcast: " + target, true);
-                                    } else {
-                                        printLog("Waiting for IceBox to activate the app timed out: " + target, true);
-                                    }
-                                    XposedBridge.invokeOriginalMethod(methodHookParam.method, methodHookParam.thisObject, methodHookParam.args);
-                                } catch (Throwable e) {
-                                    printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
-                                }
-                            }).start();
-                        } else {
-                            printLog("Send Forced Start Broadcast: " + target, true);
-                        }
-                        // cos15 unfreeze
-                        OplusProxyFix.unfreeze(target);
-                    }
+                Intent intent = (Intent) intentArg;
+                // Skip already-flagged intents; only care about FCM
+                if ((intent.getFlags() & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) != 0) {
+                    return;
                 }
+                if (!isFCMIntent(intent)) {
+                    return;
+                }
+                String target = intent.getComponent() != null
+                        ? intent.getComponent().getPackageName()
+                        : intent.getPackage();
+                if (target == null || !targetIsAllow(target)) {
+                    return;
+                }
+
+                Object appOpArg = methodHookParam.args[finalAppOp_args_index];
+                if (appOpArg instanceof Integer && ((Integer) appOpArg) == -1) {
+                    methodHookParam.args[finalAppOp_args_index] = 11;
+                }
+                intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+
+                // From FcmFuck: FLAG_RECEIVER_FOREGROUND helps delivery on more ROMs
+                if ((intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
+                    intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                }
+
+                // From FcmFuck: temporary power exemption (Android 12+)
+                applyTemporaryAllowList(target);
+
+                if (getBooleanConfig("includeIceBoxDisableApp", false) && !IceboxUtils.isAppEnabled(context, target)) {
+                    printLog("Waiting for IceBox to activate the app: " + target, true);
+                    methodHookParam.setResult(false);
+                    new Thread(() -> {
+                        IceboxUtils.activeApp(context, target);
+                        for (int i1 = 0; i1 < 300; i1++) {
+                            if (IceboxUtils.isAppEnabled(context, target)) {
+                                break;
+                            }
+                            try {
+                                Thread.sleep(100);
+                            } catch (Throwable e) {
+                                printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
+                            }
+                        }
+                        try {
+                            if (IceboxUtils.isAppEnabled(context, target)) {
+                                printLog("Send Forced Start Broadcast: " + target, true);
+                            } else {
+                                printLog("Waiting for IceBox to activate the app timed out: " + target, true);
+                            }
+                            XposedBridge.invokeOriginalMethod(methodHookParam.method, methodHookParam.thisObject, methodHookParam.args);
+                        } catch (Throwable e) {
+                            printLog("Send Forced Start Broadcast Error: " + target + " " + e.getMessage(), true);
+                        }
+                    }).start();
+                } else {
+                    printLog("Send Forced Start Broadcast: " + target, true);
+                }
+                // cos15 unfreeze
+                OplusProxyFix.unfreeze(target);
             }
         });
     }
@@ -254,7 +243,7 @@ public class BroadcastFix extends XposedModule {
                         String target = intent.getComponent() != null
                                 ? intent.getComponent().getPackageName()
                                 : intent.getPackage();
-                        if (!targetIsAllow(target)) {
+                        if (target == null || !targetIsAllow(target)) {
                             return;
                         }
                         intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
@@ -271,28 +260,37 @@ public class BroadcastFix extends XposedModule {
 
     /**
      * Android 12+ temporary allowlist (from FcmFuck).
-     * PowerExemptionManager is a framework/system API not in the public SDK,
-     * so we resolve it via reflection (available in system_server at runtime).
-     * reasonCode 102 corresponds to GOOGLE_C2DM-style exemption used by FcmFuck.
+     * Class/Method resolved once and cached — avoids Class.forName + getMethod on every FCM broadcast.
      */
     private static void applyTemporaryAllowList(String packageName) {
         if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
             return;
         }
         try {
-            Class<?> pemClass = Class.forName("android.os.PowerExemptionManager");
-            Object pem = context.getSystemService(pemClass);
+            if (!sPemResolved) {
+                synchronized (BroadcastFix.class) {
+                    if (!sPemResolved) {
+                        try {
+                            sPemClass = Class.forName("android.os.PowerExemptionManager");
+                            sPemAddMethod = sPemClass.getMethod(
+                                    "addToTemporaryAllowList",
+                                    String.class, int.class, String.class, long.class);
+                        } catch (Throwable ignored) {
+                            sPemClass = null;
+                            sPemAddMethod = null;
+                        }
+                        sPemResolved = true;
+                    }
+                }
+            }
+            if (sPemClass == null || sPemAddMethod == null) {
+                return;
+            }
+            Object pem = context.getSystemService(sPemClass);
             if (pem == null) {
                 return;
             }
-            Method add = pemClass.getMethod(
-                    "addToTemporaryAllowList",
-                    String.class,
-                    int.class,
-                    String.class,
-                    long.class
-            );
-            add.invoke(pem, packageName, 102, "GOOGLE_C2DM", 2000L);
+            sPemAddMethod.invoke(pem, packageName, 102, "GOOGLE_C2DM", 2000L);
         } catch (Throwable t) {
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
         }

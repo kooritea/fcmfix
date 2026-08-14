@@ -150,24 +150,26 @@ public abstract class XposedModule {
     };
 
     protected boolean targetIsAllow(String packageName) {
-        if (config.get("init") == null) {
-            this.checkUserDeviceUnlockAndUpdateConfig();
+        if (packageName == null) {
+            return false;
         }
+        // Fast path: self package always allowed
         if ("sumicya.fcmself".equals(packageName)) {
             return true;
         }
-        if (allowList != null) {
-            return allowList.contains(packageName);
+        if (config.get("init") == null) {
+            this.checkUserDeviceUnlockAndUpdateConfig();
         }
-        return false;
+        Set<String> list = allowList;
+        return list != null && list.contains(packageName);
     }
 
     protected boolean getBooleanConfig(String key, boolean defaultValue) {
         if (config.get("init") == null) {
             this.checkUserDeviceUnlockAndUpdateConfig();
-        }
-        if (config.get("init") == null) {
-            return defaultValue;
+            if (config.get("init") == null) {
+                return defaultValue;
+            }
         }
         Object value = config.get(key);
         return value == null ? defaultValue : (Boolean) value;
@@ -175,29 +177,26 @@ public abstract class XposedModule {
 
     protected static void onUpdateConfig() {
         if (loadConfigThread == null) {
-            loadConfigThread = new Thread() {
-                @Override
-                public void run() {
-                    super.run();
-                    try {
-                        SharedPreferences remotePreferences = XposedBridge.getRemotePreferences("config");
-                        if (remotePreferences == null) {
-                            throw new IllegalStateException("remotePreferences 不可用");
-                        }
-                        allowList = remotePreferences.getStringSet("allowList", allowList == null ? new HashSet<>() : allowList);
-                        if (allowList != null && "android".equals(getSelfPackageName())) {
-                            printLog("[Modern Xposed API]onUpdateConfig allowList size: " + allowList.size());
-                        }
-                        config.put("disableAutoCleanNotification", remotePreferences.getBoolean("disableAutoCleanNotification", false));
-                        config.put("includeIceBoxDisableApp", remotePreferences.getBoolean("includeIceBoxDisableApp", false));
-                        config.put("noResponseNotification", remotePreferences.getBoolean("noResponseNotification", false));
-                        config.put("init", true);
-                    } catch (Throwable e) {
-                        printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
+            loadConfigThread = new Thread(() -> {
+                try {
+                    SharedPreferences remotePreferences = XposedBridge.getRemotePreferences("config");
+                    if (remotePreferences == null) {
+                        throw new IllegalStateException("remotePreferences 不可用");
                     }
+                    allowList = remotePreferences.getStringSet("allowList", allowList == null ? new HashSet<>() : allowList);
+                    if (allowList != null && "android".equals(getSelfPackageName())) {
+                        printLog("[Modern Xposed API]onUpdateConfig allowList size: " + allowList.size());
+                    }
+                    config.put("disableAutoCleanNotification", remotePreferences.getBoolean("disableAutoCleanNotification", false));
+                    config.put("includeIceBoxDisableApp", remotePreferences.getBoolean("includeIceBoxDisableApp", false));
+                    config.put("noResponseNotification", remotePreferences.getBoolean("noResponseNotification", false));
+                    config.put("init", true);
+                } catch (Throwable e) {
+                    printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
+                } finally {
                     loadConfigThread = null;
                 }
-            };
+            });
             loadConfigThread.start();
         }
     }
@@ -217,24 +216,17 @@ public abstract class XposedModule {
 
             IntentFilter updateConfigIntentFilter = new IntentFilter();
             updateConfigIntentFilter.addAction("sumicya.fcmself.update.config");
+            BroadcastReceiver configReceiver = new BroadcastReceiver() {
+                public void onReceive(Context context, Intent intent) {
+                    if ("sumicya.fcmself.update.config".equals(intent.getAction())) {
+                        onUpdateConfig();
+                    }
+                }
+            };
             if (Build.VERSION.SDK_INT >= 34) {
-                context.registerReceiver(new BroadcastReceiver() {
-                    public void onReceive(Context context, Intent intent) {
-                        String action = intent.getAction();
-                        if ("sumicya.fcmself.update.config".equals(action)) {
-                            onUpdateConfig();
-                        }
-                    }
-                }, updateConfigIntentFilter, Context.RECEIVER_EXPORTED);
+                context.registerReceiver(configReceiver, updateConfigIntentFilter, Context.RECEIVER_EXPORTED);
             } else {
-                context.registerReceiver(new BroadcastReceiver() {
-                    public void onReceive(Context context, Intent intent) {
-                        String action = intent.getAction();
-                        if ("sumicya.fcmself.update.config".equals(action)) {
-                            onUpdateConfig();
-                        }
-                    }
-                }, updateConfigIntentFilter);
+                context.registerReceiver(configReceiver, updateConfigIntentFilter);
             }
 
             IntentFilter unInstallIntentFilter = new IntentFilter();
@@ -243,9 +235,12 @@ public abstract class XposedModule {
             context.registerReceiver(new BroadcastReceiver() {
                 public void onReceive(Context context, Intent intent) {
                     String action = intent.getAction();
-                    if (Intent.ACTION_PACKAGE_REMOVED.equals(action) && "sumicya.fcmself".equals(intent.getData().getSchemeSpecificPart())) {
+                    if (Intent.ACTION_PACKAGE_REMOVED.equals(action)
+                            && intent.getData() != null
+                            && "sumicya.fcmself".equals(intent.getData().getSchemeSpecificPart())) {
                         Bundle extras = intent.getExtras();
-                        if (extras.containsKey(Intent.EXTRA_REPLACING) && extras.getBoolean(Intent.EXTRA_REPLACING)) {
+                        if (extras != null && extras.containsKey(Intent.EXTRA_REPLACING)
+                                && extras.getBoolean(Intent.EXTRA_REPLACING)) {
                             return;
                         }
                         onUninstallFcmself();
@@ -298,8 +293,7 @@ public abstract class XposedModule {
     }
 
     protected boolean isFCMIntent(Intent intent) {
-        String action = intent.getAction();
-        return isFCMAction(action);
+        return isFCMAction(intent.getAction());
     }
 
     protected static String getSelfPackageName() {
