@@ -1,7 +1,5 @@
 <resources>
     <style name="AppTheme" parent="Theme.Material3Expressive.DynamicColors.DayNight">
-        <item name="windowActionBar">false</item>
-        <item name="windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
         <item name="popupMenuStyle">@style/RoundedPopupMenu</item>
