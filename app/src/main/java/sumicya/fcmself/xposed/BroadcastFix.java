@@ -359,7 +359,11 @@ public class BroadcastFix extends XposedModule {
                                 notification.setLargeIcon(icon);
                             }
                             notification.setContentIntent(pendingIntent).setAutoCancel(true);
-                            notificationManager.notify((int) System.currentTimeMillis(), notification.build());
+                            try {
+                                notificationManager.notify(
+                                    (int) System.currentTimeMillis(),notification.build()
+                                );
+                            } catch (SecurityException ignored) {}
                         } else {
                             printLog("无法获取目标应用active: " + packageName, false);
                         }
