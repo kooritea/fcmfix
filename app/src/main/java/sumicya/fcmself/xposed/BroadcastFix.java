@@ -66,6 +66,13 @@ public class BroadcastFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error high-level broadcastIntent:" + e.getMessage());
         }
+        try {
+            this.startHookScheduleResultTo();
+        } catch (Throwable e) {
+            // Only modern broadcast queues expose this hook point. Keep the core FCM fix active
+            // when an OEM or older Android release does not provide it.
+            printLog("hook error scheduleResultTo:" + e.getMessage());
+        }
     }
 
     protected void startHookBroadcastIntentLocked() {
@@ -331,15 +338,23 @@ public class BroadcastFix extends XposedModule {
                 if (!isBootComplete) {
                     return;
                 }
-                if (methodHookParam.args[0] == null
-                        || XposedHelpers.getObjectField(methodHookParam.args[0], "resultTo") == null
-                        || XposedHelpers.getObjectField(methodHookParam.args[0], "intent") == null
-                        || XposedHelpers.getObjectField(methodHookParam.args[0], "resultCode") == null) {
+                if (methodHookParam.args.length == 0 || methodHookParam.args[0] == null) {
                     return;
                 }
-                Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[0], "intent");
-                int resultCode = (int) XposedHelpers.getObjectField(methodHookParam.args[0], "resultCode");
-                String packageName = intent.getPackage();
+                Object broadcastRecord = methodHookParam.args[0];
+                Object resultTo = XposedHelpers.getObjectField(broadcastRecord, "resultTo");
+                Object intentValue = XposedHelpers.getObjectField(broadcastRecord, "intent");
+                Object resultCodeValue = XposedHelpers.getObjectField(broadcastRecord, "resultCode");
+                if (resultTo == null
+                        || !(intentValue instanceof Intent)
+                        || !(resultCodeValue instanceof Integer)) {
+                    return;
+                }
+                Intent intent = (Intent) intentValue;
+                int resultCode = (Integer) resultCodeValue;
+                String packageName = intent.getComponent() != null
+                        ? intent.getComponent().getPackageName()
+                        : intent.getPackage();
                 if (resultCode != -1 && getBooleanConfig("noResponseNotification", false) && targetIsAllow(packageName)) {
                     try {
                         Intent notifyIntent = context.getPackageManager().getLaunchIntentForPackage(packageName);

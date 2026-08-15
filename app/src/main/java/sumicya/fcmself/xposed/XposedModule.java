@@ -23,9 +23,9 @@ import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -37,7 +37,11 @@ public abstract class XposedModule {
     protected final ClassLoader classLoader;
     public static volatile Set<String> allowList = null;
     static final String TAG = "fcmself";
-    private static final HashMap<String, Object> config = new HashMap<>();
+    private static final String UPDATE_CONFIG_ACTION = "sumicya.fcmself.update.config";
+    private static final String UPDATE_CONFIG_PERMISSION =
+            "sumicya.fcmself.permission.UPDATE_CONFIG";
+    /** Read by binder/hook threads while the config loader updates it. */
+    private static final ConcurrentHashMap<String, Object> config = new ConcurrentHashMap<>();
 
     /** Min interval between diagnostic broadcast logs (ms) — reduces IPC storm */
     private static final long DIAG_LOG_MIN_INTERVAL_MS = 200L;
@@ -51,7 +55,9 @@ public abstract class XposedModule {
     private static final ArrayList<XposedModule> instances = new ArrayList<>();
     private static volatile boolean isInitReceiver = false;
     public static volatile boolean isBootComplete = false;
-    private static Thread loadConfigThread = null;
+    /** Coalesce bursts without losing a refresh that arrives while a load is running. */
+    private static final AtomicBoolean configLoadRunning = new AtomicBoolean(false);
+    private static final AtomicBoolean configReloadPending = new AtomicBoolean(false);
 
     protected XposedModule(final ClassLoader classLoader) {
         this.classLoader = classLoader;
@@ -91,6 +97,10 @@ public abstract class XposedModule {
 
     private static void callAllOnCanReadConfig() {
         initReceiver();
+        // Load eagerly after credential-encrypted storage becomes available. The old lazy-only
+        // path dropped the first FCM delivery after every boot because targetIsAllow() returned
+        // before its background config read had completed.
+        onUpdateConfig();
         if ("android".equals(getSelfPackageName())) {
             new Thread(() -> {
                 try {
@@ -185,7 +195,7 @@ public abstract class XposedModule {
         if ("sumicya.fcmself".equals(packageName)) {
             return true;
         }
-        // Fast path once config has been loaded; avoid HashMap/init work on every broadcast
+        // Fast path once config has been loaded; avoid map/init work on every broadcast
         if (!configReady.get() && config.get("init") == null) {
             this.checkUserDeviceUnlockAndUpdateConfig();
         }
@@ -207,39 +217,70 @@ public abstract class XposedModule {
     }
 
     protected static void onUpdateConfig() {
-        if (loadConfigThread == null) {
-            loadConfigThread = new Thread(() -> {
-                try {
-                    SharedPreferences remotePreferences = XposedBridge.getRemotePreferences("config");
-                    if (remotePreferences == null) {
-                        throw new IllegalStateException("remotePreferences 不可用");
-                    }
-                    Set<String> loaded = remotePreferences.getStringSet("allowList", null);
-                    if (loaded != null) {
-                        // Snapshot into a new HashSet so callers see a stable, non-shared instance
-                        allowList = new HashSet<>(loaded);
-                    } else if (allowList == null) {
-                        allowList = new HashSet<>();
-                    }
-                    if ("android".equals(getSelfPackageName())) {
-                        printLog("[Modern Xposed API]onUpdateConfig allowList size: " + allowList.size());
-                    }
-                    config.put("disableAutoCleanNotification", remotePreferences.getBoolean("disableAutoCleanNotification", false));
-                    config.put("includeIceBoxDisableApp", remotePreferences.getBoolean("includeIceBoxDisableApp", false));
-                    config.put("noResponseNotification", remotePreferences.getBoolean("noResponseNotification", false));
-                    config.put("init", true);
-                    configReady.set(true);
-                    try {
-                        BroadcastFix.onConfigUpdated();
-                    } catch (Throwable ignored) {
-                    }
-                } catch (Throwable e) {
-                    printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
-                } finally {
-                    loadConfigThread = null;
+        configReloadPending.set(true);
+        if (!configLoadRunning.compareAndSet(false, true)) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                // A broadcast can arrive while SharedPreferences is being read. Loop once more in
+                // that case so the newest committed value wins instead of silently dropping it.
+                do {
+                    configReloadPending.set(false);
+                    loadConfigOnce();
+                } while (configReloadPending.get());
+            } finally {
+                configLoadRunning.set(false);
+                // Close the small race between the loop condition and clearing the running flag.
+                if (configReloadPending.get()) {
+                    onUpdateConfig();
                 }
-            }, "fcmself-config");
-            loadConfigThread.start();
+            }
+        }, "fcmself-config").start();
+    }
+
+    private static void loadConfigOnce() {
+        try {
+            SharedPreferences remotePreferences = XposedBridge.getRemotePreferences("config");
+            if (remotePreferences == null) {
+                throw new IllegalStateException("remotePreferences 不可用");
+            }
+
+            Set<String> loaded = remotePreferences.getStringSet("allowList", null);
+            boolean initialized = remotePreferences.getBoolean("init", false);
+            Set<String> currentAllowList = allowList;
+            Set<String> newAllowList;
+            if (loaded != null) {
+                newAllowList = new HashSet<>(loaded);
+            } else if (initialized || currentAllowList == null) {
+                newAllowList = new HashSet<>();
+            } else {
+                // An uninitialised/transiently unavailable value must not erase a known snapshot.
+                newAllowList = currentAllowList;
+            }
+            boolean disableAutoClean = remotePreferences.getBoolean(
+                    "disableAutoCleanNotification", false);
+            boolean includeIceBox = remotePreferences.getBoolean(
+                    "includeIceBoxDisableApp", false);
+            boolean noResponseNotification = remotePreferences.getBoolean(
+                    "noResponseNotification", false);
+
+            // Publish complete snapshots only after every preference read succeeds. A transient
+            // type/binder failure therefore cannot partially replace the live configuration.
+            allowList = newAllowList;
+            config.put("disableAutoCleanNotification", disableAutoClean);
+            config.put("includeIceBoxDisableApp", includeIceBox);
+            config.put("noResponseNotification", noResponseNotification);
+            config.put("init", true);
+            configReady.set(true);
+
+            if ("android".equals(getSelfPackageName())) {
+                printLog("[Modern Xposed API]onUpdateConfig allowList size: " + newAllowList.size());
+            }
+            BroadcastFix.onConfigUpdated();
+            KeepNotification.onConfigUpdated();
+        } catch (Throwable e) {
+            printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
         }
     }
 
@@ -256,19 +297,27 @@ public abstract class XposedModule {
         if (!isInitReceiver && context != null) {
             isInitReceiver = true;
 
-            IntentFilter updateConfigIntentFilter = new IntentFilter();
-            updateConfigIntentFilter.addAction("sumicya.fcmself.update.config");
+            IntentFilter updateConfigIntentFilter = new IntentFilter(UPDATE_CONFIG_ACTION);
             BroadcastReceiver configReceiver = new BroadcastReceiver() {
                 public void onReceive(Context context, Intent intent) {
-                    if ("sumicya.fcmself.update.config".equals(intent.getAction())) {
+                    if (UPDATE_CONFIG_ACTION.equals(intent.getAction())) {
                         onUpdateConfig();
                     }
                 }
             };
-            if (Build.VERSION.SDK_INT >= 34) {
-                context.registerReceiver(configReceiver, updateConfigIntentFilter, Context.RECEIVER_EXPORTED);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(
+                        configReceiver,
+                        updateConfigIntentFilter,
+                        UPDATE_CONFIG_PERMISSION,
+                        null,
+                        Context.RECEIVER_EXPORTED);
             } else {
-                context.registerReceiver(configReceiver, updateConfigIntentFilter);
+                context.registerReceiver(
+                        configReceiver,
+                        updateConfigIntentFilter,
+                        UPDATE_CONFIG_PERMISSION,
+                        null);
             }
 
             IntentFilter unInstallIntentFilter = new IntentFilter();

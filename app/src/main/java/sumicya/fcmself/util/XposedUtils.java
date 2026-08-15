@@ -19,17 +19,20 @@ public class XposedUtils {
 
     public static XC_MethodHook.Unhook findAndHookConstructorAnyParam(Class<?> clazz, XC_MethodHook callbacks, Class<?>... parameterTypes) {
         Constructor<?> bestMatch = null;
-        int matchCount = 0;
+        int matchCount = -1;
         for (Constructor<?> constructor : clazz.getDeclaredConstructors()) {
             Class<?>[] constructorParamTypes = constructor.getParameterTypes();
-            int _matchCount = 0;
+            int candidateMatches = 0;
             for (int i = 0; i < Math.min(constructorParamTypes.length, parameterTypes.length); i++) {
                 if (parameterTypes[i] == constructorParamTypes[i]) {
-                    _matchCount++;
+                    candidateMatches++;
                 }
             }
-            if (_matchCount >= matchCount) {
-                matchCount = _matchCount;
+            if (candidateMatches > matchCount
+                    || (candidateMatches == matchCount
+                    && (bestMatch == null
+                    || constructorParamTypes.length > bestMatch.getParameterCount()))) {
+                matchCount = candidateMatches;
                 bestMatch = constructor;
             }
         }
@@ -76,18 +79,21 @@ public class XposedUtils {
 
     public static XC_MethodHook.Unhook findAndHookMethodAnyParam(Class<?> clazz, String methodName, XC_MethodHook callbacks, Object... parameterTypes) {
         Method bestMatch = null;
-        int matchCount = 0;
+        int matchCount = -1;
         for (Method method : clazz.getDeclaredMethods()) {
             if (methodName.equals(method.getName())) {
                 Class<?>[] methodParamTypes = method.getParameterTypes();
-                int _matchCount = 0;
+                int candidateMatches = 0;
                 for (int i = 0; i < Math.min(methodParamTypes.length, parameterTypes.length); i++) {
                     if (parameterTypes[i] == methodParamTypes[i]) {
-                        _matchCount++;
+                        candidateMatches++;
                     }
                 }
-                if (_matchCount >= matchCount) {
-                    matchCount = _matchCount;
+                if (candidateMatches > matchCount
+                        || (candidateMatches == matchCount
+                        && (bestMatch == null
+                        || methodParamTypes.length > bestMatch.getParameterCount()))) {
+                    matchCount = candidateMatches;
                     bestMatch = method;
                 }
             }
@@ -136,9 +142,10 @@ public class XposedUtils {
 
     public static Object getObjectFieldByPath(Object obj, String pathFieldName, Class<?> clazz) {
         Object result = getObjectFieldByPath(obj, pathFieldName);
-        if (result.getClass() != clazz) {
+        if (result == null || !clazz.isInstance(result)) {
+            String found = result == null ? "null" : result.getClass().getName();
             throw new NoSuchFieldError(obj.getClass().getName() + "#" + pathFieldName
-                    + ";Found " + result.getClass().getName() + " but not equal " + clazz.getName() + ".");
+                    + "; found " + found + " but expected " + clazz.getName() + ".");
         }
         return result;
     }

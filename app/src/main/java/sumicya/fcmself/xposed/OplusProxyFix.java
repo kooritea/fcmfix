@@ -54,8 +54,15 @@ public class OplusProxyFix extends XposedModule {
 
         XposedUtils.findAndHookMethod(oplusProxyBroadcastClass, "shouldProxy", 8, new XC_MethodHook() {
             @Override
-            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                String callingPkg = (String) param.args[3];
+            protected void beforeHookedMethod(MethodHookParam param) {
+                if (param.args.length <= 6
+                        || !(param.args[5] instanceof String)
+                        || !(param.args[6] instanceof String)) {
+                    return;
+                }
+                String callingPkg = param.args[3] instanceof String
+                        ? (String) param.args[3]
+                        : "unknown";
                 String pkgName = (String) param.args[5];
                 String action = (String) param.args[6];
                 if (isFCMAction(action) && targetIsAllow(pkgName)) {

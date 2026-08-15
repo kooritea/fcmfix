@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
@@ -36,13 +37,14 @@ public class ReconnectManagerFix extends XposedModule {
     private String GcmChimeraServiceLogMethodName;
     private boolean startHookFlag = false;
     private boolean hooksInstalled = false;
+    private boolean logReceiverRegistered = false;
 
     // Cached from SharedPreferences after successful resolution
     private String cachedAlarmTypePath;
-    private String[] cachedAlarmTypePathParts;
-    private long cachedHbInterval;
-    private long cachedConnInterval;
-    private Field cachedMaxLongField;
+    private volatile String[] cachedAlarmTypePathParts;
+    private volatile long cachedHbInterval;
+    private volatile long cachedConnInterval;
+    private volatile Field cachedMaxLongField;
 
     private static final Handler RECONNECT_HANDLER = new Handler(Looper.getMainLooper());
 
@@ -77,12 +79,17 @@ public class ReconnectManagerFix extends XposedModule {
                 @SuppressLint("UnspecifiedRegisterReceiverFlag")
                 @Override
                 protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
-                    IntentFilter intentFilter = new IntentFilter();
-                    intentFilter.addAction("sumicya.fcmself.log");
-                    if (Build.VERSION.SDK_INT >= 34) {
-                        context.registerReceiver(logBroadcastReceive, intentFilter, Context.RECEIVER_EXPORTED);
-                    } else {
-                        context.registerReceiver(logBroadcastReceive, intentFilter);
+                    if (!logReceiverRegistered) {
+                        IntentFilter intentFilter = new IntentFilter("sumicya.fcmself.log");
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            context.registerReceiver(
+                                    logBroadcastReceive,
+                                    intentFilter,
+                                    Context.RECEIVER_EXPORTED);
+                        } else {
+                            context.registerReceiver(logBroadcastReceive, intentFilter);
+                        }
+                        logReceiverRegistered = true;
                     }
                     if (startHookFlag) {
                         checkVersion();
@@ -94,9 +101,13 @@ public class ReconnectManagerFix extends XposedModule {
             XposedHelpers.findAndHookMethod(this.GcmChimeraService, "onDestroy", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(final MethodHookParam param) {
-                    try {
-                        context.unregisterReceiver(logBroadcastReceive);
-                    } catch (Throwable ignored) {
+                    if (logReceiverRegistered) {
+                        try {
+                            context.unregisterReceiver(logBroadcastReceive);
+                        } catch (Throwable ignored) {
+                        } finally {
+                            logReceiverRegistered = false;
+                        }
                     }
                 }
             });
@@ -352,9 +363,8 @@ public class ReconnectManagerFix extends XposedModule {
             }
         } catch (Throwable e) {
             editor.putBoolean("enable", false);
-            printLog("自动寻找hook点失败" + e.getMessage(), true);
+            printLog("自动寻找hook点失败: " + e, true);
             this.sendNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
-            e.printStackTrace();
         }
         editor.apply();
     }
@@ -364,19 +374,39 @@ public class ReconnectManagerFix extends XposedModule {
             @SuppressLint("SetTextI18n")
             @Override
             protected void afterHookedMethod(final MethodHookParam param) {
-                ViewGroup viewGroup = ((Window) XposedHelpers.callMethod(param.thisObject, "getWindow")).getDecorView().findViewById(android.R.id.content);
-                LinearLayout linearLayout = (LinearLayout) viewGroup.getChildAt(0);
-                LinearLayout linearLayout2 = (LinearLayout) linearLayout.getChildAt(0);
+                if (!(param.thisObject instanceof ContextWrapper)) {
+                    return;
+                }
+                Object windowValue = XposedHelpers.callMethod(param.thisObject, "getWindow");
+                if (!(windowValue instanceof Window)) {
+                    return;
+                }
+                View content = ((Window) windowValue).getDecorView()
+                        .findViewById(android.R.id.content);
+                if (!(content instanceof ViewGroup) || ((ViewGroup) content).getChildCount() == 0) {
+                    return;
+                }
+                View firstChild = ((ViewGroup) content).getChildAt(0);
+                if (!(firstChild instanceof LinearLayout)
+                        || ((LinearLayout) firstChild).getChildCount() == 0) {
+                    return;
+                }
+                View buttonContainer = ((LinearLayout) firstChild).getChildAt(0);
+                if (!(buttonContainer instanceof LinearLayout)) {
+                    return;
+                }
+                LinearLayout linearLayout = (LinearLayout) buttonContainer;
+                ContextWrapper activity = (ContextWrapper) param.thisObject;
 
-                Button reConnectButton = new Button((ContextWrapper) param.thisObject);
+                Button reConnectButton = new Button(activity);
                 reConnectButton.setText("RECONNECT");
                 reConnectButton.setOnClickListener(view -> {
                     context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
                     printLog("Send broadcast GCM_RECONNECT", true);
                 });
-                linearLayout2.addView(reConnectButton);
+                linearLayout.addView(reConnectButton);
 
-                Button openFcmFixButton = new Button((ContextWrapper) param.thisObject);
+                Button openFcmFixButton = new Button(activity);
                 openFcmFixButton.setText("打开FCMFIX");
                 openFcmFixButton.setOnClickListener(view -> {
                     Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -385,7 +415,7 @@ public class ReconnectManagerFix extends XposedModule {
                     intent.setComponent(new ComponentName("sumicya.fcmself", "sumicya.fcmself.MainActivity"));
                     context.startActivity(intent);
                 });
-                linearLayout2.addView(openFcmFixButton);
+                linearLayout.addView(openFcmFixButton);
             }
         });
     }
