@@ -21,6 +21,7 @@ public final class FcmReceiverDetector {
     }
 
     /** @deprecated retained for backward compatibility; use {@link #isFcmComponent(String)}. */
+    @Deprecated
     public static boolean isFcmReceiver(String className) {
         return isFcmComponent(className);
     }

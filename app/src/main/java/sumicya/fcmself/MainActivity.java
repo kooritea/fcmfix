@@ -408,11 +408,19 @@ public class MainActivity extends AppCompatActivity {
         String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
 
         Snackbar snackbar = Snackbar.make(recyclerView, text, Snackbar.LENGTH_LONG);
-        // Leading icon echoes the tile's status mark so the confirmation reads at a glance.
-        snackbar.setLeadingIcon(nowAllow
+        // Snackbar has no leading-icon API. Add the status mark to its message TextView instead.
+        TextView snackbarText = snackbar.getView()
+                .findViewById(com.google.android.material.R.id.snackbar_text);
+        Drawable icon = ContextCompat.getDrawable(this, nowAllow
                 ? R.drawable.ic_status_check
                 : R.drawable.ic_status_close);
-        snackbar.setIconTint(accent);
+        if (snackbarText != null && icon != null) {
+            icon = icon.mutate();
+            icon.setTint(accent);
+            snackbarText.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, null, null, null);
+            int iconPadding = Math.round(8 * getResources().getDisplayMetrics().density);
+            snackbarText.setCompoundDrawablePadding(iconPadding);
+        }
         snackbar.setActionTextColor(accent);
         snackbar.setTextMaxLines(2);
         // Slightly longer than the default so the undo window feels comfortable.
