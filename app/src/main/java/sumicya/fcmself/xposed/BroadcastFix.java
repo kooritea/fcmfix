@@ -9,6 +9,7 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Process;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -323,9 +324,11 @@ public class BroadcastFix extends XposedModule {
             if (sPemAddMethod == null || sPemService == null) {
                 return;
             }
-            // Use the system context's real user id. A hardcoded 102 names a user that does not
-            // exist on single-user devices, silently making the temporary allow list a no-op.
-            sPemAddMethod.invoke(sPemService, packageName, context.getUserId(),
+            // User id of the system process (USER_SYSTEM = 0). A hardcoded 102 names a user that
+            // does not exist on single-user devices, silently making the temporary allow list a
+            // no-op. Process.myUserHandle().hashCode() is the public-API equivalent of the hidden
+            // Context.getUserId() on recent SDKs (the latter fails to compile on compileSdk 37).
+            sPemAddMethod.invoke(sPemService, packageName, Process.myUserHandle().hashCode(),
                     "GOOGLE_C2DM", 2000L);
         } catch (Throwable t) {
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
