@@ -380,31 +380,43 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Shows a short confirmation for a toggle and lets the user undo it. The undo re-applies the
      * inverse persistence and re-filters, so a tile that left a filtered view comes back instead
-     * of silently disappearing.
+     * of silently disappearing. The leading icon and accent color follow the action (check/primary
+     * when enabling, cross/error when disabling).
      */
     private void showToggleFeedback(AppInfo appInfo) {
         final boolean nowAllow = appInfo.isAllow;
         final String pkg = appInfo.packageName;
         final String name = appInfo.name;
+        final int accent = nowAllow ? colorPrimary : colorError;
         String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
-        Snackbar.make(recyclerView, text, Snackbar.LENGTH_LONG)
-                .setAction("撤销", v -> {
-                    boolean reverted = nowAllow
-                            ? deleteAppInAllowList(pkg)
-                            : addAppInAllowList(pkg);
-                    if (!reverted) {
-                        return;
-                    }
-                    for (AppInfo info : fullAppList) {
-                        if (pkg.equals(info.packageName)) {
-                            info.isAllow = !nowAllow;
-                            break;
-                        }
-                    }
-                    applyFilter();
-                    updateStats();
-                })
-                .show();
+
+        Snackbar snackbar = Snackbar.make(recyclerView, text, Snackbar.LENGTH_LONG);
+        // Leading icon echoes the tile's status mark so the confirmation reads at a glance.
+        snackbar.setLeadingIcon(nowAllow
+                ? R.drawable.ic_status_check
+                : R.drawable.ic_status_close);
+        snackbar.setIconTint(accent);
+        snackbar.setActionTextColor(accent);
+        snackbar.setTextMaxLines(2);
+        // Slightly longer than the default so the undo window feels comfortable.
+        snackbar.setDuration(4_000);
+        snackbar.setAction("撤销", v -> {
+            boolean reverted = nowAllow
+                    ? deleteAppInAllowList(pkg)
+                    : addAppInAllowList(pkg);
+            if (!reverted) {
+                return;
+            }
+            for (AppInfo info : fullAppList) {
+                if (pkg.equals(info.packageName)) {
+                    info.isAllow = !nowAllow;
+                    break;
+                }
+            }
+            applyFilter();
+            updateStats();
+        });
+        snackbar.show();
     }
 
     private void applyFilter() {
