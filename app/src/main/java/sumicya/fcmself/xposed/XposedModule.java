@@ -369,7 +369,7 @@ public abstract class XposedModule {
         sendNotification(title, content, null);
     }
 
-    @SuppressLint("MissingPermission")
+    @SuppressLint({"MissingPermission", "NotificationPermission"})
     protected void sendNotification(String title, String content, PendingIntent pendingIntent) {
         printLog(title, false);
         title = "[fcmself]" + title;

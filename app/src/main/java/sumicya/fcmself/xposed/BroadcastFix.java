@@ -329,7 +329,7 @@ public class BroadcastFix extends XposedModule {
         }
     }
 
-    @SuppressLint("MissingPermission")
+    @SuppressLint({"MissingPermission", "NotificationPermission"})
     protected void startHookScheduleResultTo() {
         // This code is injected into system_server, so notification permission is determined by
         // that host process rather than this module APK. Keep the runtime SecurityException guard
