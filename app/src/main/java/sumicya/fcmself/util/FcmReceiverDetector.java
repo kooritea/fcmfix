@@ -48,7 +48,9 @@ public final class FcmReceiverDetector {
             return true;
         }
         // Legacy GCM receiver/service renames.
-        if (lower.endsWith("gcmreceiver") || lower.endsWith("gcmlistener")) {
+        if (lower.endsWith("gcmreceiver")
+                || lower.endsWith("gcmlistener")
+                || lower.endsWith("gcmlistenerservice")) {
             return true;
         }
         // Generic "fcm..." receiver/service names used by many apps.
