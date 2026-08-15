@@ -16,6 +16,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
@@ -283,7 +284,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean hasFcmDiagnosticsIssueCached() {
-        long now = System.currentTimeMillis();
+        // Cache age must not depend on wall-clock changes (network time, manual adjustment).
+        long now = SystemClock.elapsedRealtime();
         if (cachedDiagIssue != null && (now - diagCacheAtMs) < DIAG_CACHE_MS) {
             return cachedDiagIssue;
         }
@@ -800,9 +802,8 @@ public class MainActivity extends AppCompatActivity {
                 if (list.isEmpty()
                         || (list.size() == 1 && "sumicya.fcmself".equals(list.get(0).packageName))) {
                     new AlertDialog.Builder(MainActivity.this)
-                            .setTitle("请在系统设置中授予读取应用列表权限")
-                            .setMessage("或直接编辑" + getApplicationContext().getFilesDir().getAbsolutePath()
-                                    + "/config.json(需重启生效)")
+                            .setTitle("无法读取应用列表")
+                            .setMessage("请在系统设置中允许 fcmself 读取应用列表，然后重新打开本应用。")
                             .setPositiveButton("确定", (dialog, which) -> {})
                             .show();
                 }
@@ -926,6 +927,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         activeInstance = new WeakReference<>(this);
+        if (!SERVICE_LISTENER_REGISTERED.get()) {
+            // Registration can fail while the framework service is still starting. Do not require
+            // an Activity recreation before trying again.
+            initXposedService();
+        }
         // Returning from background (e.g. the task was swiped away and relaunched): the remote
         // config is the source of truth, so re-read it before repainting the check marks.
         if (xposedService != null) {

@@ -1,5 +1,6 @@
 package sumicya.fcmself.xposed;
 
+import android.annotation.SuppressLint;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -328,7 +329,11 @@ public class BroadcastFix extends XposedModule {
         }
     }
 
+    @SuppressLint("MissingPermission")
     protected void startHookScheduleResultTo() {
+        // This code is injected into system_server, so notification permission is determined by
+        // that host process rather than this module APK. Keep the runtime SecurityException guard
+        // below for OEM implementations that apply additional notification restrictions.
         Method method = XposedUtils.findMethod(
                 XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernImpl", classLoader),
                 "scheduleResultTo", 1);

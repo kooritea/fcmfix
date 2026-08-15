@@ -21,6 +21,14 @@ public class FcmReceiverDetectorTest {
     }
 
     @Test
+    public void detectsLegacyGcmReceivers() {
+        assertTrue(FcmReceiverDetector.isFcmReceiver(
+                "com.google.android.gms.gcm.GcmReceiver"));
+        assertTrue(FcmReceiverDetector.isFcmReceiver(
+                "example.push.GcmReceiver"));
+    }
+
+    @Test
     public void doesNotTreatFirebaseAnalyticsAsMessaging() {
         assertFalse(FcmReceiverDetector.isFcmReceiver(
                 "com.google.android.gms.measurement.AppMeasurementReceiver"));
