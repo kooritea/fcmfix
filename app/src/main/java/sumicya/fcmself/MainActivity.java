@@ -1425,10 +1425,9 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         int fallbackPrimary = ContextCompat.getColor(this, R.color.colorPrimary);
-        colorPrimary = resolveThemeColor(
-                com.google.android.material.R.attr.colorPrimary, fallbackPrimary);
+        colorPrimary = resolveThemeColor(android.R.attr.colorPrimary, fallbackPrimary);
         colorError = resolveThemeColor(
-                com.google.android.material.R.attr.colorError,
+                android.R.attr.colorError,
                 ContextCompat.getColor(this, R.color.status_error));
         colorOnSurface = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnSurface, Color.DKGRAY);
