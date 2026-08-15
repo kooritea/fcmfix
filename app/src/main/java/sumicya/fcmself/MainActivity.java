@@ -10,9 +10,11 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -22,13 +24,13 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.util.LruCache;
 import android.util.TypedValue;
-import android.view.ContextThemeWrapper;
+import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.PopupMenu;
+import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -43,6 +45,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
@@ -139,6 +142,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             };
     private FloatingActionButton mainFab;
+    private TextView allStatsView;
     private TextView statsView;
     private View headerSafe;
     private RecyclerView recyclerView;
@@ -147,10 +151,16 @@ public class MainActivity extends AppCompatActivity {
     private boolean lastConfigError = false;
     private FilterMode filterMode = FilterMode.ALL;
 
-    private int colorConnected;
-    private int colorError;
-    private int colorDisconnected;
     private int colorPrimary;
+    private int colorError;
+    private int colorOnSurface;
+    private int colorOnSurfaceVariant;
+    private int colorSurfaceContainerHigh;
+    private int fabConnectedContainer;
+    private int fabConnectedContent;
+    private int fabErrorContainer;
+    private int fabErrorContent;
+    private int fabDisconnectedContainer;
     /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
     private ColorStateList tintPrimary;
     private ColorStateList tintError;
@@ -314,15 +324,20 @@ public class MainActivity extends AppCompatActivity {
         if (mainFab == null) {
             return;
         }
-        int color;
+        int container;
+        int content;
         if (xposedService == null) {
-            color = colorDisconnected;
+            container = fabDisconnectedContainer;
+            content = colorOnSurfaceVariant;
         } else if (lastConfigError || hasFcmDiagnosticsIssueCached()) {
-            color = colorError;
+            container = fabErrorContainer;
+            content = fabErrorContent;
         } else {
-            color = colorConnected;
+            container = fabConnectedContainer;
+            content = fabConnectedContent;
         }
-        mainFab.setBackgroundTintList(ColorStateList.valueOf(color));
+        mainFab.setBackgroundTintList(ColorStateList.valueOf(container));
+        mainFab.setImageTintList(ColorStateList.valueOf(content));
     }
 
     private boolean hasFcmDiagnosticsIssueCached() {
@@ -382,7 +397,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         try {
-            int surface = resolveThemeColor(android.R.attr.colorBackground, Color.WHITE);
+            int surface = resolveThemeColor(
+                    com.google.android.material.R.attr.colorSurface, Color.WHITE);
             int r = Color.red(surface);
             int g = Color.green(surface);
             int b = Color.blue(surface);
@@ -413,21 +429,67 @@ public class MainActivity extends AppCompatActivity {
         int enabled = 0;
         int totalFcm = 0;
         for (AppInfo info : fullAppList) {
-            if (info.isAllow) {
-                enabled++;
-            }
             if (info.includeFcm) {
                 totalFcm++;
+                if (info.isAllow) {
+                    enabled++;
+                }
             }
         }
-        statsView.setText(getString(R.string.stats_format, enabled, totalFcm));
+        if (allStatsView != null) {
+            allStatsView.setText(getString(R.string.all_apps_count, fullAppList.size()));
+        }
+        statsView.setText(getString(R.string.fcm_enabled_count, enabled, totalFcm));
+    }
+
+    private Snackbar createExpressiveSnackbar(
+            String text, int iconRes, int accent, int duration) {
+        Snackbar snackbar = Snackbar.make(recyclerView, text, duration);
+        if (mainFab != null) {
+            // Anchor above the FAB instead of letting CoordinatorLayout translate the FAB while the
+            // Snackbar animates. This removes the two animations fighting over the same space.
+            snackbar.setAnchorView(mainFab);
+        }
+        View snackbarView = snackbar.getView();
+        int radius = Math.round(22 * getResources().getDisplayMetrics().density);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(colorSurfaceContainerHigh);
+        background.setCornerRadius(radius);
+        snackbarView.setBackground(background);
+        snackbarView.setElevation(6 * getResources().getDisplayMetrics().density);
+
+        if (snackbarView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams layoutParams =
+                    (ViewGroup.MarginLayoutParams) snackbarView.getLayoutParams();
+            int sideMargin = Math.round(16 * getResources().getDisplayMetrics().density);
+            layoutParams.setMarginStart(Math.max(layoutParams.getMarginStart(), sideMargin));
+            layoutParams.setMarginEnd(Math.max(layoutParams.getMarginEnd(), sideMargin));
+            snackbarView.setLayoutParams(layoutParams);
+        }
+
+        TextView snackbarText = snackbarView
+                .findViewById(com.google.android.material.R.id.snackbar_text);
+        Drawable icon = ContextCompat.getDrawable(this, iconRes);
+        if (snackbarText != null) {
+            snackbarText.setTextColor(colorOnSurface);
+            if (icon != null) {
+                icon = icon.mutate();
+                icon.setTint(accent);
+                snackbarText.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                        icon, null, null, null);
+                int iconPadding = Math.round(8 * getResources().getDisplayMetrics().density);
+                snackbarText.setCompoundDrawablePadding(iconPadding);
+            }
+        }
+        snackbar.setActionTextColor(accent);
+        snackbar.setTextMaxLines(2);
+        return snackbar;
     }
 
     /**
      * Shows a short confirmation for a toggle and lets the user undo it. The undo re-applies the
      * inverse persistence and re-filters, so a tile that left a filtered view comes back instead
-     * of silently disappearing. The leading icon and accent color follow the action (check/primary
-     * when enabling, cross/error when disabling).
+     * of silently disappearing.
      */
     private void showToggleFeedback(AppInfo appInfo) {
         final boolean nowAllow = appInfo.isAllow;
@@ -436,25 +498,12 @@ public class MainActivity extends AppCompatActivity {
         final int accent = nowAllow ? colorPrimary : colorError;
         String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
 
-        Snackbar snackbar = Snackbar.make(recyclerView, text, Snackbar.LENGTH_LONG);
-        // Snackbar has no leading-icon API. Add the status mark to its message TextView instead.
-        TextView snackbarText = snackbar.getView()
-                .findViewById(com.google.android.material.R.id.snackbar_text);
-        Drawable icon = ContextCompat.getDrawable(this, nowAllow
-                ? R.drawable.ic_status_check
-                : R.drawable.ic_status_close);
-        if (snackbarText != null && icon != null) {
-            icon = icon.mutate();
-            icon.setTint(accent);
-            snackbarText.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, null, null, null);
-            int iconPadding = Math.round(8 * getResources().getDisplayMetrics().density);
-            snackbarText.setCompoundDrawablePadding(iconPadding);
-        }
-        snackbar.setActionTextColor(accent);
-        snackbar.setTextMaxLines(2);
-        // Slightly longer than the default so the undo window feels comfortable.
-        snackbar.setDuration(4_000);
-        snackbar.setAction("撤销", v -> {
+        Snackbar snackbar = createExpressiveSnackbar(
+                text,
+                nowAllow ? R.drawable.ic_status_check : R.drawable.ic_status_close,
+                accent,
+                4_000);
+        snackbar.setAction(R.string.undo, v -> {
             boolean reverted = nowAllow
                     ? deleteAppInAllowList(pkg)
                     : addAppInAllowList(pkg);
@@ -470,6 +519,15 @@ public class MainActivity extends AppCompatActivity {
             applyFilter();
             updateStats();
         });
+        snackbar.show();
+    }
+
+    private void showUnsupportedAppFeedback(AppInfo appInfo) {
+        Snackbar snackbar = createExpressiveSnackbar(
+                getString(R.string.unsupported_app_message, appInfo.name),
+                R.drawable.ic_status_dash,
+                colorOnSurfaceVariant,
+                Snackbar.LENGTH_SHORT);
         snackbar.show();
     }
 
@@ -528,88 +586,161 @@ public class MainActivity extends AppCompatActivity {
         if (mainFab == null) {
             return;
         }
-        Context themed = new ContextThemeWrapper(this, R.style.RoundedPopupMenu);
-        PopupMenu popup = new PopupMenu(themed, mainFab);
-        popup.getMenu().add(0, 1, 0, "阻止应用停止时自动清除通知").setCheckable(true);
-        popup.getMenu().add(0, 2, 1, "允许唤醒被冰箱冻结的应用").setCheckable(true);
-        popup.getMenu().add(0, 3, 2, "目标无响应时代发提示通知").setCheckable(true);
-        popup.getMenu().add(0, 4, 3, "全选包含 FCM 的应用");
-        popup.getMenu().add(0, 5, 4, "打开 FCM Diagnostics");
+        LayoutInflater inflater = LayoutInflater.from(this);
+        View content = inflater.inflate(R.layout.fab_menu_popup, null, false);
+        LinearLayout items = content.findViewById(R.id.fab_menu_items);
+        int horizontalMargin = Math.round(12 * getResources().getDisplayMetrics().density);
+        int maxWidth = getResources().getDisplayMetrics().widthPixels - horizontalMargin * 2;
+        int popupWidth = Math.min(
+                Math.round(336 * getResources().getDisplayMetrics().density), maxWidth);
+        PopupWindow popup = new PopupWindow(
+                content, popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        popup.setOutsideTouchable(true);
+        popup.setElevation(12 * getResources().getDisplayMetrics().density);
+        popup.setClippingEnabled(true);
 
-        try {
-            popup.getMenu().findItem(1).setChecked(config.optBoolean("disableAutoCleanNotification", false));
-            popup.getMenu().findItem(2).setChecked(config.optBoolean("includeIceBoxDisableApp", false));
-            popup.getMenu().findItem(3).setChecked(config.optBoolean("noResponseNotification", false));
-        } catch (Throwable ignored) {
+        addToggleFabMenuItem(
+                items,
+                R.string.fab_menu_disable_auto_clean,
+                "disableAutoCleanNotification");
+        addToggleFabMenuItem(
+                items,
+                R.string.fab_menu_include_icebox,
+                "includeIceBoxDisableApp");
+        addToggleFabMenuItem(
+                items,
+                R.string.fab_menu_no_response,
+                "noResponseNotification");
+        addActionFabMenuItem(items, R.string.fab_menu_select_all_fcm, "✓", v -> {
+            enableAllFcmApps();
+            popup.dismiss();
+        });
+        addActionFabMenuItem(items, R.string.fab_menu_diagnostics, "↗", v -> {
+            popup.dismiss();
+            openFcmDiagnostics();
+        });
+
+        content.measure(
+                View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int[] location = new int[2];
+        mainFab.getLocationInWindow(location);
+        int x;
+        if (ViewCompat.getLayoutDirection(mainFab) == ViewCompat.LAYOUT_DIRECTION_RTL) {
+            x = location[0];
+        } else {
+            x = location[0] + mainFab.getWidth() - popupWidth;
         }
-
-        popup.setOnMenuItemClickListener(this::onFabMenuItemClick);
-        popup.show();
+        x = Math.max(horizontalMargin, Math.min(x, maxWidth - popupWidth + horizontalMargin));
+        int verticalGap = Math.round(12 * getResources().getDisplayMetrics().density);
+        int y = Math.max(
+                horizontalMargin,
+                location[1] - content.getMeasuredHeight() - verticalGap);
+        popup.showAtLocation(mainFab, Gravity.NO_GRAVITY, x, y);
     }
 
-    private void updateBooleanConfig(String key, boolean value) throws JSONException {
+    private View inflateFabMenuItem(LinearLayout parent, int labelRes) {
+        View row = LayoutInflater.from(this).inflate(R.layout.fab_menu_item, parent, false);
+        ((TextView) row.findViewById(R.id.menu_label)).setText(labelRes);
+        parent.addView(row);
+        return row;
+    }
+
+    private void bindToggleFabMenuState(View row, boolean checked) {
+        MaterialCardView stateContainer = row.findViewById(R.id.menu_state_container);
+        TextView symbol = row.findViewById(R.id.menu_symbol);
+        int container = resolveThemeColor(
+                checked
+                        ? com.google.android.material.R.attr.colorPrimaryContainer
+                        : com.google.android.material.R.attr.colorSurfaceContainerHighest,
+                checked ? fabConnectedContainer : fabDisconnectedContainer);
+        int content = resolveThemeColor(
+                checked
+                        ? com.google.android.material.R.attr.colorOnPrimaryContainer
+                        : com.google.android.material.R.attr.colorOnSurfaceVariant,
+                checked ? fabConnectedContent : colorOnSurfaceVariant);
+        stateContainer.setCardBackgroundColor(container);
+        symbol.setText(checked ? "✓" : "—");
+        symbol.setTextColor(content);
+        TextView label = row.findViewById(R.id.menu_label);
+        row.setContentDescription(label.getText() + "，" + (checked ? "已开启" : "已关闭"));
+    }
+
+    private void addToggleFabMenuItem(LinearLayout parent, int labelRes, String configKey) {
+        View row = inflateFabMenuItem(parent, labelRes);
+        bindToggleFabMenuState(row, config.optBoolean(configKey, false));
+        row.setOnClickListener(v -> {
+            boolean next = !config.optBoolean(configKey, false);
+            if (updateBooleanConfig(configKey, next)) {
+                bindToggleFabMenuState(row, next);
+            }
+        });
+    }
+
+    private void addActionFabMenuItem(
+            LinearLayout parent, int labelRes, String symbolText, View.OnClickListener listener) {
+        View row = inflateFabMenuItem(parent, labelRes);
+        MaterialCardView stateContainer = row.findViewById(R.id.menu_state_container);
+        TextView symbol = row.findViewById(R.id.menu_symbol);
+        stateContainer.setCardBackgroundColor(resolveThemeColor(
+                com.google.android.material.R.attr.colorSecondaryContainer,
+                fabConnectedContainer));
+        symbol.setText(symbolText);
+        symbol.setTextColor(resolveThemeColor(
+                com.google.android.material.R.attr.colorOnSecondaryContainer,
+                fabConnectedContent));
+        row.setContentDescription(((TextView) row.findViewById(R.id.menu_label)).getText());
+        row.setOnClickListener(listener);
+    }
+
+    private boolean updateBooleanConfig(String key, boolean value) {
         boolean previous = config.optBoolean(key, false);
-        config.put(key, value);
-        if (!updateConfig()) {
-            // Keep the in-memory menu state aligned with the last successfully persisted value.
-            // Otherwise a later, unrelated save would silently persist this failed toggle.
-            config.put(key, previous);
-        }
-    }
-
-    private boolean onFabMenuItemClick(MenuItem item) {
-        int id = item.getItemId();
         try {
-            if (id == 1) {
-                updateBooleanConfig("disableAutoCleanNotification", !item.isChecked());
+            config.put(key, value);
+            if (updateConfig()) {
                 return true;
             }
-            if (id == 2) {
-                updateBooleanConfig("includeIceBoxDisableApp", !item.isChecked());
-                return true;
-            }
-            if (id == 3) {
-                updateBooleanConfig("noResponseNotification", !item.isChecked());
-                return true;
-            }
-            if (id == 4) {
-                Set<String> before = new HashSet<>(allowList);
-                for (AppInfo appInfo : fullAppList) {
-                    if (appInfo.includeFcm) {
-                        allowList.add(appInfo.packageName);
-                    }
-                }
-                if (!updateConfig()) {
-                    allowList.clear();
-                    allowList.addAll(before);
-                }
-                syncAllowStateIntoList();
-                return true;
-            }
-            if (id == 5) {
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                intent.setPackage("com.google.android.gms");
-                intent.setComponent(new ComponentName(
-                        "com.google.android.gms",
-                        "com.google.android.gms.gcm.GcmDiagnostics"));
-                try {
-                    startActivity(intent);
-                } catch (Throwable e) {
-                    lastConfigError = true;
-                    cachedDiagIssue = true;
-                    refreshFabStatus();
-                    new AlertDialog.Builder(this)
-                            .setTitle("无法打开 FCM Diagnostics")
-                            .setMessage(String.valueOf(e.getMessage()))
-                            .show();
-                }
-                return true;
-            }
+            // Keep the in-memory menu state aligned with the last successfully persisted value.
+            config.put(key, previous);
         } catch (JSONException e) {
-            Log.e(TAG, "onFabMenuItemClick: " + e);
+            Log.e(TAG, "updateBooleanConfig: " + e);
         }
         return false;
+    }
+
+    private void enableAllFcmApps() {
+        Set<String> before = new HashSet<>(allowList);
+        for (AppInfo appInfo : fullAppList) {
+            if (appInfo.includeFcm) {
+                allowList.add(appInfo.packageName);
+            }
+        }
+        if (!updateConfig()) {
+            allowList.clear();
+            allowList.addAll(before);
+        }
+        syncAllowStateIntoList();
+    }
+
+    private void openFcmDiagnostics() {
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setPackage("com.google.android.gms");
+        intent.setComponent(new ComponentName(
+                "com.google.android.gms",
+                "com.google.android.gms.gcm.GcmDiagnostics"));
+        try {
+            startActivity(intent);
+        } catch (Throwable e) {
+            lastConfigError = true;
+            cachedDiagIssue = true;
+            refreshFabStatus();
+            new AlertDialog.Builder(this)
+                    .setTitle("无法打开 FCM Diagnostics")
+                    .setMessage(String.valueOf(e.getMessage()))
+                    .show();
+        }
     }
 
     private static class AppInfo {
@@ -793,6 +924,10 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 AppInfo appInfo = mAppList.get(position);
+                if (!appInfo.includeFcm && !appInfo.isAllow) {
+                    showUnsupportedAppFeedback(appInfo);
+                    return;
+                }
                 boolean ok = appInfo.isAllow
                         ? deleteAppInAllowList(appInfo.packageName)
                         : addAppInAllowList(appInfo.packageName);
@@ -916,7 +1051,7 @@ public class MainActivity extends AppCompatActivity {
                 holder.status.setImageTintList(tintDisconnected);
                 description = appInfo.includeFcm
                         ? R.string.app_status_pending_desc
-                        : R.string.app_status_manual_desc;
+                        : R.string.app_status_unsupported_desc;
             }
             holder.appView.setContentDescription(getString(description, appInfo.name));
         }
@@ -932,6 +1067,67 @@ public class MainActivity extends AppCompatActivity {
         public int getItemCount() {
             return mAppList.size();
         }
+    }
+
+    private static final String[] FCM_INTENT_ACTIONS = {
+            "com.google.android.c2dm.intent.RECEIVE",
+            "com.google.android.c2dm.intent.REGISTRATION",
+            "com.google.firebase.MESSAGING_EVENT",
+            "com.google.firebase.INSTANCE_ID_EVENT"
+    };
+
+    private static void collectResolvedPackages(
+            Set<String> packages, List<ResolveInfo> resolvedComponents) {
+        if (resolvedComponents == null) {
+            return;
+        }
+        for (ResolveInfo resolved : resolvedComponents) {
+            if (resolved == null) {
+                continue;
+            }
+            if (resolved.activityInfo != null && resolved.activityInfo.packageName != null) {
+                packages.add(resolved.activityInfo.packageName);
+            }
+            if (resolved.serviceInfo != null && resolved.serviceInfo.packageName != null) {
+                packages.add(resolved.serviceInfo.packageName);
+            }
+        }
+    }
+
+    /**
+     * Component class names are only a heuristic: apps commonly name their Firebase service
+     * simply "PushService". Querying manifest intent filters catches those obfuscated/custom names
+     * without opening every APK individually.
+     */
+    private static Set<String> queryFcmIntentPackages(PackageManager pm) {
+        Set<String> packages = new HashSet<>();
+        int flags = PackageManager.MATCH_DISABLED_COMPONENTS;
+        for (String action : FCM_INTENT_ACTIONS) {
+            Intent intent = new Intent(action);
+            try {
+                collectResolvedPackages(packages, pm.queryBroadcastReceivers(intent, flags));
+            } catch (Throwable t) {
+                Log.w(TAG, "query FCM receivers failed for " + action + ": " + t);
+            }
+            try {
+                collectResolvedPackages(packages, pm.queryIntentServices(intent, flags));
+            } catch (Throwable t) {
+                Log.w(TAG, "query FCM services failed for " + action + ": " + t);
+            }
+        }
+        return packages;
+    }
+
+    private static boolean requestsFcmPermission(String[] permissions) {
+        if (permissions == null) {
+            return false;
+        }
+        for (String permission : permissions) {
+            if ("com.google.android.c2dm.permission.RECEIVE".equals(permission)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasFcmComponent(ActivityInfo[] components) {
@@ -964,11 +1160,13 @@ public class MainActivity extends AppCompatActivity {
         List<AppInfo> notAllow = new ArrayList<>();
         List<AppInfo> noFcm = new ArrayList<>();
 
+        Set<String> packagesResolvedForFcm = queryFcmIntentPackages(pm);
         List<PackageInfo> packages;
         try {
             packages = pm.getInstalledPackages(
                     PackageManager.GET_RECEIVERS
                             | PackageManager.GET_SERVICES
+                            | PackageManager.GET_PERMISSIONS
                             | PackageManager.MATCH_DISABLED_COMPONENTS);
         } catch (Throwable t) {
             Log.e(TAG, "getInstalledPackages: " + t);
@@ -979,9 +1177,12 @@ public class MainActivity extends AppCompatActivity {
             if (packageInfo.applicationInfo == null) {
                 continue;
             }
-            // Some apps wire FCM through a service (FirebaseMessagingService subclass) with an
-            // oddly named or missing receiver, so inspect both receivers and services.
-            boolean hasFcm = hasFcmComponent(packageInfo.receivers)
+            // Combine three signals: manifest action filters, the standard C2DM permission, and
+            // component-name heuristics. This catches custom/obfuscated PushService names while
+            // retaining compatibility with unusual legacy integrations.
+            boolean hasFcm = packagesResolvedForFcm.contains(packageInfo.packageName)
+                    || requestsFcmPermission(packageInfo.requestedPermissions)
+                    || hasFcmComponent(packageInfo.receivers)
                     || hasFcmComponent(packageInfo.services);
 
             String label;
@@ -1223,15 +1424,36 @@ public class MainActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);
 
-        colorConnected = ContextCompat.getColor(this, R.color.status_connected);
-        colorError = ContextCompat.getColor(this, R.color.status_error);
-        colorDisconnected = ContextCompat.getColor(this, R.color.status_disconnected);
-        colorPrimary = resolveThemeColor(android.R.attr.colorPrimary, colorConnected);
+        int fallbackPrimary = ContextCompat.getColor(this, R.color.colorPrimary);
+        colorPrimary = resolveThemeColor(
+                com.google.android.material.R.attr.colorPrimary, fallbackPrimary);
+        colorError = resolveThemeColor(
+                com.google.android.material.R.attr.colorError,
+                ContextCompat.getColor(this, R.color.status_error));
+        colorOnSurface = resolveThemeColor(
+                com.google.android.material.R.attr.colorOnSurface, Color.DKGRAY);
+        colorOnSurfaceVariant = resolveThemeColor(
+                com.google.android.material.R.attr.colorOnSurfaceVariant,
+                ContextCompat.getColor(this, R.color.status_disconnected));
+        colorSurfaceContainerHigh = resolveThemeColor(
+                com.google.android.material.R.attr.colorSurfaceContainerHigh, Color.WHITE);
+        fabConnectedContainer = resolveThemeColor(
+                com.google.android.material.R.attr.colorPrimaryContainer, fallbackPrimary);
+        fabConnectedContent = resolveThemeColor(
+                com.google.android.material.R.attr.colorOnPrimaryContainer, Color.WHITE);
+        fabErrorContainer = resolveThemeColor(
+                com.google.android.material.R.attr.colorErrorContainer, colorError);
+        fabErrorContent = resolveThemeColor(
+                com.google.android.material.R.attr.colorOnErrorContainer, Color.WHITE);
+        fabDisconnectedContainer = resolveThemeColor(
+                com.google.android.material.R.attr.colorSurfaceContainerHighest,
+                colorSurfaceContainerHigh);
         tintPrimary = ColorStateList.valueOf(colorPrimary);
         tintError = ColorStateList.valueOf(colorError);
-        tintDisconnected = ColorStateList.valueOf(colorDisconnected);
+        tintDisconnected = ColorStateList.valueOf(colorOnSurfaceVariant);
 
         headerSafe = findViewById(R.id.header_safe);
+        allStatsView = findViewById(R.id.all_stats);
         statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
         filterChips = findViewById(R.id.filter_chips);

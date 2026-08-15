@@ -1,10 +1,23 @@
 <resources>
     <string name="app_name">fcmself</string>
-    <string name="stats_format">已启用 %1$d / FCM %2$d</string>
+    <string name="all_apps_title">全部</string>
+    <string name="fcm_title">FCM</string>
+    <string name="all_apps_count">%1$d 个应用</string>
+    <string name="all_apps_count_initial">0 个应用</string>
+    <string name="fcm_enabled_count">%1$d / %2$d 已启用</string>
+    <string name="fcm_enabled_count_initial">0 / 0 已启用</string>
     <string name="app_status_enabled_desc">%1$s，已允许唤醒，点按以停用</string>
     <string name="app_status_disabled_desc">%1$s，检测到 FCM，点按以启用唤醒</string>
     <string name="app_status_pending_desc">%1$s，检测到 FCM，配置尚未就绪</string>
-    <string name="app_status_manual_desc">%1$s，未检测到 FCM，点按以手动允许唤醒</string>
+    <string name="app_status_unsupported_desc">%1$s，未检测到 FCM，不可启用</string>
+    <string name="unsupported_app_message">未检测到 FCM 组件：%1$s</string>
     <string name="empty_hint">没有匹配的应用</string>
+    <string name="undo">撤销</string>
+    <string name="fab_menu_disable_auto_clean">阻止应用停止时自动清除通知</string>
+    <string name="fab_menu_include_icebox">允许唤醒被冰箱冻结的应用</string>
+    <string name="fab_menu_no_response">目标无响应时代发提示通知</string>
+    <string name="fab_menu_select_all_fcm">启用全部 FCM 应用</string>
+    <string name="fab_menu_diagnostics">打开 FCM Diagnostics</string>
+    <string name="fab_content_description">功能与状态</string>
     <string name="xposed_description">Allow FCM/GCM to wake stopped apps; includes FcmFuck FOREGROUND flag + PowerExemptionManager</string>
 </resources>
