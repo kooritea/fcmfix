@@ -6,22 +6,22 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.Summary">
+    <style name="ShapeAppearance.Fcmself.Summary" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">24dp</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.Popup">
+    <style name="ShapeAppearance.Fcmself.Popup" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">28dp</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.MenuItem">
+    <style name="ShapeAppearance.Fcmself.MenuItem" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">18dp</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.MenuState">
+    <style name="ShapeAppearance.Fcmself.MenuState" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">16dp</item>
     </style>
