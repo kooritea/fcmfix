@@ -48,6 +48,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.lang.ref.WeakReference;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -57,6 +58,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import sumicya.fcmself.util.IceboxUtils;
 
@@ -90,7 +92,15 @@ public class MainActivity extends AppCompatActivity {
     private enum FilterMode { ALL, FCM_ONLY, ENABLED }
 
     private AppListAdapter appListAdapter;
-    private static XposedService xposedService;
+    private static volatile XposedService xposedService;
+    /**
+     * XposedServiceHelper keeps a single static listener and consumes its binder cache on the
+     * first registration, so the listener must be installed exactly once per process. Registering
+     * again from a recreated Activity would never receive a second onServiceBind callback.
+     */
+    private static final AtomicBoolean SERVICE_LISTENER_REGISTERED = new AtomicBoolean(false);
+    /** Activity currently able to render service updates; weak so a dead Activity is not leaked. */
+    private static volatile WeakReference<MainActivity> activeInstance = new WeakReference<>(null);
     private FloatingActionButton mainFab;
     private TextView statsView;
     private View headerSafe;
@@ -111,6 +121,8 @@ public class MainActivity extends AppCompatActivity {
     private List<AppInfo> fullAppList = new ArrayList<>();
 
     Set<String> allowList = new HashSet<>();
+    /** True once the allowList has been read from the remote config at least once. */
+    private boolean allowListLoaded = false;
     JSONObject config = new JSONObject();
 
     private SharedPreferences getRemotePreferencesOrNull() {
@@ -126,38 +138,70 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Installs the process-wide service listener (only ever once) and immediately syncs this
+     * Activity against a service that may already be bound from a previous Activity instance.
+     */
     private void initXposedService() {
-        try {
-            XposedServiceHelper.registerListener(new XposedServiceHelper.OnServiceListener() {
-                @Override
-                public void onServiceBind(@NonNull XposedService service) {
-                    xposedService = service;
-                    lastConfigError = false;
-                    cachedDiagIssue = null;
-                    runOnUiThread(() -> {
-                        loadConfigFromRemotePreferences();
-                        refreshFabStatus();
-                        if (appListAdapter != null) {
-                            for (AppInfo info : fullAppList) {
-                                info.isAllow = allowList.contains(info.packageName);
+        activeInstance = new WeakReference<>(this);
+        if (SERVICE_LISTENER_REGISTERED.compareAndSet(false, true)) {
+            try {
+                XposedServiceHelper.registerListener(new XposedServiceHelper.OnServiceListener() {
+                    @Override
+                    public void onServiceBind(@NonNull XposedService service) {
+                        xposedService = service;
+                        MAIN_HANDLER.post(() -> {
+                            MainActivity act = activeInstance.get();
+                            if (act != null && !act.isFinishing() && !act.isDestroyed()) {
+                                act.onXposedServiceConnected();
                             }
-                            applyFilter();
-                            updateStats();
-                        }
-                    });
-                }
-
-                @Override
-                public void onServiceDied(@NonNull XposedService service) {
-                    if (xposedService == service) {
-                        xposedService = null;
+                        });
                     }
-                    runOnUiThread(() -> refreshFabStatus());
-                }
-            });
-        } catch (Throwable e) {
-            Log.e(TAG, "initXposedService: " + e);
+
+                    @Override
+                    public void onServiceDied(@NonNull XposedService service) {
+                        if (xposedService == service) {
+                            xposedService = null;
+                        }
+                        MAIN_HANDLER.post(() -> {
+                            MainActivity act = activeInstance.get();
+                            if (act != null && !act.isFinishing() && !act.isDestroyed()) {
+                                act.refreshFabStatus();
+                            }
+                        });
+                    }
+                });
+            } catch (Throwable e) {
+                SERVICE_LISTENER_REGISTERED.set(false);
+                Log.e(TAG, "initXposedService: " + e);
+            }
+        } else if (xposedService != null) {
+            // Service was already bound before this Activity existed — no new callback is coming.
+            onXposedServiceConnected();
         }
+    }
+
+    /** Called on the main thread whenever the remote config becomes readable. */
+    private void onXposedServiceConnected() {
+        lastConfigError = false;
+        cachedDiagIssue = null;
+        loadConfigFromRemotePreferences();
+        refreshFabStatus();
+        syncAllowStateIntoList();
+    }
+
+    /** Re-applies the current allowList onto the already-built app list. */
+    private void syncAllowStateIntoList() {
+        if (fullAppList.isEmpty()) {
+            return;
+        }
+        for (AppInfo info : fullAppList) {
+            info.isAllow = allowList.contains(info.packageName);
+        }
+        if (appListAdapter != null) {
+            applyFilter();
+        }
+        updateStats();
     }
 
     private void ensureDefaultConfigValues() {
@@ -185,10 +229,20 @@ public class MainActivity extends AppCompatActivity {
         if (pref == null) {
             return;
         }
-        this.allowList.clear();
         Set<String> remote = pref.getStringSet("allowList", null);
         if (remote != null) {
+            // Only replace the in-memory list when the remote side actually returned data.
+            // Clearing first would wipe every check mark whenever a read transiently fails.
+            this.allowList.clear();
             this.allowList.addAll(remote);
+            allowListLoaded = true;
+        } else if (pref.getBoolean("init", false)) {
+            // Config exists but holds no entries — an empty allow list is the truth.
+            this.allowList.clear();
+            allowListLoaded = true;
+        } else {
+            // Never initialised (fresh install) — keep whatever we have, do not report an error.
+            Log.i(TAG, "loadRemoteConfig: config not initialised yet, keeping current allowList");
         }
         try {
             this.config.put("allowList", new JSONArray(this.allowList));
@@ -402,15 +456,17 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
             if (id == 4) {
+                Set<String> before = new HashSet<>(allowList);
                 for (AppInfo appInfo : fullAppList) {
                     if (appInfo.includeFcm) {
                         allowList.add(appInfo.packageName);
-                        appInfo.isAllow = true;
                     }
                 }
-                updateConfig();
-                applyFilter();
-                updateStats();
+                if (!updateConfig()) {
+                    allowList.clear();
+                    allowList.addAll(before);
+                }
+                syncAllowStateIntoList();
                 return true;
             }
             if (id == 5) {
@@ -503,10 +559,12 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 AppInfo appInfo = mAppList.get(position);
-                if (appInfo.isAllow) {
-                    deleteAppInAllowList(appInfo.packageName);
-                } else {
-                    addAppInAllowList(appInfo.packageName);
+                boolean ok = appInfo.isAllow
+                        ? deleteAppInAllowList(appInfo.packageName)
+                        : addAppInAllowList(appInfo.packageName);
+                if (!ok) {
+                    // Persisting failed — keep the mark in sync with what is actually stored.
+                    return;
                 }
                 appInfo.isAllow = !appInfo.isAllow;
                 if (filterMode == FilterMode.ENABLED && !appInfo.isAllow) {
@@ -594,6 +652,11 @@ public class MainActivity extends AppCompatActivity {
                 if (appInfo.isAllow) {
                     holder.status.setText(STATUS_OK);
                     holder.status.setTextColor(colorPrimary);
+                } else if (!allowListLoaded) {
+                    // Config not read yet (service still binding after a cold start): "not allowed"
+                    // is not known to be true, so show the neutral marker instead of a false ✗.
+                    holder.status.setText(STATUS_NA);
+                    holder.status.setTextColor(colorDisconnected);
                 } else {
                     holder.status.setText(STATUS_NO);
                     holder.status.setTextColor(colorError);
@@ -617,8 +680,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private List<AppInfo> buildAppList() {
-        Set<String> allowListSet = new HashSet<>(allowList);
+    private List<AppInfo> buildAppList(Set<String> allowListSet) {
         List<AppInfo> allow = new ArrayList<>();
         List<AppInfo> notAllow = new ArrayList<>();
         List<AppInfo> noFcm = new ArrayList<>();
@@ -683,13 +745,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadAppListAsync() {
+        // Snapshot on the main thread — HashSet is not safe to read while another thread mutates it.
+        final Set<String> allowSnapshot = new HashSet<>(allowList);
         BG.execute(() -> {
-            List<AppInfo> list = buildAppList();
+            List<AppInfo> list = buildAppList(allowSnapshot);
             MAIN_HANDLER.post(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
                 fullAppList = list;
+                // The scan snapshotted allowList on a background thread; the service may have
+                // connected (or reconnected) in the meantime. Re-apply the authoritative list so
+                // entries never render as ✗ just because the scan won the race.
+                for (AppInfo info : fullAppList) {
+                    info.isAllow = allowList.contains(info.packageName);
+                }
                 if (appListAdapter == null) {
                     appListAdapter = new AppListAdapter();
                     recyclerView.setAdapter(appListAdapter);
@@ -833,20 +903,49 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        activeInstance = new WeakReference<>(this);
+        // Returning from background (e.g. the task was swiped away and relaunched): the remote
+        // config is the source of truth, so re-read it before repainting the check marks.
+        if (xposedService != null) {
+            loadConfigFromRemotePreferences();
+            syncAllowStateIntoList();
+        }
         refreshFabStatus();
     }
 
-    private void addAppInAllowList(String packageName) {
-        this.allowList.add(packageName);
-        this.updateConfig();
+    @Override
+    protected void onDestroy() {
+        if (activeInstance.get() == this) {
+            activeInstance = new WeakReference<>(null);
+        }
+        super.onDestroy();
     }
 
-    private void deleteAppInAllowList(String packageName) {
+    /** @return true when the change was persisted; on false the in-memory list is rolled back. */
+    private boolean addAppInAllowList(String packageName) {
+        if (!this.allowList.add(packageName)) {
+            return true;
+        }
+        if (this.updateConfig()) {
+            return true;
+        }
         this.allowList.remove(packageName);
-        this.updateConfig();
+        return false;
     }
 
-    private void updateConfig() {
+    /** @return true when the change was persisted; on false the in-memory list is rolled back. */
+    private boolean deleteAppInAllowList(String packageName) {
+        if (!this.allowList.remove(packageName)) {
+            return true;
+        }
+        if (this.updateConfig()) {
+            return true;
+        }
+        this.allowList.add(packageName);
+        return false;
+    }
+
+    private boolean updateConfig() {
         try {
             SharedPreferences pref = getRemotePreferencesOrNull();
             if (pref == null) {
@@ -867,13 +966,16 @@ public class MainActivity extends AppCompatActivity {
                 throw new IllegalStateException("配置写入失败");
             }
             lastConfigError = false;
+            allowListLoaded = true;
             this.sendBroadcast(new Intent("sumicya.fcmself.update.config"));
             refreshFabStatus();
+            return true;
         } catch (Throwable e) {
             Log.e(TAG, "updateConfig: " + e);
             lastConfigError = true;
             refreshFabStatus();
             new AlertDialog.Builder(this).setTitle("更新配置文件失败").setMessage(e.getMessage()).show();
+            return false;
         }
     }
 }
