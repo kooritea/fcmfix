@@ -38,6 +38,20 @@ android {
     }
 }
 
+tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+    afterTest { descriptor, result ->
+        if (result.resultType == org.gradle.api.tasks.testing.TestResult.ResultType.FAILURE) {
+            result.exceptions.each { failure ->
+                def message = String.valueOf(failure.message)
+                        .replace('%', '%25')
+                        .replace('\r', '%0D')
+                        .replace('\n', '%0A')
+                println "::error title=Unit test failed::${descriptor.className}#${descriptor.name}: ${message}"
+            }
+        }
+    }
+}
+
 dependencies {
     compileOnly 'io.github.libxposed:api:102.0.0'
     implementation 'io.github.libxposed:interface:102.0.0'
