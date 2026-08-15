@@ -4,6 +4,8 @@ package sumicya.fcmself.util;
 public final class FcmReceiverDetector {
     private static final String FIREBASE_IID_RECEIVER =
             "com.google.firebase.iid.FirebaseInstanceIdReceiver";
+    private static final String PLAY_SERVICES_GCM_RECEIVER =
+            "com.google.android.gms.gcm.GcmReceiver";
     private static final String APP_MEASUREMENT_RECEIVER =
             "com.google.android.gms.measurement.AppMeasurementReceiver";
 
@@ -15,7 +17,9 @@ public final class FcmReceiverDetector {
             return false;
         }
         return FIREBASE_IID_RECEIVER.equals(className)
+                || PLAY_SERVICES_GCM_RECEIVER.equals(className)
                 || className.endsWith(".FirebaseInstanceIdReceiver")
+                || className.endsWith(".GcmReceiver")
                 || className.contains("FirebaseMessaging");
     }
 }

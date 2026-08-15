@@ -148,6 +148,9 @@ public abstract class XposedModule {
                 if (context != null) {
                     try {
                         Intent log = new Intent("sumicya.fcmself.log");
+                        // Only GMS hosts the diagnostics receiver. Restrict resolution so package
+                        // names in diagnostic messages are not exposed to unrelated receivers.
+                        log.setPackage("com.google.android.gms");
                         log.putExtra("text", msg);
                         context.sendBroadcast(log);
                         return;
@@ -294,17 +297,19 @@ public abstract class XposedModule {
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private static synchronized void initReceiver() {
-        if (!isInitReceiver && context != null) {
-            isInitReceiver = true;
+        if (isInitReceiver || context == null) {
+            return;
+        }
 
-            IntentFilter updateConfigIntentFilter = new IntentFilter(UPDATE_CONFIG_ACTION);
-            BroadcastReceiver configReceiver = new BroadcastReceiver() {
-                public void onReceive(Context context, Intent intent) {
-                    if (UPDATE_CONFIG_ACTION.equals(intent.getAction())) {
-                        onUpdateConfig();
-                    }
+        IntentFilter updateConfigIntentFilter = new IntentFilter(UPDATE_CONFIG_ACTION);
+        BroadcastReceiver configReceiver = new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                if (UPDATE_CONFIG_ACTION.equals(intent.getAction())) {
+                    onUpdateConfig();
                 }
-            };
+            }
+        };
+        try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(
                         configReceiver,
@@ -319,7 +324,17 @@ public abstract class XposedModule {
                         UPDATE_CONFIG_PERMISSION,
                         null);
             }
+            // Publish readiness only after the core receiver is actually registered. Previously a
+            // registration failure left this true forever and silently disabled future retries.
+            isInitReceiver = true;
+        } catch (Throwable e) {
+            printLog("注册配置更新广播失败: " + e.getMessage());
+            return;
+        }
 
+        // Uninstall cleanup is optional. A vendor-specific registration failure here must not
+        // undo the working configuration receiver above.
+        try {
             IntentFilter unInstallIntentFilter = new IntentFilter();
             unInstallIntentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
             unInstallIntentFilter.addDataScheme("package");
@@ -341,6 +356,8 @@ public abstract class XposedModule {
                     }
                 }
             }, unInstallIntentFilter);
+        } catch (Throwable e) {
+            printLog("注册卸载监听失败: " + e.getMessage());
         }
     }
 
@@ -352,7 +369,7 @@ public abstract class XposedModule {
         sendNotification(title, content, null);
     }
 
-    @SuppressLint("MissingPermission")
+    @SuppressLint({"MissingPermission", "NotificationPermission"})
     protected void sendNotification(String title, String content, PendingIntent pendingIntent) {
         printLog(title, false);
         title = "[fcmself]" + title;

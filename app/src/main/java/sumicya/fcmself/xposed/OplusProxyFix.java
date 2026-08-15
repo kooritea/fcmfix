@@ -3,8 +3,6 @@ package sumicya.fcmself.xposed;
 import android.content.pm.PackageManager;
 import android.os.WorkSource;
 
-import java.util.concurrent.ConcurrentHashMap;
-
 import sumicya.fcmself.util.XposedUtils;
 
 import sumicya.fcmself.libxposed.XC_MethodHook;
@@ -17,18 +15,20 @@ public class OplusProxyFix extends XposedModule {
     private static volatile boolean s_useFourParams = false;
     private static volatile boolean s_signatureDetected = false;
 
-    /** UID cache — PackageManager lookup is relatively expensive on the broadcast hot path. */
-    private static final ConcurrentHashMap<String, Integer> sUidCache = new ConcurrentHashMap<>();
-    /** Reusable empty WorkSource to avoid allocation on every unfreeze. */
-    private static final WorkSource EMPTY_WS = new WorkSource();
-
     public OplusProxyFix(ClassLoader classLoader) {
         super(classLoader);
+        // ColorOS internals vary by release. Install every independent hook even if an unrelated
+        // class is missing; in particular, absence of the wake-lock proxy must not disable the
+        // broadcast bypass.
         try {
             this.startHookOplusProxyWakeLock();
+        } catch (Throwable e) {
+            printLog("hook error OplusProxyWakeLock:" + e.getMessage());
+        }
+        try {
             this.startHookOplusProxyBroadcast();
         } catch (Throwable e) {
-            printLog("hook error OplusProxy:" + e.getMessage());
+            printLog("hook error OplusProxyBroadcast:" + e.getMessage());
         }
         try {
             this.startHookRegisterGmsRestrictObserver();
@@ -93,14 +93,10 @@ public class OplusProxyFix extends XposedModule {
         if (packageName == null || context == null) {
             return -1;
         }
-        Integer cached = sUidCache.get(packageName);
-        if (cached != null) {
-            return cached;
-        }
         try {
-            int uid = context.getPackageManager().getPackageUid(packageName, 0);
-            sUidCache.put(packageName, uid);
-            return uid;
+            // Do not cache UIDs in system_server: uninstalling and reinstalling an app can assign a
+            // different UID while this process (and the Xposed module) stays alive.
+            return context.getPackageManager().getPackageUid(packageName, 0);
         } catch (PackageManager.NameNotFoundException e) {
             return -1;
         } catch (Throwable t) {
@@ -118,8 +114,9 @@ public class OplusProxyFix extends XposedModule {
             return;
         }
 
-        // Reuse empty WorkSource — allocation-free on the FCM hot path
-        final WorkSource ws = EMPTY_WS;
+        // WorkSource is mutable and OEM implementations may modify it. A per-call instance avoids
+        // sharing mutable state when broadcasts are delivered concurrently.
+        final WorkSource ws = new WorkSource();
         final String tag = "FCMXX";
 
         if (!s_signatureDetected) {
