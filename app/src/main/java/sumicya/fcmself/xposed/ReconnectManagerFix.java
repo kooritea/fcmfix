@@ -185,7 +185,26 @@ public class ReconnectManagerFix extends XposedModule {
         printLog("timer_alarm_type_property: " + cachedAlarmTypePath, true);
         printLog("timer_settimeout_method: " + setTimeoutMethod, true);
 
-        final Class<?> timerClazz = XposedHelpers.findClass(timerClassName, classLoader);
+        // Defensive: a stale/blank target (e.g. GMS updated, or detection never ran) must degrade
+        // gracefully instead of throwing. The next GMS restart re-runs detection and re-hooks.
+        if (timerClassName.isEmpty() || setTimeoutMethod.isEmpty()) {
+            printLog("reconnect fix skipped: missing timer_class/timer_settimeout_method in config", true);
+            return;
+        }
+        final Class<?> timerClazz = XposedHelpers.findClassIfExists(timerClassName, classLoader);
+        if (timerClazz == null) {
+            printLog("reconnect fix skipped: timer class no longer present: " + timerClassName, true);
+            return;
+        }
+        try {
+            // Verify the target method still exists before hooking so a signature change surfaces
+            // as a clear message rather than a raw NoSuchMethodError mid-start.
+            timerClazz.getDeclaredMethod(setTimeoutMethod, long.class);
+        } catch (NoSuchMethodException e) {
+            printLog("reconnect fix skipped: no long.setTimeout method " + setTimeoutMethod
+                    + " on " + timerClassName, true);
+            return;
+        }
 
         XposedHelpers.findAndHookMethod(timerClazz, "toString", new XC_MethodHook() {
             @Override
