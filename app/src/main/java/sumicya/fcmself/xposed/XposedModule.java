@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static android.content.Context.NOTIFICATION_SERVICE;
 
 public abstract class XposedModule {
-    private static String selfPackageName = "UNKNOWN";
+    private static volatile String selfPackageName = "UNKNOWN";
 
     protected final ClassLoader classLoader;
     public static volatile Set<String> allowList = null;
@@ -304,10 +304,10 @@ public abstract class XposedModule {
                     }
                 }
                 XposedBridge.log("[fcmself] " + msg);
-            } else {
-                // Dropped by throttle — still log locally at verbose level only
-                Log.v(TAG, text);
             }
+            // Throttled diagnostic events are intentionally dropped completely. Calling Log.v for
+            // every suppressed hot-path event still crosses into logging code and defeats much of
+            // the allocation/IPC reduction this limiter is meant to provide.
         } else {
             Log.d(TAG, text);
             XposedBridge.log("[fcmself] [" + getSelfPackageName() + "]" + text);

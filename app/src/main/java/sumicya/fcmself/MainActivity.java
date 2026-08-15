@@ -104,6 +104,37 @@ public class MainActivity extends AppCompatActivity {
     private static final AtomicBoolean SERVICE_LISTENER_REGISTERED = new AtomicBoolean(false);
     /** Activity currently able to render service updates; weak so a dead Activity is not leaked. */
     private static volatile WeakReference<MainActivity> activeInstance = new WeakReference<>(null);
+    /** Static by design: XposedServiceHelper retains this process-wide listener indefinitely. */
+    private static final XposedServiceHelper.OnServiceListener XPOSED_SERVICE_LISTENER =
+            new XposedServiceHelper.OnServiceListener() {
+                @Override
+                public void onServiceBind(@NonNull XposedService service) {
+                    xposedService = service;
+                    MAIN_HANDLER.post(() -> {
+                        MainActivity activity = activeInstance.get();
+                        if (activity != null
+                                && !activity.isFinishing()
+                                && !activity.isDestroyed()) {
+                            activity.onXposedServiceConnected();
+                        }
+                    });
+                }
+
+                @Override
+                public void onServiceDied(@NonNull XposedService service) {
+                    if (xposedService == service) {
+                        xposedService = null;
+                    }
+                    MAIN_HANDLER.post(() -> {
+                        MainActivity activity = activeInstance.get();
+                        if (activity != null
+                                && !activity.isFinishing()
+                                && !activity.isDestroyed()) {
+                            activity.refreshFabStatus();
+                        }
+                    });
+                }
+            };
     private FloatingActionButton mainFab;
     private TextView statsView;
     private View headerSafe;
@@ -176,31 +207,7 @@ public class MainActivity extends AppCompatActivity {
         activeInstance = new WeakReference<>(this);
         if (SERVICE_LISTENER_REGISTERED.compareAndSet(false, true)) {
             try {
-                XposedServiceHelper.registerListener(new XposedServiceHelper.OnServiceListener() {
-                    @Override
-                    public void onServiceBind(@NonNull XposedService service) {
-                        xposedService = service;
-                        MAIN_HANDLER.post(() -> {
-                            MainActivity act = activeInstance.get();
-                            if (act != null && !act.isFinishing() && !act.isDestroyed()) {
-                                act.onXposedServiceConnected();
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void onServiceDied(@NonNull XposedService service) {
-                        if (xposedService == service) {
-                            xposedService = null;
-                        }
-                        MAIN_HANDLER.post(() -> {
-                            MainActivity act = activeInstance.get();
-                            if (act != null && !act.isFinishing() && !act.isDestroyed()) {
-                                act.refreshFabStatus();
-                            }
-                        });
-                    }
-                });
+                XposedServiceHelper.registerListener(XPOSED_SERVICE_LISTENER);
             } catch (Throwable e) {
                 SERVICE_LISTENER_REGISTERED.set(false);
                 Log.e(TAG, "initXposedService: " + e);
@@ -398,14 +405,14 @@ public class MainActivity extends AppCompatActivity {
         int enabled = 0;
         int totalFcm = 0;
         for (AppInfo info : fullAppList) {
+            if (info.isAllow) {
+                enabled++;
+            }
             if (info.includeFcm) {
                 totalFcm++;
-                if (info.isAllow) {
-                    enabled++;
-                }
             }
         }
-        statsView.setText("已启用 " + enabled + " / FCM " + totalFcm);
+        statsView.setText(getString(R.string.stats_format, enabled, totalFcm));
     }
 
     /**
@@ -740,10 +747,13 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private int statusState(AppInfo appInfo) {
-            if (!appInfo.includeFcm || (!appInfo.isAllow && !allowListLoaded)) {
+            if (appInfo.isAllow) {
+                return 1;
+            }
+            if (!appInfo.includeFcm || !allowListLoaded) {
                 return 0;
             }
-            return appInfo.isAllow ? 1 : -1;
+            return -1;
         }
 
         private void rebuildSubmittedState() {
@@ -872,24 +882,28 @@ public class MainActivity extends AppCompatActivity {
 
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
             // Vector marks are tinted so the icon follows the theme instead of being re-drawn as
-            // an emoji glyph by the OEM font on the device.
-            if (appInfo.includeFcm) {
-                if (appInfo.isAllow) {
-                    holder.status.setImageResource(R.drawable.ic_status_check);
-                    holder.status.setImageTintList(tintPrimary);
-                } else if (!allowListLoaded) {
-                    // Config not read yet (service still binding after a cold start): "not allowed"
-                    // is not known to be true, so show the neutral marker instead of a false ✗.
-                    holder.status.setImageResource(R.drawable.ic_status_dash);
-                    holder.status.setImageTintList(tintDisconnected);
-                } else {
-                    holder.status.setImageResource(R.drawable.ic_status_close);
-                    holder.status.setImageTintList(tintError);
-                }
+            // an emoji glyph by the OEM font on the device. Manually allowed apps keep a check even
+            // when heuristic component scanning did not identify FCM; otherwise the Enabled filter
+            // and the tile would disagree about the same allow-list entry.
+            final int description;
+            if (appInfo.isAllow) {
+                holder.status.setImageResource(R.drawable.ic_status_check);
+                holder.status.setImageTintList(tintPrimary);
+                description = R.string.app_status_enabled_desc;
+            } else if (appInfo.includeFcm && allowListLoaded) {
+                holder.status.setImageResource(R.drawable.ic_status_close);
+                holder.status.setImageTintList(tintError);
+                description = R.string.app_status_disabled_desc;
             } else {
+                // Config not read yet (service still binding after a cold start), or no FCM
+                // component was detected: show the neutral marker instead of a false cross.
                 holder.status.setImageResource(R.drawable.ic_status_dash);
                 holder.status.setImageTintList(tintDisconnected);
+                description = appInfo.includeFcm
+                        ? R.string.app_status_pending_desc
+                        : R.string.app_status_manual_desc;
             }
+            holder.appView.setContentDescription(getString(description, appInfo.name));
         }
 
         @Override
@@ -1220,7 +1234,9 @@ public class MainActivity extends AppCompatActivity {
 
         recyclerView = findViewById(R.id.recycler_view);
         defaultAppIcon = getPackageManager().getDefaultActivityIcon();
-        recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
+        int screenWidthDp = getResources().getConfiguration().screenWidthDp;
+        int spanCount = Math.max(2, Math.min(8, screenWidthDp / 112));
+        recyclerView.setLayoutManager(new GridLayoutManager(this, spanCount));
         recyclerView.setHasFixedSize(true);
         recyclerView.setItemViewCacheSize(32);
         recyclerView.setDrawingCacheEnabled(false);
@@ -1231,7 +1247,7 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setRecycledViewPool(pool);
         GridLayoutManager glm = (GridLayoutManager) recyclerView.getLayoutManager();
         if (glm != null) {
-            glm.setInitialPrefetchItemCount(6);
+            glm.setInitialPrefetchItemCount(spanCount * 2);
         }
         registerPackageChangeReceiver();
 

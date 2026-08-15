@@ -1,6 +1,10 @@
 <resources>
     <string name="app_name">fcmself</string>
-    <string name="status_mark_desc">FCM 状态</string>
+    <string name="stats_format">已启用 %1$d / FCM %2$d</string>
+    <string name="app_status_enabled_desc">%1$s，已允许唤醒，点按以停用</string>
+    <string name="app_status_disabled_desc">%1$s，检测到 FCM，点按以启用唤醒</string>
+    <string name="app_status_pending_desc">%1$s，检测到 FCM，配置尚未就绪</string>
+    <string name="app_status_manual_desc">%1$s，未检测到 FCM，点按以手动允许唤醒</string>
     <string name="empty_hint">没有匹配的应用</string>
     <string name="xposed_description">Allow FCM/GCM to wake stopped apps; includes FcmFuck FOREGROUND flag + PowerExemptionManager</string>
 </resources>

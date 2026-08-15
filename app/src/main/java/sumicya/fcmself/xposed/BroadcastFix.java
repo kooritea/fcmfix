@@ -59,8 +59,14 @@ public class BroadcastFix extends XposedModule {
         DeferredBroadcast(Member method, Object receiver, Object[] args) {
             this.method = method;
             this.receiver = receiver;
-            // Hook args are mutable. Keep a private snapshot until the asynchronous replay.
+            // Hook args are mutable. Keep a private snapshot until the asynchronous replay, and
+            // copy Intent values so a caller reusing its instance cannot change the queued message.
             this.args = args.clone();
+            for (int i = 0; i < this.args.length; i++) {
+                if (this.args[i] instanceof Intent) {
+                    this.args[i] = new Intent((Intent) this.args[i]);
+                }
+            }
         }
     }
 
@@ -405,24 +411,37 @@ public class BroadcastFix extends XposedModule {
                             sPemAddMethod = sPemClass.getMethod(
                                     "addToTemporaryAllowList",
                                     String.class, int.class, String.class, long.class);
-                            sPemService = context.getSystemService(sPemClass);
                         } catch (Throwable ignored) {
                             sPemClass = null;
                             sPemAddMethod = null;
-                            sPemService = null;
                         }
                         sPemResolved = true;
                     }
                 }
             }
-            if (sPemAddMethod == null || sPemService == null) {
+            if (sPemAddMethod == null || sPemClass == null) {
+                return;
+            }
+            // Service publication can lag class resolution during boot. Retry only this cheap
+            // lookup when it was temporarily null instead of permanently disabling exemptions.
+            Object service = sPemService;
+            if (service == null) {
+                synchronized (BroadcastFix.class) {
+                    service = sPemService;
+                    if (service == null) {
+                        service = context.getSystemService(sPemClass);
+                        sPemService = service;
+                    }
+                }
+            }
+            if (service == null) {
                 return;
             }
             // User id of the system process (USER_SYSTEM = 0). A hardcoded 102 names a user that
             // does not exist on single-user devices, silently making the temporary allow list a
             // no-op. Process.myUserHandle().hashCode() is the public-API equivalent of the hidden
             // Context.getUserId() on recent SDKs (the latter fails to compile on compileSdk 37).
-            sPemAddMethod.invoke(sPemService, packageName, Process.myUserHandle().hashCode(),
+            sPemAddMethod.invoke(service, packageName, Process.myUserHandle().hashCode(),
                     "GOOGLE_C2DM", 2000L);
         } catch (Throwable t) {
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
