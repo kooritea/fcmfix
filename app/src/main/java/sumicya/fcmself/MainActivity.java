@@ -544,7 +544,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                     break;
                 case ENABLED:
-                    if (info.isAllow) {
+                    if (info.includeFcm && info.isAllow) {
                         filtered.add(info);
                     }
                     break;
