@@ -216,6 +216,7 @@ public class AutoStartFix extends XposedModule {
             XposedUtils.findAndHookMethodAnyParam(AutoStartManagerService, "shouldInterceptService", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    if (!isBootComplete) return;
                     Intent intent = intentArg(param, 0);
                     String target = allowedMessagingEventPackage(intent);
                     if (target != null) {

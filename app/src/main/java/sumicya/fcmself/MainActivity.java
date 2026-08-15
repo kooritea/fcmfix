@@ -20,6 +20,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import android.util.LruCache;
 import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -89,6 +90,8 @@ public class MainActivity extends AppCompatActivity {
             });
     private static final Object PAYLOAD_STATUS = new Object();
     private static final Object PAYLOAD_ICON = new Object();
+    /** Bounded process cache: scrolling through hundreds of apps must not retain every icon. */
+    private static final LruCache<String, Drawable> APP_ICON_CACHE = new LruCache<>(96);
 
     private Drawable defaultAppIcon;
 
@@ -163,8 +166,8 @@ public class MainActivity extends AppCompatActivity {
      * Structural app-list cache shared across Activity instances (rotation / recreation). The
      * expensive scan (getInstalledPackages + label loading + FCM component matching) only needs to
      * happen once per process; recreations rebuild lightweight AppInfo wrappers from this snapshot.
-     * Entries carry no mutable state (icon = null, isAllow = false) so the cache itself is never
-     * mutated by a live Activity. Kept in the same (sorted/grouped) order buildAppList produced.
+     * Entries keep isAllow=false and carry no icon state, so the cache itself is never mutated by
+     * a live Activity. Kept in the same (sorted/grouped) order buildAppList produced.
      */
     private static final Object APPS_CACHE_LOCK = new Object();
     private static List<AppInfo> sCachedAppList;
@@ -181,6 +184,11 @@ public class MainActivity extends AppCompatActivity {
     private final BroadcastReceiver packageChangeReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (intent.getData() != null) {
+                APP_ICON_CACHE.remove(intent.getData().getSchemeSpecificPart());
+            } else {
+                APP_ICON_CACHE.evictAll();
+            }
             invalidateAppListCache();
             loadAppListAsync();
         }
@@ -609,17 +617,14 @@ public class MainActivity extends AppCompatActivity {
         final String packageName;
         /** Precomputed once instead of hashing the package on every RecyclerView ID lookup. */
         final long stableId;
-        /** Lazily loaded; null until first bind requests it. */
-        volatile Drawable icon;
         boolean isAllow;
         final boolean includeFcm;
         volatile boolean iconLoading;
 
-        AppInfo(String name, String packageName, Drawable icon, boolean includeFcm, boolean isAllow) {
+        AppInfo(String name, String packageName, boolean includeFcm, boolean isAllow) {
             this.name = name;
             this.packageName = packageName;
             this.stableId = stableIdForPackage(packageName);
-            this.icon = icon;
             this.includeFcm = includeFcm;
             this.isAllow = isAllow;
         }
@@ -826,9 +831,9 @@ public class MainActivity extends AppCompatActivity {
             holder.icon.setTag(appInfo.packageName);
             for (Object payload : payloads) {
                 if (payload == PAYLOAD_ICON) {
-                    if (appInfo.icon != null
-                            && appInfo.packageName.equals(holder.icon.getTag())) {
-                        holder.icon.setImageDrawable(appInfo.icon);
+                    Drawable icon = APP_ICON_CACHE.get(appInfo.packageName);
+                    if (icon != null && appInfo.packageName.equals(holder.icon.getTag())) {
+                        holder.icon.setImageDrawable(icon);
                     }
                 } else if (payload == PAYLOAD_STATUS) {
                     bindStatus(holder, appInfo);
@@ -839,7 +844,7 @@ public class MainActivity extends AppCompatActivity {
         private void bindIcon(ViewHolder holder, AppInfo appInfo) {
             // Tag guards against recycled view showing wrong icon
             holder.icon.setTag(appInfo.packageName);
-            Drawable cached = appInfo.icon;
+            Drawable cached = APP_ICON_CACHE.get(appInfo.packageName);
             if (cached != null) {
                 holder.icon.setImageDrawable(cached);
                 return;
@@ -854,6 +859,10 @@ public class MainActivity extends AppCompatActivity {
             final String pkg = appInfo.packageName;
             final PackageManager packageManager = getApplicationContext().getPackageManager();
             final Drawable fallbackIcon = defaultAppIcon;
+            final int iconGeneration;
+            synchronized (APPS_CACHE_LOCK) {
+                iconGeneration = sAppListGeneration;
+            }
             final WeakReference<AppListAdapter> adapterRef = new WeakReference<>(this);
             ICON_EXEC.execute(() -> {
                 Drawable loadedIcon;
@@ -862,7 +871,13 @@ public class MainActivity extends AppCompatActivity {
                 } catch (Throwable t) {
                     loadedIcon = fallbackIcon;
                 }
-                appInfo.icon = loadedIcon;
+                final boolean stillCurrent;
+                synchronized (APPS_CACHE_LOCK) {
+                    stillCurrent = iconGeneration == sAppListGeneration;
+                }
+                if (loadedIcon != null && stillCurrent) {
+                    APP_ICON_CACHE.put(pkg, loadedIcon);
+                }
                 appInfo.iconLoading = false;
                 MAIN_HANDLER.post(() -> {
                     AppListAdapter adapter = adapterRef.get();
@@ -977,7 +992,7 @@ public class MainActivity extends AppCompatActivity {
             }
             // Icon loaded lazily on bind — scanning hundreds of packages stays fast
             boolean isAllow = allowListSet.contains(packageInfo.packageName);
-            AppInfo info = new AppInfo(label, packageInfo.packageName, null, hasFcm, isAllow);
+            AppInfo info = new AppInfo(label, packageInfo.packageName, hasFcm, isAllow);
             if (isAllow) {
                 allow.add(info);
             } else if (hasFcm) {
@@ -1030,7 +1045,7 @@ public class MainActivity extends AppCompatActivity {
     private static List<AppInfo> structuralCopy(List<AppInfo> source) {
         List<AppInfo> copy = new ArrayList<>(source.size());
         for (AppInfo a : source) {
-            copy.add(new AppInfo(a.name, a.packageName, null, a.includeFcm, false));
+            copy.add(new AppInfo(a.name, a.packageName, a.includeFcm, false));
         }
         return copy;
     }
