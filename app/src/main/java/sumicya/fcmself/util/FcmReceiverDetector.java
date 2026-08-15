@@ -1,6 +1,14 @@
 package sumicya.fcmself.util;
 
-/** Receiver-name checks used by the app browser; kept Android-free so it can be unit tested. */
+import java.util.Locale;
+
+/**
+ * FCM/GCM component-name checks used by the app browser; kept Android-free so it can be unit
+ * tested. Matching is deliberately a superset of the canonical class names because apps rename the
+ * manifest receiver/service (e.g. {@code .MyFirebaseMessagingService}) while keeping a name that
+ * still reveals its purpose. False positives are harmless here: the flag only controls which apps
+ * are offered in the "FCM" filter, never the module's runtime behaviour.
+ */
 public final class FcmReceiverDetector {
     private static final String FIREBASE_IID_RECEIVER =
             "com.google.firebase.iid.FirebaseInstanceIdReceiver";
@@ -12,14 +20,37 @@ public final class FcmReceiverDetector {
     private FcmReceiverDetector() {
     }
 
+    /** @deprecated retained for backward compatibility; use {@link #isFcmComponent(String)}. */
     public static boolean isFcmReceiver(String className) {
+        return isFcmComponent(className);
+    }
+
+    /**
+     * True when a manifest receiver or service class name indicates FCM/GCM push wiring.
+     */
+    public static boolean isFcmComponent(String className) {
         if (className == null || APP_MEASUREMENT_RECEIVER.equals(className)) {
             return false;
         }
-        return FIREBASE_IID_RECEIVER.equals(className)
-                || PLAY_SERVICES_GCM_RECEIVER.equals(className)
-                || className.endsWith(".FirebaseInstanceIdReceiver")
-                || className.endsWith(".GcmReceiver")
-                || className.contains("FirebaseMessaging");
+        // Exact well-known receivers (fast path).
+        if (FIREBASE_IID_RECEIVER.equals(className)
+                || PLAY_SERVICES_GCM_RECEIVER.equals(className)) {
+            return true;
+        }
+        String lower = className.toLowerCase(Locale.ROOT);
+        // FirebaseMessagingReceiver / FirebaseMessagingService and app-specific renames.
+        if (lower.contains("firebasemessaging")) {
+            return true;
+        }
+        // com.google.firebase.iid.FirebaseInstanceIdReceiver and renames.
+        if (lower.contains("firebaseinstanceid") || lower.contains("firebase.iid")) {
+            return true;
+        }
+        // Legacy GCM receiver/service renames.
+        if (lower.endsWith("gcmreceiver") || lower.endsWith("gcmlistener")) {
+            return true;
+        }
+        // Generic "fcm..." receiver/service names used by many apps.
+        return lower.endsWith("fcmreceiver") || lower.endsWith("fcmpushreceiver");
     }
 }

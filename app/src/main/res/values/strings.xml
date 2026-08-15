@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">fcmself</string>
+    <string name="status_mark_desc">FCM 状态</string>
     <string name="xposed_description">Allow FCM/GCM to wake stopped apps; includes FcmFuck FOREGROUND flag + PowerExemptionManager</string>
 </resources>

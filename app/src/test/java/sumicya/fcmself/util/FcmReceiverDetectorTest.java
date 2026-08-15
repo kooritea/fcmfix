@@ -29,6 +29,26 @@ public class FcmReceiverDetectorTest {
     }
 
     @Test
+    public void detectsFirebaseMessagingServices() {
+        assertTrue(FcmReceiverDetector.isFcmComponent(
+                "com.example.MyFirebaseMessagingService"));
+        assertTrue(FcmReceiverDetector.isFcmComponent(
+                "com.google.firebase.messaging.FirebaseMessaging"));
+        assertTrue(FcmReceiverDetector.isFcmComponent(
+                "com.google.firebase.messaging.FirebaseMessagingService"));
+    }
+
+    @Test
+    public void detectsGcmListenerServicesAndGenericFcmReceivers() {
+        assertTrue(FcmReceiverDetector.isFcmComponent(
+                "com.example.gcm.GcmListenerService"));
+        assertTrue(FcmReceiverDetector.isFcmComponent(
+                "com.example.push.FCMPushReceiver"));
+        assertTrue(FcmReceiverDetector.isFcmComponent(
+                "com.example.push.FcmReceiver"));
+    }
+
+    @Test
     public void doesNotTreatFirebaseAnalyticsAsMessaging() {
         assertFalse(FcmReceiverDetector.isFcmReceiver(
                 "com.google.android.gms.measurement.AppMeasurementReceiver"));

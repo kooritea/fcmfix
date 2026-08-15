@@ -50,16 +50,13 @@
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="9sp" />
 
-        <TextView
+        <ImageView
             android:id="@+id/status"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
             android:layout_marginTop="2dp"
-            android:fontFamily="sans-serif-medium"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:contentDescription="@string/status_mark_desc"
+            android:scaleType="fitCenter" />
 
     </LinearLayout>
 

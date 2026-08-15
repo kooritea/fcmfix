@@ -8,9 +8,9 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -36,11 +36,13 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.snackbar.Snackbar;
 
 import io.github.libxposed.service.XposedService;
 import io.github.libxposed.service.XposedServiceHelper;
@@ -83,12 +85,6 @@ public class MainActivity extends AppCompatActivity {
             });
     private static final Object PAYLOAD_STATUS = new Object();
     private static final Object PAYLOAD_ICON = new Object();
-
-    /** Text-presentation (U+FE0E) so OEM emoji fonts do not restyle these. */
-    private static final String STATUS_OK = "\u2713\uFE0E"; // ✓
-    private static final String STATUS_NO = "\u2717\uFE0E"; // ✗
-    private static final String STATUS_NA = "\u2013";       // – en dash
-    private static final Typeface STATUS_TYPEFACE = Typeface.create("sans-serif-medium", Typeface.NORMAL);
 
     private Drawable defaultAppIcon;
 
@@ -381,6 +377,36 @@ public class MainActivity extends AppCompatActivity {
         statsView.setText("已启用 " + enabled + " / FCM " + totalFcm);
     }
 
+    /**
+     * Shows a short confirmation for a toggle and lets the user undo it. The undo re-applies the
+     * inverse persistence and re-filters, so a tile that left a filtered view comes back instead
+     * of silently disappearing.
+     */
+    private void showToggleFeedback(AppInfo appInfo) {
+        final boolean nowAllow = appInfo.isAllow;
+        final String pkg = appInfo.packageName;
+        final String name = appInfo.name;
+        String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
+        Snackbar.make(recyclerView, text, Snackbar.LENGTH_LONG)
+                .setAction("撤销", v -> {
+                    boolean reverted = nowAllow
+                            ? deleteAppInAllowList(pkg)
+                            : addAppInAllowList(pkg);
+                    if (!reverted) {
+                        return;
+                    }
+                    for (AppInfo info : fullAppList) {
+                        if (pkg.equals(info.packageName)) {
+                            info.isAllow = !nowAllow;
+                            break;
+                        }
+                    }
+                    applyFilter();
+                    updateStats();
+                })
+                .show();
+    }
+
     private void applyFilter() {
         if (appListAdapter == null) {
             return;
@@ -541,7 +567,7 @@ public class MainActivity extends AppCompatActivity {
             final ImageView icon;
             final TextView name;
             final TextView appPkg;
-            final TextView status;
+            final ImageView status;
 
             ViewHolder(View view) {
                 super(view);
@@ -558,9 +584,35 @@ public class MainActivity extends AppCompatActivity {
         }
 
         void replaceList(List<AppInfo> list) {
+            // DiffUtil animates add/remove/move so toggling (especially in a filtered view) eases
+            // items in/out instead of them vanishing abruptly or the whole grid flashing.
+            DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+                @Override
+                public int getOldListSize() {
+                    return mAppList.size();
+                }
+
+                @Override
+                public int getNewListSize() {
+                    return list.size();
+                }
+
+                @Override
+                public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                    return mAppList.get(oldItemPosition).packageName
+                            .equals(list.get(newItemPosition).packageName);
+                }
+
+                @Override
+                public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                    AppInfo a = mAppList.get(oldItemPosition);
+                    AppInfo b = list.get(newItemPosition);
+                    return a.isAllow == b.isAllow && a.includeFcm == b.includeFcm;
+                }
+            }, true);
             mAppList.clear();
             mAppList.addAll(list);
-            notifyDataSetChanged();
+            result.dispatchUpdatesTo(this);
         }
 
         @Override
@@ -601,6 +653,7 @@ public class MainActivity extends AppCompatActivity {
                     notifyItemChanged(position, PAYLOAD_STATUS);
                 }
                 updateStats();
+                showToggleFeedback(appInfo);
             });
             return holder;
         }
@@ -675,23 +728,24 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
-            holder.status.setTypeface(STATUS_TYPEFACE);
+            // Vector marks are tinted so the icon follows the theme instead of being re-drawn as
+            // an emoji glyph by the OEM font on the device.
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
-                    holder.status.setText(STATUS_OK);
-                    holder.status.setTextColor(colorPrimary);
+                    holder.status.setImageResource(R.drawable.ic_status_check);
+                    holder.status.setImageTintList(ColorStateList.valueOf(colorPrimary));
                 } else if (!allowListLoaded) {
                     // Config not read yet (service still binding after a cold start): "not allowed"
                     // is not known to be true, so show the neutral marker instead of a false ✗.
-                    holder.status.setText(STATUS_NA);
-                    holder.status.setTextColor(colorDisconnected);
+                    holder.status.setImageResource(R.drawable.ic_status_dash);
+                    holder.status.setImageTintList(ColorStateList.valueOf(colorDisconnected));
                 } else {
-                    holder.status.setText(STATUS_NO);
-                    holder.status.setTextColor(colorError);
+                    holder.status.setImageResource(R.drawable.ic_status_close);
+                    holder.status.setImageTintList(ColorStateList.valueOf(colorError));
                 }
             } else {
-                holder.status.setText(STATUS_NA);
-                holder.status.setTextColor(colorDisconnected);
+                holder.status.setImageResource(R.drawable.ic_status_dash);
+                holder.status.setImageTintList(ColorStateList.valueOf(colorDisconnected));
             }
         }
 
@@ -708,6 +762,30 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private static boolean hasFcmComponent(ActivityInfo[] components) {
+        if (components == null) {
+            return false;
+        }
+        for (ActivityInfo c : components) {
+            if (c != null && c.name != null && FcmReceiverDetector.isFcmComponent(c.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasFcmComponent(ServiceInfo[] components) {
+        if (components == null) {
+            return false;
+        }
+        for (ServiceInfo c : components) {
+            if (c != null && c.name != null && FcmReceiverDetector.isFcmComponent(c.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<AppInfo> buildAppList(Set<String> allowListSet) {
         List<AppInfo> allow = new ArrayList<>();
         List<AppInfo> notAllow = new ArrayList<>();
@@ -718,6 +796,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             packages = pm.getInstalledPackages(
                     PackageManager.GET_RECEIVERS
+                            | PackageManager.GET_SERVICES
                             | PackageManager.MATCH_DISABLED_COMPONENTS);
         } catch (Throwable t) {
             Log.e(TAG, "getInstalledPackages: " + t);
@@ -725,20 +804,13 @@ public class MainActivity extends AppCompatActivity {
         }
 
         for (PackageInfo packageInfo : packages) {
-            if (packageInfo.receivers == null || packageInfo.applicationInfo == null) {
+            if (packageInfo.applicationInfo == null) {
                 continue;
             }
-            boolean hasFcm = false;
-            for (ActivityInfo receiverInfo : packageInfo.receivers) {
-                String n = receiverInfo.name;
-                if (n == null) {
-                    continue;
-                }
-                if (FcmReceiverDetector.isFcmReceiver(n)) {
-                    hasFcm = true;
-                    break;
-                }
-            }
+            // Some apps wire FCM through a service (FirebaseMessagingService subclass) with an
+            // oddly named or missing receiver, so inspect both receivers and services.
+            boolean hasFcm = hasFcmComponent(packageInfo.receivers)
+                    || hasFcmComponent(packageInfo.services);
 
             String label;
             try {

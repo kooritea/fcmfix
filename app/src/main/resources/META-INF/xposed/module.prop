@@ -2,4 +2,7 @@ minApiVersion=100
 targetApiVersion=102
 staticScope=false
 exceptionMode=protective
-autoHotReload=true
+# Scoped to system_server, which cannot be soft-reloaded cleanly. Disabling auto hot-reload
+# stops LSPosed from attempting the reload (and reporting "热重载进程失败"); config changes made
+# inside the app take effect immediately via the config broadcast, only an APK update needs a reboot.
+autoHotReload=false
