@@ -58,15 +58,22 @@ public class BroadcastFix extends XposedModule {
 
     public BroadcastFix(ClassLoader classLoader) {
         super(classLoader);
+        boolean lockedInstalled = false;
         try {
-            this.startHookBroadcastIntentLocked();
+            lockedInstalled = this.startHookBroadcastIntentLocked();
         } catch (Throwable e) {
             printLog("hook error broadcastIntentLocked:" + e.getMessage());
         }
-        try {
-            this.startHookBroadcastIntentHighLevel();
-        } catch (Throwable e) {
-            printLog("hook error high-level broadcastIntent:" + e.getMessage());
+        // The locked hook is the innermost entry point every high-level broadcast passes through,
+        // so on devices where it installed successfully the high-level broadcastIntent hook would
+        // only double-intercept each broadcast (an extra allocation + callback per send). Install it
+        // only as a fallback for OEM/older builds that lack the locked hook.
+        if (!lockedInstalled) {
+            try {
+                this.startHookBroadcastIntentHighLevel();
+            } catch (Throwable e) {
+                printLog("hook error high-level broadcastIntent:" + e.getMessage());
+            }
         }
         try {
             this.startHookScheduleResultTo();
@@ -77,7 +84,8 @@ public class BroadcastFix extends XposedModule {
         }
     }
 
-    protected void startHookBroadcastIntentLocked() {
+    /** @return true when a usable broadcastIntentLocked hook was installed. */
+    protected boolean startHookBroadcastIntentLocked() {
         Method targetMethod = null;
         int intent_args_index = 0;
         int appOp_args_index = 0;
@@ -134,9 +142,10 @@ public class BroadcastFix extends XposedModule {
                 && targetMethod.getParameters()[intent_args_index].getType() == Intent.class
                 && targetMethod.getParameters()[appOp_args_index].getType() == int.class) {
             createBroadcastIntentLockedHooker(intent_args_index, appOp_args_index, targetMethod);
-        } else {
-            printLog("broadcastIntentLocked hook 位置查找失败，fcmself将不会工作。");
+            return true;
         }
+        printLog("broadcastIntentLocked hook 位置查找失败，fcmself将不会工作。");
+        return false;
     }
 
     protected void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method) {

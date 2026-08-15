@@ -112,6 +112,10 @@ public class MainActivity extends AppCompatActivity {
     private int colorError;
     private int colorDisconnected;
     private int colorPrimary;
+    /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
+    private ColorStateList tintPrimary;
+    private ColorStateList tintError;
+    private ColorStateList tintDisconnected;
 
     private Boolean cachedDiagIssue;
     private long diagCacheAtMs;
@@ -745,19 +749,19 @@ public class MainActivity extends AppCompatActivity {
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
                     holder.status.setImageResource(R.drawable.ic_status_check);
-                    holder.status.setImageTintList(ColorStateList.valueOf(colorPrimary));
+                    holder.status.setImageTintList(tintPrimary);
                 } else if (!allowListLoaded) {
                     // Config not read yet (service still binding after a cold start): "not allowed"
                     // is not known to be true, so show the neutral marker instead of a false ✗.
                     holder.status.setImageResource(R.drawable.ic_status_dash);
-                    holder.status.setImageTintList(ColorStateList.valueOf(colorDisconnected));
+                    holder.status.setImageTintList(tintDisconnected);
                 } else {
                     holder.status.setImageResource(R.drawable.ic_status_close);
-                    holder.status.setImageTintList(ColorStateList.valueOf(colorError));
+                    holder.status.setImageTintList(tintError);
                 }
             } else {
                 holder.status.setImageResource(R.drawable.ic_status_dash);
-                holder.status.setImageTintList(ColorStateList.valueOf(colorDisconnected));
+                holder.status.setImageTintList(tintDisconnected);
             }
         }
 
@@ -961,6 +965,9 @@ public class MainActivity extends AppCompatActivity {
         colorError = ContextCompat.getColor(this, R.color.status_error);
         colorDisconnected = ContextCompat.getColor(this, R.color.status_disconnected);
         colorPrimary = resolveThemeColor(android.R.attr.colorPrimary, colorConnected);
+        tintPrimary = ColorStateList.valueOf(colorPrimary);
+        tintError = ColorStateList.valueOf(colorError);
+        tintDisconnected = ColorStateList.valueOf(colorDisconnected);
 
         headerSafe = findViewById(R.id.header_safe);
         statsView = findViewById(R.id.stats);
