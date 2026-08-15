@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <size android:width="1dp" android:height="1dp" />
-    <solid android:color="@android:color/transparent" />
-</shape>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Check mark. Rendered with a stroke so it stays crisp on any density;
+         tint applied from code (setImageTintList). -->
+    <path
+        android:pathData="M5,12.5 L9.5,17 L19,7"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

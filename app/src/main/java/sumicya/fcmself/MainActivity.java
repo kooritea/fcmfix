@@ -8,9 +8,9 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -36,11 +36,13 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.snackbar.Snackbar;
 
 import io.github.libxposed.service.XposedService;
 import io.github.libxposed.service.XposedServiceHelper;
@@ -84,12 +86,6 @@ public class MainActivity extends AppCompatActivity {
     private static final Object PAYLOAD_STATUS = new Object();
     private static final Object PAYLOAD_ICON = new Object();
 
-    /** Text-presentation (U+FE0E) so OEM emoji fonts do not restyle these. */
-    private static final String STATUS_OK = "\u2713\uFE0E"; // ✓
-    private static final String STATUS_NO = "\u2717\uFE0E"; // ✗
-    private static final String STATUS_NA = "\u2013";       // – en dash
-    private static final Typeface STATUS_TYPEFACE = Typeface.create("sans-serif-medium", Typeface.NORMAL);
-
     private Drawable defaultAppIcon;
 
     private enum FilterMode { ALL, FCM_ONLY, ENABLED }
@@ -109,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
     private View headerSafe;
     private RecyclerView recyclerView;
     private ChipGroup filterChips;
+    private TextView emptyHint;
     private boolean lastConfigError = false;
     private FilterMode filterMode = FilterMode.ALL;
 
@@ -116,12 +113,28 @@ public class MainActivity extends AppCompatActivity {
     private int colorError;
     private int colorDisconnected;
     private int colorPrimary;
+    /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
+    private ColorStateList tintPrimary;
+    private ColorStateList tintError;
+    private ColorStateList tintDisconnected;
 
     private Boolean cachedDiagIssue;
     private long diagCacheAtMs;
     private static final long DIAG_CACHE_MS = 15_000L;
 
     private List<AppInfo> fullAppList = new ArrayList<>();
+
+    /**
+     * Structural app-list cache shared across Activity instances (rotation / recreation). The
+     * expensive scan (getInstalledPackages + label loading + FCM component matching) only needs to
+     * happen once per process; recreations rebuild lightweight AppInfo wrappers from this snapshot.
+     * Entries carry no mutable state (icon = null, isAllow = false) so the cache itself is never
+     * mutated by a live Activity. Kept in the same (sorted/grouped) order buildAppList produced.
+     */
+    private static final Object APPS_CACHE_LOCK = new Object();
+    // TODO(experimental): 进程存活期间新装的 App 不会自动出现在列表（需下次冷启动）。
+    //   可考虑加下拉刷新 / 显式刷新入口，或监听 ACTION_PACKAGE_ADDED 后失效此缓存。
+    private static List<AppInfo> sCachedAppList;
 
     private final Set<String> allowList = new HashSet<>();
     /** True once the allowList has been read from the remote config at least once. */
@@ -381,6 +394,48 @@ public class MainActivity extends AppCompatActivity {
         statsView.setText("已启用 " + enabled + " / FCM " + totalFcm);
     }
 
+    /**
+     * Shows a short confirmation for a toggle and lets the user undo it. The undo re-applies the
+     * inverse persistence and re-filters, so a tile that left a filtered view comes back instead
+     * of silently disappearing. The leading icon and accent color follow the action (check/primary
+     * when enabling, cross/error when disabling).
+     */
+    private void showToggleFeedback(AppInfo appInfo) {
+        final boolean nowAllow = appInfo.isAllow;
+        final String pkg = appInfo.packageName;
+        final String name = appInfo.name;
+        final int accent = nowAllow ? colorPrimary : colorError;
+        String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
+
+        Snackbar snackbar = Snackbar.make(recyclerView, text, Snackbar.LENGTH_LONG);
+        // Leading icon echoes the tile's status mark so the confirmation reads at a glance.
+        snackbar.setLeadingIcon(nowAllow
+                ? R.drawable.ic_status_check
+                : R.drawable.ic_status_close);
+        snackbar.setIconTint(accent);
+        snackbar.setActionTextColor(accent);
+        snackbar.setTextMaxLines(2);
+        // Slightly longer than the default so the undo window feels comfortable.
+        snackbar.setDuration(4_000);
+        snackbar.setAction("撤销", v -> {
+            boolean reverted = nowAllow
+                    ? deleteAppInAllowList(pkg)
+                    : addAppInAllowList(pkg);
+            if (!reverted) {
+                return;
+            }
+            for (AppInfo info : fullAppList) {
+                if (pkg.equals(info.packageName)) {
+                    info.isAllow = !nowAllow;
+                    break;
+                }
+            }
+            applyFilter();
+            updateStats();
+        });
+        snackbar.show();
+    }
+
     private void applyFilter() {
         if (appListAdapter == null) {
             return;
@@ -405,6 +460,11 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         appListAdapter.replaceList(filtered);
+        if (emptyHint != null) {
+            boolean showEmpty = filtered.isEmpty();
+            emptyHint.setVisibility(showEmpty ? View.VISIBLE : View.GONE);
+            recyclerView.setVisibility(showEmpty ? View.GONE : View.VISIBLE);
+        }
     }
 
     private void setupFilterChips() {
@@ -541,7 +601,7 @@ public class MainActivity extends AppCompatActivity {
             final ImageView icon;
             final TextView name;
             final TextView appPkg;
-            final TextView status;
+            final ImageView status;
 
             ViewHolder(View view) {
                 super(view);
@@ -558,9 +618,35 @@ public class MainActivity extends AppCompatActivity {
         }
 
         void replaceList(List<AppInfo> list) {
+            // DiffUtil animates add/remove/move so toggling (especially in a filtered view) eases
+            // items in/out instead of them vanishing abruptly or the whole grid flashing.
+            DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+                @Override
+                public int getOldListSize() {
+                    return mAppList.size();
+                }
+
+                @Override
+                public int getNewListSize() {
+                    return list.size();
+                }
+
+                @Override
+                public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                    return mAppList.get(oldItemPosition).packageName
+                            .equals(list.get(newItemPosition).packageName);
+                }
+
+                @Override
+                public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                    AppInfo a = mAppList.get(oldItemPosition);
+                    AppInfo b = list.get(newItemPosition);
+                    return a.isAllow == b.isAllow && a.includeFcm == b.includeFcm;
+                }
+            }, true);
             mAppList.clear();
             mAppList.addAll(list);
-            notifyDataSetChanged();
+            result.dispatchUpdatesTo(this);
         }
 
         @Override
@@ -601,6 +687,7 @@ public class MainActivity extends AppCompatActivity {
                     notifyItemChanged(position, PAYLOAD_STATUS);
                 }
                 updateStats();
+                showToggleFeedback(appInfo);
             });
             return holder;
         }
@@ -675,23 +762,24 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
-            holder.status.setTypeface(STATUS_TYPEFACE);
+            // Vector marks are tinted so the icon follows the theme instead of being re-drawn as
+            // an emoji glyph by the OEM font on the device.
             if (appInfo.includeFcm) {
                 if (appInfo.isAllow) {
-                    holder.status.setText(STATUS_OK);
-                    holder.status.setTextColor(colorPrimary);
+                    holder.status.setImageResource(R.drawable.ic_status_check);
+                    holder.status.setImageTintList(tintPrimary);
                 } else if (!allowListLoaded) {
                     // Config not read yet (service still binding after a cold start): "not allowed"
                     // is not known to be true, so show the neutral marker instead of a false ✗.
-                    holder.status.setText(STATUS_NA);
-                    holder.status.setTextColor(colorDisconnected);
+                    holder.status.setImageResource(R.drawable.ic_status_dash);
+                    holder.status.setImageTintList(tintDisconnected);
                 } else {
-                    holder.status.setText(STATUS_NO);
-                    holder.status.setTextColor(colorError);
+                    holder.status.setImageResource(R.drawable.ic_status_close);
+                    holder.status.setImageTintList(tintError);
                 }
             } else {
-                holder.status.setText(STATUS_NA);
-                holder.status.setTextColor(colorDisconnected);
+                holder.status.setImageResource(R.drawable.ic_status_dash);
+                holder.status.setImageTintList(tintDisconnected);
             }
         }
 
@@ -708,6 +796,30 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private static boolean hasFcmComponent(ActivityInfo[] components) {
+        if (components == null) {
+            return false;
+        }
+        for (ActivityInfo c : components) {
+            if (c != null && c.name != null && FcmReceiverDetector.isFcmComponent(c.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasFcmComponent(ServiceInfo[] components) {
+        if (components == null) {
+            return false;
+        }
+        for (ServiceInfo c : components) {
+            if (c != null && c.name != null && FcmReceiverDetector.isFcmComponent(c.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<AppInfo> buildAppList(Set<String> allowListSet) {
         List<AppInfo> allow = new ArrayList<>();
         List<AppInfo> notAllow = new ArrayList<>();
@@ -718,6 +830,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             packages = pm.getInstalledPackages(
                     PackageManager.GET_RECEIVERS
+                            | PackageManager.GET_SERVICES
                             | PackageManager.MATCH_DISABLED_COMPONENTS);
         } catch (Throwable t) {
             Log.e(TAG, "getInstalledPackages: " + t);
@@ -725,20 +838,13 @@ public class MainActivity extends AppCompatActivity {
         }
 
         for (PackageInfo packageInfo : packages) {
-            if (packageInfo.receivers == null || packageInfo.applicationInfo == null) {
+            if (packageInfo.applicationInfo == null) {
                 continue;
             }
-            boolean hasFcm = false;
-            for (ActivityInfo receiverInfo : packageInfo.receivers) {
-                String n = receiverInfo.name;
-                if (n == null) {
-                    continue;
-                }
-                if (FcmReceiverDetector.isFcmReceiver(n)) {
-                    hasFcm = true;
-                    break;
-                }
-            }
+            // Some apps wire FCM through a service (FirebaseMessagingService subclass) with an
+            // oddly named or missing receiver, so inspect both receivers and services.
+            boolean hasFcm = hasFcmComponent(packageInfo.receivers)
+                    || hasFcmComponent(packageInfo.services);
 
             String label;
             try {
@@ -768,47 +874,80 @@ public class MainActivity extends AppCompatActivity {
         return allow;
     }
 
+    /** Rebuilds mutable AppInfo wrappers from the cached snapshot; never touches the cache itself. */
+    private static List<AppInfo> structuralCopy(List<AppInfo> source) {
+        List<AppInfo> copy = new ArrayList<>(source.size());
+        for (AppInfo a : source) {
+            copy.add(new AppInfo(a.name, a.packageName, null, a.includeFcm, false));
+        }
+        return copy;
+    }
+
     private void loadAppListAsync() {
+        // Reuse a completed scan when this process already built it (e.g. rotation/recreation),
+        // so we skip the expensive getInstalledPackages + label + FCM-matching pass.
+        final List<AppInfo> cached;
+        synchronized (APPS_CACHE_LOCK) {
+            cached = sCachedAppList;
+        }
+        if (cached != null) {
+            applyAppList(structuralCopy(cached), false);
+            return;
+        }
         // Snapshot on the main thread — HashSet is not safe to read while another thread mutates it.
         final Set<String> allowSnapshot = new HashSet<>(allowList);
         BG.execute(() -> {
             List<AppInfo> list = buildAppList(allowSnapshot);
-            MAIN_HANDLER.post(() -> {
-                if (isFinishing() || isDestroyed()) {
-                    return;
+            synchronized (APPS_CACHE_LOCK) {
+                if (sCachedAppList == null) {
+                    sCachedAppList = structuralCopy(list);
                 }
-                fullAppList = list;
-                // The scan snapshotted allowList on a background thread; the service may have
-                // connected (or reconnected) in the meantime. Re-apply the authoritative list so
-                // entries never render as ✗ just because the scan won the race.
-                for (AppInfo info : fullAppList) {
-                    info.isAllow = allowList.contains(info.packageName);
-                }
-                if (appListAdapter == null) {
-                    appListAdapter = new AppListAdapter();
-                    recyclerView.setAdapter(appListAdapter);
-                }
-                applyFilter();
-                View loading = findViewById(R.id.loading_container);
-                if (loading != null) {
-                    loading.setVisibility(View.GONE);
-                } else {
-                    findViewById(R.id.progress_bar).setVisibility(View.GONE);
-                }
-                recyclerView.setVisibility(View.VISIBLE);
-                updateStats();
-                refreshFabStatus();
-
-                if (list.isEmpty()
-                        || (list.size() == 1 && "sumicya.fcmself".equals(list.get(0).packageName))) {
-                    new AlertDialog.Builder(MainActivity.this)
-                            .setTitle("无法读取应用列表")
-                            .setMessage("请在系统设置中允许 fcmself 读取应用列表，然后重新打开本应用。")
-                            .setPositiveButton("确定", (dialog, which) -> {})
-                            .show();
-                }
-            });
+            }
+            MAIN_HANDLER.post(() -> applyAppList(list, true));
         });
+    }
+
+    /**
+     * Called on the main thread once the app list is ready.
+     *
+     * @param initialLoad true for the first scan; the "cannot read app list" warning is only shown
+     *                    then, so a recreated Activity (from cache) does not re-alert the user.
+     */
+    private void applyAppList(List<AppInfo> list, boolean initialLoad) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        fullAppList = list;
+        // The scan snapshotted allowList on a background thread; the service may have
+        // connected (or reconnected) in the meantime. Re-apply the authoritative list so
+        // entries never render as ✗ just because the scan won the race.
+        for (AppInfo info : fullAppList) {
+            info.isAllow = allowList.contains(info.packageName);
+        }
+        if (appListAdapter == null) {
+            appListAdapter = new AppListAdapter();
+            recyclerView.setAdapter(appListAdapter);
+        }
+        View loading = findViewById(R.id.loading_container);
+        if (loading != null) {
+            loading.setVisibility(View.GONE);
+        } else {
+            findViewById(R.id.progress_bar).setVisibility(View.GONE);
+        }
+        // applyFilter() also decides whether to show the empty-state hint instead of the grid.
+        applyFilter();
+        updateStats();
+        refreshFabStatus();
+
+        if (initialLoad
+                && (list.isEmpty()
+                || (list.size() == 1 && "sumicya.fcmself".equals(list.get(0).packageName)))) {
+            new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("无法读取应用列表")
+                    .setMessage("请在系统设置中允许 fcmself 读取应用列表，然后重新打开本应用。")
+                    .setPositiveButton("确定", (dialog, which) -> {})
+                    .show();
+        }
     }
 
 
@@ -877,11 +1016,15 @@ public class MainActivity extends AppCompatActivity {
         colorError = ContextCompat.getColor(this, R.color.status_error);
         colorDisconnected = ContextCompat.getColor(this, R.color.status_disconnected);
         colorPrimary = resolveThemeColor(android.R.attr.colorPrimary, colorConnected);
+        tintPrimary = ColorStateList.valueOf(colorPrimary);
+        tintError = ColorStateList.valueOf(colorError);
+        tintDisconnected = ColorStateList.valueOf(colorDisconnected);
 
         headerSafe = findViewById(R.id.header_safe);
         statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
         filterChips = findViewById(R.id.filter_chips);
+        emptyHint = findViewById(R.id.empty_hint);
         applyHeaderScrim();
         setupFilterChips();
         setupEdgeToEdgeInsets();

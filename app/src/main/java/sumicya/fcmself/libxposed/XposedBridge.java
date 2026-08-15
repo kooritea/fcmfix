@@ -59,8 +59,11 @@ public final class XposedBridge {
                             List<?> argList = chain.getArgs();
                             param.args = argList.toArray(new Object[argList.size()]);
 
-                            // Published as an immutable array: no allocation or locking on the
-                            // system-server hot path, and unhook cannot invalidate this invocation.
+                            // Publish as a stable reference so unhook cannot invalidate the
+                            // callbacks array midway through this invocation (no lock held). Note
+                            // the MethodHookParam itself and the args copy below are still
+                            // allocated per invocation — that is inherent to the hook abstraction
+                            // (callbacks may mutate args/result in place).
                             XC_MethodHook[] callbacks = installedRegistration.callbacks;
                             if (callbacks.length == 0) {
                                 return chain.proceed(param.args);

@@ -32,6 +32,9 @@ import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
 
 public class ReconnectManagerFix extends XposedModule {
+    // TODO(experimental): 这是整套代码里最复杂的自配置 hook（反射探测 GMS 内部、写本地
+    //   fcmfix_config、动态找 hook 点）。已做防御性加固，但整体结构仍可考虑更彻底的重构。
+    //   需真机验证：GMS 升级后的重新探测、heartbeat/reconn 间隔语义、以及 across 版本差异。
 
     private Class<?> GcmChimeraService;
     private String GcmChimeraServiceLogMethodName;
@@ -165,6 +168,8 @@ public class ReconnectManagerFix extends XposedModule {
     }
 
     protected void startHook() {
+        // TODO(experimental): cachedHbInterval / cachedConnInterval（来自 heartbeatInterval /
+        //   reconnInterval 配置）的语义与默认值可实验性调参，需真机观察心跳/重连实际效果。
         if (hooksInstalled) {
             // Refresh cached intervals only
             SharedPreferences prefs = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
@@ -185,7 +190,26 @@ public class ReconnectManagerFix extends XposedModule {
         printLog("timer_alarm_type_property: " + cachedAlarmTypePath, true);
         printLog("timer_settimeout_method: " + setTimeoutMethod, true);
 
-        final Class<?> timerClazz = XposedHelpers.findClass(timerClassName, classLoader);
+        // Defensive: a stale/blank target (e.g. GMS updated, or detection never ran) must degrade
+        // gracefully instead of throwing. The next GMS restart re-runs detection and re-hooks.
+        if (timerClassName.isEmpty() || setTimeoutMethod.isEmpty()) {
+            printLog("reconnect fix skipped: missing timer_class/timer_settimeout_method in config", true);
+            return;
+        }
+        final Class<?> timerClazz = XposedHelpers.findClassIfExists(timerClassName, classLoader);
+        if (timerClazz == null) {
+            printLog("reconnect fix skipped: timer class no longer present: " + timerClassName, true);
+            return;
+        }
+        try {
+            // Verify the target method still exists before hooking so a signature change surfaces
+            // as a clear message rather than a raw NoSuchMethodError mid-start.
+            timerClazz.getDeclaredMethod(setTimeoutMethod, long.class);
+        } catch (NoSuchMethodException e) {
+            printLog("reconnect fix skipped: no long.setTimeout method " + setTimeoutMethod
+                    + " on " + timerClassName, true);
+            return;
+        }
 
         XposedHelpers.findAndHookMethod(timerClazz, "toString", new XC_MethodHook() {
             @Override
