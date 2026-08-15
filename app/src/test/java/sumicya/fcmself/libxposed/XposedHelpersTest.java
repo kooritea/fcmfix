@@ -19,6 +19,22 @@ public class XposedHelpersTest {
         private String overloaded(Integer value) {
             return "integer";
         }
+
+        private String assignable(Object value) {
+            return "object";
+        }
+
+        private String assignable(Number value) {
+            return "number";
+        }
+
+        private String nullable(Object value) {
+            return "object";
+        }
+
+        private String nullable(int value) {
+            return "primitive";
+        }
     }
 
     @Test
@@ -35,6 +51,16 @@ public class XposedHelpersTest {
 
     @Test
     public void callMethodSelectsMostSpecificCompatibleOverload() {
-        assertEquals("integer", XposedHelpers.callMethod(new Child(), "overloaded", 7));
+        Child child = new Child();
+        assertEquals("integer", XposedHelpers.callMethod(child, "overloaded", 7));
+        assertEquals("number", XposedHelpers.callMethod(child, "assignable", 7));
+        // Resolve the same signatures again through the runtime-signature cache.
+        assertEquals("integer", XposedHelpers.callMethod(child, "overloaded", 8));
+        assertEquals("number", XposedHelpers.callMethod(child, "assignable", 8));
+    }
+
+    @Test
+    public void callMethodDoesNotSelectPrimitiveOverloadForNull() {
+        assertEquals("object", XposedHelpers.callMethod(new Child(), "nullable", (Object) null));
     }
 }

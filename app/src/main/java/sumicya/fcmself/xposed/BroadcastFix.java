@@ -18,10 +18,12 @@ import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XposedBridge;
@@ -44,8 +46,29 @@ public class BroadcastFix extends XposedModule {
         t.setDaemon(true);
         return t;
     });
-    /** Packages currently being activated; prevents duplicate concurrent activations. */
-    private static final Set<String> iceboxInFlight = ConcurrentHashMap.newKeySet();
+    /** Bound retained hook arguments if a frozen app receives a burst before IceBox enables it. */
+    private static final int MAX_DEFERRED_BROADCASTS_PER_PACKAGE = 64;
+    private static final ConcurrentHashMap<String, DeferredBroadcastQueue> DEFERRED_BROADCASTS =
+            new ConcurrentHashMap<>();
+
+    private static final class DeferredBroadcast {
+        final Member method;
+        final Object receiver;
+        final Object[] args;
+
+        DeferredBroadcast(Member method, Object receiver, Object[] args) {
+            this.method = method;
+            this.receiver = receiver;
+            // Hook args are mutable. Keep a private snapshot until the asynchronous replay.
+            this.args = args.clone();
+        }
+    }
+
+    private static final class DeferredBroadcastQueue {
+        final ConcurrentLinkedQueue<DeferredBroadcast> broadcasts = new ConcurrentLinkedQueue<>();
+        final AtomicInteger size = new AtomicInteger();
+        final AtomicBoolean workerRunning = new AtomicBoolean();
+    }
 
     // Cached boolean config keys read once into volatiles for the absolute hottest path
     private static volatile boolean sIncludeIceBox = false;
@@ -201,40 +224,15 @@ public class BroadcastFix extends XposedModule {
                 }
                 if (sIncludeIceBox && !IceboxUtils.isAppEnabled(context, target)) {
                     printLog("Waiting for IceBox to activate the app: " + target, true);
-                    methodHookParam.setResult(false);
-                    if (iceboxInFlight.add(target)) {
-                        final Object thisObject = methodHookParam.thisObject;
-                        final Object[] args = methodHookParam.args;
-                        final Member originalMethod = methodHookParam.method;
-                        final String pkg = target;
-                        ICEBOX_EXEC.execute(() -> {
-                            try {
-                                IceboxUtils.activeApp(context, pkg);
-                                for (int i1 = 0; i1 < 300; i1++) {
-                                    if (IceboxUtils.isAppEnabled(context, pkg)) {
-                                        break;
-                                    }
-                                    try {
-                                        Thread.sleep(100);
-                                    } catch (Throwable e) {
-                                        printLog("Send Forced Start Broadcast Error: " + pkg + " " + e.getMessage(), true);
-                                        break;
-                                    }
-                                }
-                                try {
-                                    if (IceboxUtils.isAppEnabled(context, pkg)) {
-                                        printLog("Send Forced Start Broadcast: " + pkg, true);
-                                    } else {
-                                        printLog("Waiting for IceBox to activate the app timed out: " + pkg, true);
-                                    }
-                                    XposedBridge.invokeOriginalMethod(originalMethod, thisObject, args);
-                                } catch (Throwable e) {
-                                    printLog("Send Forced Start Broadcast Error: " + pkg + " " + e.getMessage(), true);
-                                }
-                            } finally {
-                                iceboxInFlight.remove(pkg);
-                            }
-                        });
+                    // Every intercepted delivery must be replayed. The old in-flight Set retained
+                    // only the first broadcast and silently dropped later messages for the same
+                    // package while IceBox was still enabling it.
+                    if (deferUntilIceBoxEnabled(
+                            target,
+                            methodHookParam.method,
+                            methodHookParam.thisObject,
+                            methodHookParam.args)) {
+                        methodHookParam.setResult(defaultReturnValue(methodHookParam.method));
                     }
                 } else {
                     printLog("Send Forced Start Broadcast: " + target, true);
@@ -242,6 +240,91 @@ public class BroadcastFix extends XposedModule {
                 OplusProxyFix.unfreeze(target);
             }
         });
+    }
+
+    private static boolean deferUntilIceBoxEnabled(
+            String packageName, Member method, Object receiver, Object[] args) {
+        DeferredBroadcastQueue state = DEFERRED_BROADCASTS.computeIfAbsent(
+                packageName, ignored -> new DeferredBroadcastQueue());
+        int queued = state.size.incrementAndGet();
+        if (queued > MAX_DEFERRED_BROADCASTS_PER_PACKAGE) {
+            state.size.decrementAndGet();
+            // Do not cancel this delivery when the queue is full. Let the original framework path
+            // run synchronously rather than trading bounded memory for a guaranteed message loss.
+            printLog("IceBox deferred queue full, sending directly: " + packageName, true);
+            return false;
+        }
+        state.broadcasts.offer(new DeferredBroadcast(method, receiver, args));
+        startIceBoxWorker(packageName, state);
+        return true;
+    }
+
+    private static void startIceBoxWorker(String packageName, DeferredBroadcastQueue state) {
+        if (!state.workerRunning.compareAndSet(false, true)) {
+            return;
+        }
+        ICEBOX_EXEC.execute(() -> {
+            try {
+                if (!IceboxUtils.isAppEnabled(context, packageName)) {
+                    IceboxUtils.activeApp(context, packageName);
+                    for (int attempt = 0; attempt < 300; attempt++) {
+                        if (IceboxUtils.isAppEnabled(context, packageName)) {
+                            break;
+                        }
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+
+                if (IceboxUtils.isAppEnabled(context, packageName)) {
+                    printLog("Send deferred forced-start broadcasts: " + packageName, true);
+                } else {
+                    printLog("Waiting for IceBox to activate the app timed out: "
+                            + packageName, true);
+                }
+
+                DeferredBroadcast deferred;
+                while ((deferred = state.broadcasts.poll()) != null) {
+                    state.size.decrementAndGet();
+                    try {
+                        XposedBridge.invokeOriginalMethod(
+                                deferred.method, deferred.receiver, deferred.args);
+                    } catch (Throwable e) {
+                        printLog("Send Forced Start Broadcast Error: " + packageName + " "
+                                + e.getMessage(), true);
+                    }
+                }
+            } finally {
+                state.workerRunning.set(false);
+                // Close the enqueue-vs-drain race: a delivery may arrive after poll() returned null
+                // but before workerRunning was cleared.
+                if (!state.broadcasts.isEmpty()) {
+                    startIceBoxWorker(packageName, state);
+                }
+            }
+        });
+    }
+
+    /** Return a type-correct placeholder while an intercepted method is replayed asynchronously. */
+    private static Object defaultReturnValue(Member member) {
+        if (!(member instanceof Method)) {
+            return null;
+        }
+        Class<?> type = ((Method) member).getReturnType();
+        if (!type.isPrimitive() || type == void.class) return null;
+        if (type == boolean.class) return false;
+        if (type == char.class) return '\0';
+        if (type == byte.class) return (byte) 0;
+        if (type == short.class) return (short) 0;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == float.class) return 0F;
+        if (type == double.class) return 0D;
+        return null;
     }
 
     protected void startHookBroadcastIntentHighLevel() {

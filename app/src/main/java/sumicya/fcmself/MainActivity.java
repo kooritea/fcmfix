@@ -1,9 +1,11 @@
 package sumicya.fcmself;
 
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
@@ -134,16 +136,24 @@ public class MainActivity extends AppCompatActivity {
      * mutated by a live Activity. Kept in the same (sorted/grouped) order buildAppList produced.
      */
     private static final Object APPS_CACHE_LOCK = new Object();
-    // TODO(experimental): 进程存活期间新装的 App 不会自动出现在列表（需下次冷启动）。
-    //   可考虑加下拉刷新 / 显式刷新入口，或监听 ACTION_PACKAGE_ADDED 后失效此缓存。
     private static List<AppInfo> sCachedAppList;
     /** Coalesces rotations/recreations while the first package scan is still running. */
     private static boolean sAppListLoadInProgress;
+    /** Invalidates a scan if packages change while PackageManager is still enumerating them. */
+    private static int sAppListGeneration;
 
     private final Set<String> allowList = new HashSet<>();
     /** True once the allowList has been read from the remote config at least once. */
     private boolean allowListLoaded = false;
     private final JSONObject config = new JSONObject();
+    private boolean packageReceiverRegistered;
+    private final BroadcastReceiver packageChangeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            invalidateAppListCache();
+            loadAppListAsync();
+        }
+    };
 
     private SharedPreferences getRemotePreferencesOrNull() {
         if (xposedService == null) {
@@ -973,6 +983,35 @@ public class MainActivity extends AppCompatActivity {
         return allow;
     }
 
+    private static void invalidateAppListCache() {
+        synchronized (APPS_CACHE_LOCK) {
+            sCachedAppList = null;
+            sAppListGeneration++;
+        }
+    }
+
+    private void registerPackageChangeReceiver() {
+        if (packageReceiverRegistered) {
+            return;
+        }
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        filter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        filter.addDataScheme("package");
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(packageChangeReceiver, filter, Context.RECEIVER_EXPORTED);
+            } else {
+                registerReceiver(packageChangeReceiver, filter);
+            }
+            packageReceiverRegistered = true;
+        } catch (Throwable e) {
+            Log.w(TAG, "registerPackageChangeReceiver: " + e);
+        }
+    }
+
     /** Rebuilds mutable AppInfo wrappers from the cached snapshot; never touches the cache itself. */
     private static List<AppInfo> structuralCopy(List<AppInfo> source) {
         List<AppInfo> copy = new ArrayList<>(source.size());
@@ -988,8 +1027,10 @@ public class MainActivity extends AppCompatActivity {
         // already running, its completion is delivered to the latest live Activity via
         // activeInstance; rotations therefore do not queue duplicate package-manager work.
         final List<AppInfo> cached;
+        final int scanGeneration;
         synchronized (APPS_CACHE_LOCK) {
             cached = sCachedAppList;
+            scanGeneration = sAppListGeneration;
             if (cached == null) {
                 if (sAppListLoadInProgress) {
                     return;
@@ -1015,18 +1056,35 @@ public class MainActivity extends AppCompatActivity {
                 scanned = new ArrayList<>();
             }
             final List<AppInfo> result;
+            final boolean invalidated;
             synchronized (APPS_CACHE_LOCK) {
-                if (sCachedAppList == null) {
+                invalidated = scanGeneration != sAppListGeneration;
+                if (!invalidated && sCachedAppList == null) {
                     sCachedAppList = structuralCopy(scanned);
                 }
-                result = sCachedAppList;
+                result = invalidated ? null : sCachedAppList;
                 sAppListLoadInProgress = false;
             }
             MAIN_HANDLER.post(() -> {
                 MainActivity activity = activeInstance.get();
-                if (activity != null && !activity.isFinishing() && !activity.isDestroyed()) {
-                    activity.applyAppList(structuralCopy(result), true);
+                if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+                    return;
                 }
+                if (invalidated) {
+                    // A package changed during enumeration. Discard the stale snapshot and start
+                    // one coalesced scan against the new PackageManager state.
+                    activity.loadAppListAsync();
+                    return;
+                }
+                final boolean stillCurrent;
+                synchronized (APPS_CACHE_LOCK) {
+                    stillCurrent = scanGeneration == sAppListGeneration;
+                }
+                if (!stillCurrent) {
+                    activity.loadAppListAsync();
+                    return;
+                }
+                activity.applyAppList(structuralCopy(result), true);
             });
         });
     }
@@ -1175,6 +1233,7 @@ public class MainActivity extends AppCompatActivity {
         if (glm != null) {
             glm.setInitialPrefetchItemCount(6);
         }
+        registerPackageChangeReceiver();
 
         initXposedService();
 
@@ -1212,6 +1271,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         if (activeInstance.get() == this) {
             activeInstance = new WeakReference<>(null);
+        }
+        if (packageReceiverRegistered) {
+            try {
+                unregisterReceiver(packageChangeReceiver);
+            } catch (Throwable ignored) {
+            } finally {
+                packageReceiverRegistered = false;
+            }
         }
         super.onDestroy();
     }

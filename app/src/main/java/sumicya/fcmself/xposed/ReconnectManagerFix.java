@@ -124,7 +124,7 @@ public class ReconnectManagerFix extends XposedModule {
     private void checkVersion() throws Throwable {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         PackageInfo pi = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
-        String versionName = pi.versionName;
+        String versionName = pi.versionName != null ? pi.versionName : "";
         long versionCode = pi.getLongVersionCode();
         if (versionCode < 213916046) {
             printLog("当前为旧版GMS，请使用0.4.1版本FCMFIX，禁用重连修复功能");
@@ -148,9 +148,11 @@ public class ReconnectManagerFix extends XposedModule {
             findAndUpdateHookTarget(sharedPreferences);
             return;
         }
-        if (!versionName.equals(sharedPreferences.getString("gms_version", ""))) {
-            printLog("gms已更新: " + sharedPreferences.getString("gms_version", "") + "("
-                    + sharedPreferences.getLong("gms_version_code", 0) + ")" + "->" + versionName + "(" + versionCode + ")", true);
+        String configuredVersionName = sharedPreferences.getString("gms_version", "");
+        long configuredVersionCode = sharedPreferences.getLong("gms_version_code", 0);
+        if (!versionName.equals(configuredVersionName) || versionCode != configuredVersionCode) {
+            printLog("gms已更新: " + configuredVersionName + "(" + configuredVersionCode + ")"
+                    + "->" + versionName + "(" + versionCode + ")", true);
             sharedPreferences.edit()
                     .putString("gms_version", versionName)
                     .putLong("gms_version_code", versionCode)
