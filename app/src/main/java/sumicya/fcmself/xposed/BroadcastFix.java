@@ -323,7 +323,10 @@ public class BroadcastFix extends XposedModule {
             if (sPemAddMethod == null || sPemService == null) {
                 return;
             }
-            sPemAddMethod.invoke(sPemService, packageName, 102, "GOOGLE_C2DM", 2000L);
+            // Use the system context's real user id. A hardcoded 102 names a user that does not
+            // exist on single-user devices, silently making the temporary allow list a no-op.
+            sPemAddMethod.invoke(sPemService, packageName, context.getUserId(),
+                    "GOOGLE_C2DM", 2000L);
         } catch (Throwable t) {
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
         }
@@ -380,9 +383,7 @@ public class BroadcastFix extends XposedModule {
                             }
                             notification.setContentIntent(pendingIntent).setAutoCancel(true);
                             try {
-                                notificationManager.notify(
-                                    (int) System.currentTimeMillis(),notification.build()
-                                );
+                                notificationManager.notify(nextNotificationId(), notification.build());
                             } catch (SecurityException ignored) {}
                         } else {
                             printLog("无法获取目标应用active: " + packageName, false);
@@ -403,6 +404,9 @@ public class BroadcastFix extends XposedModule {
             if (drawable instanceof BitmapDrawable) {
                 return ((BitmapDrawable) drawable).getBitmap();
             } else {
+                if (drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
+                    return null;
+                }
                 Bitmap bitmap = Bitmap.createBitmap(
                         drawable.getIntrinsicWidth(),
                         drawable.getIntrinsicHeight(),

@@ -24,9 +24,11 @@ import sumicya.fcmself.libxposed.XposedHelpers;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static android.content.Context.NOTIFICATION_SERVICE;
@@ -50,8 +52,15 @@ public abstract class XposedModule {
     /** Fast-path flag: config has been loaded at least once. Avoids work on every broadcast. */
     private static final AtomicBoolean configReady = new AtomicBoolean(false);
 
+    /**
+     * Monotonic notification ID shared by every fix. System.currentTimeMillis() overflows int in
+     * 2038 and two modules notifying in the same millisecond could collide.
+     */
+    private static final AtomicInteger NOTIFY_ID_SEQ = new AtomicInteger();
+
     @SuppressLint("StaticFieldLeak")
     protected static Context context = null;
+    /** Written while hooks install; read by callAllOnCanReadConfig — both must be synchronized. */
     private static final ArrayList<XposedModule> instances = new ArrayList<>();
     private static volatile boolean isInitReceiver = false;
     public static volatile boolean isBootComplete = false;
@@ -61,8 +70,12 @@ public abstract class XposedModule {
 
     protected XposedModule(final ClassLoader classLoader) {
         this.classLoader = classLoader;
-        instances.add(this);
-        if (instances.size() == 1) {
+        final boolean first;
+        synchronized (instances) {
+            instances.add(this);
+            first = instances.size() == 1;
+        }
+        if (first) {
             initContext(classLoader);
         } else if (context != null && context.getSystemService(UserManager.class).isUserUnlocked()) {
             try {
@@ -115,7 +128,11 @@ public abstract class XposedModule {
         } else {
             isBootComplete = true;
         }
-        for (XposedModule instance : instances) {
+        final List<XposedModule> snapshot;
+        synchronized (instances) {
+            snapshot = new ArrayList<>(instances);
+        }
+        for (XposedModule instance : snapshot) {
             try {
                 instance.onCanReadConfig();
             } catch (Throwable e) {
@@ -134,11 +151,11 @@ public abstract class XposedModule {
     /**
      * @param isDiagnosticsLog when true, also mirrors to GMS diagnostics via broadcast (throttled).
      */
-    protected static void printLog(String text, Boolean isDiagnosticsLog) {
+    protected static void printLog(String text, boolean isDiagnosticsLog) {
         if (text == null) {
             return;
         }
-        if (Boolean.TRUE.equals(isDiagnosticsLog)) {
+        if (isDiagnosticsLog) {
             // Diagnostics path: throttle IPC; still keep a local log line
             long now = SystemClock.elapsedRealtime();
             long prev = lastDiagLogElapsed.get();
@@ -383,7 +400,12 @@ public abstract class XposedModule {
         if (pendingIntent != null) {
             notification.setContentIntent(pendingIntent).setAutoCancel(true);
         }
-        notificationManager.notify((int) System.currentTimeMillis(), notification.build());
+        notificationManager.notify(nextNotificationId(), notification.build());
+    }
+
+    /** Process-wide monotonic notification ID; never collides and never overflows negative. */
+    protected static int nextNotificationId() {
+        return NOTIFY_ID_SEQ.incrementAndGet();
     }
 
     protected void createFcmselfChannel(NotificationManagerCompat notificationManager) {

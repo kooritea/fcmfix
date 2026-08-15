@@ -40,40 +40,29 @@ public class KeepNotification extends XposedModule {
             }
         }
         if (targetMethod != null) {
-            int pkg_args_index = 0;
-            int reason_args_index = 0;
-            if (Build.VERSION.SDK_INT == 30) {
+            int pkg_args_index;
+            int reason_args_index;
+            final int sdk = Build.VERSION.SDK_INT;
+            final int paramCount = targetMethod.getParameterTypes().length;
+            if (sdk >= 30 && sdk <= 33) {
                 pkg_args_index = 2;
                 reason_args_index = 8;
-            }
-            if (Build.VERSION.SDK_INT == 31) {
-                pkg_args_index = 2;
-                reason_args_index = 8;
-            }
-            if (Build.VERSION.SDK_INT == 32) {
-                pkg_args_index = 2;
-                reason_args_index = 8;
-            }
-            if (Build.VERSION.SDK_INT == 33) {
-                pkg_args_index = 2;
-                reason_args_index = 8;
-            }
-            if (Build.VERSION.SDK_INT == 34) {
-                if (targetMethod.getParameterTypes().length == 10) {
+            } else if (sdk == 34) {
+                if (paramCount == 10) {
                     pkg_args_index = 2;
                     reason_args_index = 8;
-                } else if (targetMethod.getParameterTypes().length == 8) {
+                } else if (paramCount == 8) {
                     pkg_args_index = 2;
                     reason_args_index = 7;
+                } else {
+                    throw new NoSuchMethodError();
                 }
-            }
-            if (Build.VERSION.SDK_INT == 35) {
+            } else if (sdk >= 35) {
                 pkg_args_index = 2;
                 reason_args_index = 7;
-            }
-            if (Build.VERSION.SDK_INT > 35) {
-                pkg_args_index = 2;
-                reason_args_index = 7;
+            } else {
+                // Signature unknown below Android 11 — leave the fix unhooked.
+                throw new NoSuchMethodError();
             }
             if (pkg_args_index == 0 || reason_args_index == 0) {
                 throw new NoSuchMethodError();

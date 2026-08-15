@@ -45,6 +45,11 @@ public class OplusProxyFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error isGoogleRestricInfoOn:" + e.getMessage());
         }
+        try {
+            this.startHookIsGmsApp();
+        } catch (Throwable e) {
+            printLog("hook error isGmsApp:" + e.getMessage());
+        }
     }
 
     private void startHookOplusProxyBroadcast() throws Exception {
