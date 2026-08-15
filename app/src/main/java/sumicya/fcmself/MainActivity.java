@@ -105,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
     private View headerSafe;
     private RecyclerView recyclerView;
     private ChipGroup filterChips;
+    private TextView emptyHint;
     private boolean lastConfigError = false;
     private FilterMode filterMode = FilterMode.ALL;
 
@@ -447,6 +448,11 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         appListAdapter.replaceList(filtered);
+        if (emptyHint != null) {
+            boolean showEmpty = filtered.isEmpty();
+            emptyHint.setVisibility(showEmpty ? View.VISIBLE : View.GONE);
+            recyclerView.setVisibility(showEmpty ? View.GONE : View.VISIBLE);
+        }
     }
 
     private void setupFilterChips() {
@@ -876,14 +882,14 @@ public class MainActivity extends AppCompatActivity {
                     appListAdapter = new AppListAdapter();
                     recyclerView.setAdapter(appListAdapter);
                 }
-                applyFilter();
                 View loading = findViewById(R.id.loading_container);
                 if (loading != null) {
                     loading.setVisibility(View.GONE);
                 } else {
                     findViewById(R.id.progress_bar).setVisibility(View.GONE);
                 }
-                recyclerView.setVisibility(View.VISIBLE);
+                // applyFilter() also decides whether to show the empty-state hint instead of the grid.
+                applyFilter();
                 updateStats();
                 refreshFabStatus();
 
@@ -973,6 +979,7 @@ public class MainActivity extends AppCompatActivity {
         statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
         filterChips = findViewById(R.id.filter_chips);
+        emptyHint = findViewById(R.id.empty_hint);
         applyHeaderScrim();
         setupFilterChips();
         setupEdgeToEdgeInsets();
