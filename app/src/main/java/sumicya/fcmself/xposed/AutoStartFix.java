@@ -39,6 +39,22 @@ public class AutoStartFix extends XposedModule {
         return targetIsAllow(target) ? target : null;
     }
 
+    private String allowedFcmPackageFromIntentPackage(Intent intent) {
+        if (!isFCMIntent(intent)) {
+            return null;
+        }
+        String target = intent.getPackage();
+        return targetIsAllow(target) ? target : null;
+    }
+
+    private String allowedMessagingEventPackage(Intent intent) {
+        if (intent == null || !"com.google.firebase.MESSAGING_EVENT".equals(intent.getAction())) {
+            return null;
+        }
+        String target = packageFromIntent(intent);
+        return targetIsAllow(target) ? target : null;
+    }
+
     protected void startHook() {
         try {
             Class<?> BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueInjector", classLoader);
@@ -167,7 +183,7 @@ public class AutoStartFix extends XposedModule {
                     Object intentObj = XposedHelpers.getObjectField(methodHookParam.args[0], "intent");
                     if (!(intentObj instanceof Intent)) return;
                     Intent intent = (Intent) intentObj;
-                    if (allowedFcmPackage(intent) != null) {
+                    if (allowedFcmPackageFromIntentPackage(intent) != null) {
                         methodHookParam.setResult(false);
                     }
                 }
@@ -184,7 +200,7 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     Intent intent = (Intent) param.args[0];
-                    String target = allowedFcmPackage(intent);
+                    String target = allowedMessagingEventPackage(intent);
                     if (target != null) {
                         printLog("Disable MIUI Intercept: " + target, true);
                         param.setResult(false);
