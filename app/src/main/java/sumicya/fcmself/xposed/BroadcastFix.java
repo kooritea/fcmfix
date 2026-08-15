@@ -185,7 +185,7 @@ public class BroadcastFix extends XposedModule {
                     if (iceboxInFlight.add(target)) {
                         final Object thisObject = methodHookParam.thisObject;
                         final Object[] args = methodHookParam.args;
-                        final Method originalMethod = methodHookParam.method;
+                        final Member originalMethod = methodHookParam.method;
                         final String pkg = target;
                         ICEBOX_EXEC.execute(() -> {
                             try {
