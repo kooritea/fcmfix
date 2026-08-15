@@ -32,6 +32,9 @@ import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
 
 public class ReconnectManagerFix extends XposedModule {
+    // TODO(experimental): 这是整套代码里最复杂的自配置 hook（反射探测 GMS 内部、写本地
+    //   fcmfix_config、动态找 hook 点）。已做防御性加固，但整体结构仍可考虑更彻底的重构。
+    //   需真机验证：GMS 升级后的重新探测、heartbeat/reconn 间隔语义、以及 across 版本差异。
 
     private Class<?> GcmChimeraService;
     private String GcmChimeraServiceLogMethodName;
@@ -165,6 +168,8 @@ public class ReconnectManagerFix extends XposedModule {
     }
 
     protected void startHook() {
+        // TODO(experimental): cachedHbInterval / cachedConnInterval（来自 heartbeatInterval /
+        //   reconnInterval 配置）的语义与默认值可实验性调参，需真机观察心跳/重连实际效果。
         if (hooksInstalled) {
             // Refresh cached intervals only
             SharedPreferences prefs = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);

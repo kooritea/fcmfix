@@ -132,6 +132,8 @@ public class MainActivity extends AppCompatActivity {
      * mutated by a live Activity. Kept in the same (sorted/grouped) order buildAppList produced.
      */
     private static final Object APPS_CACHE_LOCK = new Object();
+    // TODO(experimental): 进程存活期间新装的 App 不会自动出现在列表（需下次冷启动）。
+    //   可考虑加下拉刷新 / 显式刷新入口，或监听 ACTION_PACKAGE_ADDED 后失效此缓存。
     private static List<AppInfo> sCachedAppList;
 
     private final Set<String> allowList = new HashSet<>();

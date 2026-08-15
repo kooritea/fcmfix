@@ -75,6 +75,8 @@ public class BroadcastFix extends XposedModule {
                 printLog("hook error high-level broadcastIntent:" + e.getMessage());
             }
         }
+        // TODO(experimental): 目前策略是「锁定钩子为主，高层钩子仅在锁定钩子装不上时兜底」。
+        //   若想保留双保险（两者都装，以韧性优先于省一次拦截开销），可改为无条件都装并观察。 
         try {
             this.startHookScheduleResultTo();
         } catch (Throwable e) {
