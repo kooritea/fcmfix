@@ -30,7 +30,7 @@
         <item name="cornerSizeBottomRight">16dp</item>
     </style>
 
-    <style name="Animation.Fcmself.FabMenu" parent="@android:style/Animation.PopupWindow">
+    <style name="Animation.Fcmself.FabMenu" parent="">
         <item name="android:windowEnterAnimation">@anim/fab_menu_enter</item>
         <item name="android:windowExitAnimation">@anim/fab_menu_exit</item>
     </style>
