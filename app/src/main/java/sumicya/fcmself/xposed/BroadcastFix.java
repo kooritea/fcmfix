@@ -12,7 +12,7 @@ import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
-import java.lang.reflect.Method;
+import java.lang.reflect.Member;
 import java.lang.reflect.Parameter;
 
 import java.util.Set;
