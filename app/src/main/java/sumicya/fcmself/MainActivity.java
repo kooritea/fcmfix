@@ -124,6 +124,16 @@ public class MainActivity extends AppCompatActivity {
 
     private List<AppInfo> fullAppList = new ArrayList<>();
 
+    /**
+     * Structural app-list cache shared across Activity instances (rotation / recreation). The
+     * expensive scan (getInstalledPackages + label loading + FCM component matching) only needs to
+     * happen once per process; recreations rebuild lightweight AppInfo wrappers from this snapshot.
+     * Entries carry no mutable state (icon = null, isAllow = false) so the cache itself is never
+     * mutated by a live Activity. Kept in the same (sorted/grouped) order buildAppList produced.
+     */
+    private static final Object APPS_CACHE_LOCK = new Object();
+    private static List<AppInfo> sCachedAppList;
+
     private final Set<String> allowList = new HashSet<>();
     /** True once the allowList has been read from the remote config at least once. */
     private boolean allowListLoaded = false;
@@ -862,47 +872,80 @@ public class MainActivity extends AppCompatActivity {
         return allow;
     }
 
+    /** Rebuilds mutable AppInfo wrappers from the cached snapshot; never touches the cache itself. */
+    private static List<AppInfo> structuralCopy(List<AppInfo> source) {
+        List<AppInfo> copy = new ArrayList<>(source.size());
+        for (AppInfo a : source) {
+            copy.add(new AppInfo(a.name, a.packageName, null, a.includeFcm, false));
+        }
+        return copy;
+    }
+
     private void loadAppListAsync() {
+        // Reuse a completed scan when this process already built it (e.g. rotation/recreation),
+        // so we skip the expensive getInstalledPackages + label + FCM-matching pass.
+        final List<AppInfo> cached;
+        synchronized (APPS_CACHE_LOCK) {
+            cached = sCachedAppList;
+        }
+        if (cached != null) {
+            applyAppList(structuralCopy(cached), false);
+            return;
+        }
         // Snapshot on the main thread — HashSet is not safe to read while another thread mutates it.
         final Set<String> allowSnapshot = new HashSet<>(allowList);
         BG.execute(() -> {
             List<AppInfo> list = buildAppList(allowSnapshot);
-            MAIN_HANDLER.post(() -> {
-                if (isFinishing() || isDestroyed()) {
-                    return;
+            synchronized (APPS_CACHE_LOCK) {
+                if (sCachedAppList == null) {
+                    sCachedAppList = structuralCopy(list);
                 }
-                fullAppList = list;
-                // The scan snapshotted allowList on a background thread; the service may have
-                // connected (or reconnected) in the meantime. Re-apply the authoritative list so
-                // entries never render as ✗ just because the scan won the race.
-                for (AppInfo info : fullAppList) {
-                    info.isAllow = allowList.contains(info.packageName);
-                }
-                if (appListAdapter == null) {
-                    appListAdapter = new AppListAdapter();
-                    recyclerView.setAdapter(appListAdapter);
-                }
-                View loading = findViewById(R.id.loading_container);
-                if (loading != null) {
-                    loading.setVisibility(View.GONE);
-                } else {
-                    findViewById(R.id.progress_bar).setVisibility(View.GONE);
-                }
-                // applyFilter() also decides whether to show the empty-state hint instead of the grid.
-                applyFilter();
-                updateStats();
-                refreshFabStatus();
-
-                if (list.isEmpty()
-                        || (list.size() == 1 && "sumicya.fcmself".equals(list.get(0).packageName))) {
-                    new AlertDialog.Builder(MainActivity.this)
-                            .setTitle("无法读取应用列表")
-                            .setMessage("请在系统设置中允许 fcmself 读取应用列表，然后重新打开本应用。")
-                            .setPositiveButton("确定", (dialog, which) -> {})
-                            .show();
-                }
-            });
+            }
+            MAIN_HANDLER.post(() -> applyAppList(list, true));
         });
+    }
+
+    /**
+     * Called on the main thread once the app list is ready.
+     *
+     * @param initialLoad true for the first scan; the "cannot read app list" warning is only shown
+     *                    then, so a recreated Activity (from cache) does not re-alert the user.
+     */
+    private void applyAppList(List<AppInfo> list, boolean initialLoad) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        fullAppList = list;
+        // The scan snapshotted allowList on a background thread; the service may have
+        // connected (or reconnected) in the meantime. Re-apply the authoritative list so
+        // entries never render as ✗ just because the scan won the race.
+        for (AppInfo info : fullAppList) {
+            info.isAllow = allowList.contains(info.packageName);
+        }
+        if (appListAdapter == null) {
+            appListAdapter = new AppListAdapter();
+            recyclerView.setAdapter(appListAdapter);
+        }
+        View loading = findViewById(R.id.loading_container);
+        if (loading != null) {
+            loading.setVisibility(View.GONE);
+        } else {
+            findViewById(R.id.progress_bar).setVisibility(View.GONE);
+        }
+        // applyFilter() also decides whether to show the empty-state hint instead of the grid.
+        applyFilter();
+        updateStats();
+        refreshFabStatus();
+
+        if (initialLoad
+                && (list.isEmpty()
+                || (list.size() == 1 && "sumicya.fcmself".equals(list.get(0).packageName)))) {
+            new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("无法读取应用列表")
+                    .setMessage("请在系统设置中允许 fcmself 读取应用列表，然后重新打开本应用。")
+                    .setPositiveButton("确定", (dialog, which) -> {})
+                    .show();
+        }
     }
 
 
