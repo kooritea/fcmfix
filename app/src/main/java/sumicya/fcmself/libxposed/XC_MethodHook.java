@@ -29,6 +29,7 @@ public abstract class XC_MethodHook {
 
         public void setThrowable(Throwable throwable) {
             this.throwable = throwable;
+            this.result = null;
             this.returnEarly = true;
         }
 

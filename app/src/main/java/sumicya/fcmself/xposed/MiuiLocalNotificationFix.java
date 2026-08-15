@@ -37,8 +37,11 @@ public class MiuiLocalNotificationFix extends XposedModule {
                         if (!isBootComplete) {
                             return;
                         }
-                        if (targetIsAllow((String) methodHookParam.args[3])) {
-                            methodHookParam.setResult("isAllowLocalNotification".equals(finalTargetMethod.getName()));
+                        if (methodHookParam.args.length > 3
+                                && methodHookParam.args[3] instanceof String
+                                && targetIsAllow((String) methodHookParam.args[3])) {
+                            methodHookParam.setResult(
+                                    "isAllowLocalNotification".equals(finalTargetMethod.getName()));
                         }
                     }
                 });

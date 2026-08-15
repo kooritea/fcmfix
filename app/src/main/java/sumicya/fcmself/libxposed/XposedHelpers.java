@@ -8,8 +8,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class XposedHelpers {
 
-    /** Cache key: className + '#' + fieldName */
-    private static final ConcurrentHashMap<String, Field> FIELD_CACHE = new ConcurrentHashMap<>();
+    /** Class identity is part of the key; OEM/Dynamite class loaders may reuse class names. */
+    private static final ConcurrentHashMap<Class<?>, ConcurrentHashMap<String, Field>> FIELD_CACHE =
+            new ConcurrentHashMap<>();
 
     private XposedHelpers() {
     }
@@ -37,13 +38,17 @@ public final class XposedHelpers {
     }
 
     public static Method findMethodExact(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
-        try {
-            Method method = clazz.getDeclaredMethod(methodName, parameterTypes);
-            method.setAccessible(true);
-            return method;
-        } catch (NoSuchMethodException e) {
-            throw new NoSuchMethodError(clazz.getName() + "#" + methodName);
+        Class<?> current = clazz;
+        while (current != null) {
+            try {
+                Method method = current.getDeclaredMethod(methodName, parameterTypes);
+                method.setAccessible(true);
+                return method;
+            } catch (NoSuchMethodException ignored) {
+                current = current.getSuperclass();
+            }
         }
+        throw new NoSuchMethodError(clazz.getName() + "#" + methodName);
     }
 
     public static Constructor<?> findConstructorExact(Class<?> clazz, Class<?>... parameterTypes) {
@@ -163,8 +168,9 @@ public final class XposedHelpers {
     }
 
     private static Field findField(Class<?> clazz, String fieldName) {
-        String key = clazz.getName() + '#' + fieldName;
-        Field cached = FIELD_CACHE.get(key);
+        ConcurrentHashMap<String, Field> classCache = FIELD_CACHE.computeIfAbsent(
+                clazz, ignored -> new ConcurrentHashMap<>());
+        Field cached = classCache.get(fieldName);
         if (cached != null) {
             return cached;
         }
@@ -173,8 +179,8 @@ public final class XposedHelpers {
             try {
                 Field field = current.getDeclaredField(fieldName);
                 field.setAccessible(true);
-                FIELD_CACHE.put(key, field);
-                return field;
+                Field existing = classCache.putIfAbsent(fieldName, field);
+                return existing != null ? existing : field;
             } catch (NoSuchFieldException ignored) {
                 current = current.getSuperclass();
             }
@@ -185,34 +191,37 @@ public final class XposedHelpers {
     private static Method findBestMethod(Class<?> clazz, String methodName, Object[] args) {
         Method best = null;
         int bestScore = -1;
-        for (Method m : clazz.getDeclaredMethods()) {
-            if (!m.getName().equals(methodName)) {
-                continue;
-            }
-            Class<?>[] pts = m.getParameterTypes();
-            if (pts.length != args.length) {
-                continue;
-            }
-            int score = 0;
-            boolean ok = true;
-            for (int i = 0; i < pts.length; i++) {
-                Object arg = args[i];
-                if (arg == null) {
+        Class<?> current = clazz;
+        while (current != null) {
+            for (Method method : current.getDeclaredMethods()) {
+                if (!method.getName().equals(methodName)) {
                     continue;
                 }
-                Class<?> boxed = boxPrimitive(pts[i]);
-                if (!boxed.isAssignableFrom(arg.getClass())) {
-                    ok = false;
-                    break;
+                Class<?>[] parameterTypes = method.getParameterTypes();
+                if (parameterTypes.length != args.length) {
+                    continue;
                 }
-                if (boxed == arg.getClass()) {
-                    score++;
+                int score = 0;
+                boolean compatible = true;
+                for (int i = 0; i < parameterTypes.length; i++) {
+                    Object arg = args[i];
+                    if (arg == null) {
+                        continue;
+                    }
+                    Class<?> boxed = boxPrimitive(parameterTypes[i]);
+                    if (!boxed.isAssignableFrom(arg.getClass())) {
+                        compatible = false;
+                        break;
+                    }
+                    score += boxed == arg.getClass() ? 2 : 1;
+                }
+                // Walk from the concrete class upward and preserve the subclass on equal scores.
+                if (compatible && score > bestScore) {
+                    best = method;
+                    bestScore = score;
                 }
             }
-            if (ok && score >= bestScore) {
-                best = m;
-                bestScore = score;
-            }
+            current = current.getSuperclass();
         }
         if (best == null) {
             throw new NoSuchMethodError(clazz.getName() + "#" + methodName);

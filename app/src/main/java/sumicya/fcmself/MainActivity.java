@@ -60,10 +60,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import sumicya.fcmself.util.FcmReceiverDetector;
 import sumicya.fcmself.util.IceboxUtils;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
+    private static final String UPDATE_CONFIG_ACTION = "sumicya.fcmself.update.config";
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final ExecutorService BG = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "fcmself-apps");
@@ -120,10 +122,10 @@ public class MainActivity extends AppCompatActivity {
 
     private List<AppInfo> fullAppList = new ArrayList<>();
 
-    Set<String> allowList = new HashSet<>();
+    private final Set<String> allowList = new HashSet<>();
     /** True once the allowList has been read from the remote config at least once. */
     private boolean allowListLoaded = false;
-    JSONObject config = new JSONObject();
+    private final JSONObject config = new JSONObject();
 
     private SharedPreferences getRemotePreferencesOrNull() {
         if (xposedService == null) {
@@ -229,28 +231,37 @@ public class MainActivity extends AppCompatActivity {
         if (pref == null) {
             return;
         }
-        Set<String> remote = pref.getStringSet("allowList", null);
-        if (remote != null) {
-            // Only replace the in-memory list when the remote side actually returned data.
-            // Clearing first would wipe every check mark whenever a read transiently fails.
-            this.allowList.clear();
-            this.allowList.addAll(remote);
-            allowListLoaded = true;
-        } else if (pref.getBoolean("init", false)) {
-            // Config exists but holds no entries — an empty allow list is the truth.
-            this.allowList.clear();
-            allowListLoaded = true;
-        } else {
-            // Never initialised (fresh install) — keep whatever we have, do not report an error.
-            Log.i(TAG, "loadRemoteConfig: config not initialised yet, keeping current allowList");
-        }
         try {
+            // Read every value before changing live state. Remote/binder preferences can throw a
+            // type or transport error; a partial read must not clear checks or mix config versions.
+            Set<String> remote = pref.getStringSet("allowList", null);
+            boolean initialized = pref.getBoolean("init", false);
+            boolean disableAutoClean = pref.getBoolean("disableAutoCleanNotification", false);
+            boolean includeIceBox = pref.getBoolean("includeIceBoxDisableApp", false);
+            boolean noResponseNotification = pref.getBoolean("noResponseNotification", false);
+
+            Set<String> newAllowList = null;
+            if (remote != null) {
+                newAllowList = new HashSet<>(remote);
+            } else if (initialized) {
+                // Config exists but holds no entries — an empty allow list is authoritative.
+                newAllowList = new HashSet<>();
+            } else {
+                // Fresh install or a temporarily unavailable value: preserve any known snapshot.
+                Log.i(TAG, "loadRemoteConfig: config not initialised yet, keeping current allowList");
+            }
+
+            if (newAllowList != null) {
+                this.allowList.clear();
+                this.allowList.addAll(newAllowList);
+                allowListLoaded = true;
+            }
             this.config.put("allowList", new JSONArray(this.allowList));
-            this.config.put("disableAutoCleanNotification", pref.getBoolean("disableAutoCleanNotification", false));
-            this.config.put("includeIceBoxDisableApp", pref.getBoolean("includeIceBoxDisableApp", false));
-            this.config.put("noResponseNotification", pref.getBoolean("noResponseNotification", false));
+            this.config.put("disableAutoCleanNotification", disableAutoClean);
+            this.config.put("includeIceBoxDisableApp", includeIceBox);
+            this.config.put("noResponseNotification", noResponseNotification);
             lastConfigError = false;
-        } catch (JSONException e) {
+        } catch (Throwable e) {
             Log.e(TAG, "loadRemoteConfig: " + e);
             lastConfigError = true;
         }
@@ -437,22 +448,29 @@ public class MainActivity extends AppCompatActivity {
         popup.show();
     }
 
+    private void updateBooleanConfig(String key, boolean value) throws JSONException {
+        boolean previous = config.optBoolean(key, false);
+        config.put(key, value);
+        if (!updateConfig()) {
+            // Keep the in-memory menu state aligned with the last successfully persisted value.
+            // Otherwise a later, unrelated save would silently persist this failed toggle.
+            config.put(key, previous);
+        }
+    }
+
     private boolean onFabMenuItemClick(MenuItem item) {
         int id = item.getItemId();
         try {
             if (id == 1) {
-                config.put("disableAutoCleanNotification", !item.isChecked());
-                updateConfig();
+                updateBooleanConfig("disableAutoCleanNotification", !item.isChecked());
                 return true;
             }
             if (id == 2) {
-                config.put("includeIceBoxDisableApp", !item.isChecked());
-                updateConfig();
+                updateBooleanConfig("includeIceBoxDisableApp", !item.isChecked());
                 return true;
             }
             if (id == 3) {
-                config.put("noResponseNotification", !item.isChecked());
-                updateConfig();
+                updateBooleanConfig("noResponseNotification", !item.isChecked());
                 return true;
             }
             if (id == 4) {
@@ -545,7 +563,15 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public long getItemId(int position) {
-            return mAppList.get(position).packageName.hashCode();
+            // RecyclerView stable IDs are 64-bit; String.hashCode() needlessly limits package IDs
+            // to 32 bits and can make colliding package names reuse the wrong view state.
+            String packageName = mAppList.get(position).packageName;
+            long hash = 0xcbf29ce484222325L;
+            for (int i = 0; i < packageName.length(); i++) {
+                hash ^= packageName.charAt(i);
+                hash *= 0x100000001b3L;
+            }
+            return hash;
         }
 
         @NonNull
@@ -690,8 +716,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             packages = pm.getInstalledPackages(
                     PackageManager.GET_RECEIVERS
-                            | PackageManager.MATCH_DISABLED_COMPONENTS
-                            | PackageManager.MATCH_UNINSTALLED_PACKAGES);
+                            | PackageManager.MATCH_DISABLED_COMPONENTS);
         } catch (Throwable t) {
             Log.e(TAG, "getInstalledPackages: " + t);
             return new ArrayList<>();
@@ -707,10 +732,7 @@ public class MainActivity extends AppCompatActivity {
                 if (n == null) {
                     continue;
                 }
-                if ("com.google.firebase.iid.FirebaseInstanceIdReceiver".equals(n)
-                        || "com.google.android.gms.measurement.AppMeasurementReceiver".equals(n)
-                        || n.contains("FirebaseMessaging")
-                        || n.endsWith(".FirebaseInstanceIdReceiver")) {
+                if (FcmReceiverDetector.isFcmReceiver(n)) {
                     hasFcm = true;
                     break;
                 }
@@ -967,7 +989,7 @@ public class MainActivity extends AppCompatActivity {
             }
             lastConfigError = false;
             allowListLoaded = true;
-            this.sendBroadcast(new Intent("sumicya.fcmself.update.config"));
+            this.sendBroadcast(new Intent(UPDATE_CONFIG_ACTION));
             refreshFabStatus();
             return true;
         } catch (Throwable e) {

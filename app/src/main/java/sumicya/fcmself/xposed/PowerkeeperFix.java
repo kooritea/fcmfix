@@ -2,89 +2,90 @@ package sumicya.fcmself.xposed;
 
 import android.content.Context;
 
-import sumicya.fcmself.util.XposedUtils;
-
-import java.lang.reflect.Field;
 import java.util.List;
 
 import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XposedHelpers;
+import sumicya.fcmself.util.XposedUtils;
 
 public class PowerkeeperFix extends XposedModule {
+    private static final String GMS_PACKAGE = "com.google.android.gms";
+
     public PowerkeeperFix(ClassLoader classLoader) {
         super(classLoader);
-        this.startHook();
+        installSafely("MilletConfig", this::configureMilletGlobalMode);
+        installSafely("SimpleSettings.Misc#getBoolean", this::hookGmsControl);
+        installSafely("MilletPolicy", this::hookMilletPolicy);
     }
 
-    protected void startHook() {
+    private void installSafely(String name, Runnable installer) {
         try {
-            Class<?> MilletConfig = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletConfig", classLoader);
-            XposedHelpers.setStaticBooleanField(MilletConfig, "isGlobal", true);
-            printLog("Set com.miui.powerkeeper.millet.MilletConfig.isGlobal to true");
+            installer.run();
+        } catch (Throwable e) {
+            // PowerKeeper internals vary significantly between MIUI releases. One missing class or
+            // field must not prevent the other independent compatibility hooks from loading.
+            printLog("PowerkeeperFix " + name + " unavailable: " + e);
+        }
+    }
 
-            Class<?> Misc = XposedHelpers.findClassIfExists("com.miui.powerkeeper.provider.SimpleSettings.Misc", classLoader);
-            printLog("[fcmfix] start hook com.miui.powerkeeper.provider.SimpleSettings.Misc.getBoolean");
-            XposedUtils.findAndHookMethod(Misc, "getBoolean", 3, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam methodHookParam) throws Throwable {
-                    if ("gms_control".equals((String) methodHookParam.args[1])) {
-                        printLog("Success: Success: PowerKeeper GMS Limitation. ", true);
-                        methodHookParam.setResult(false);
-                    }
+    private void configureMilletGlobalMode() {
+        Class<?> milletConfig = XposedHelpers.findClass(
+                "com.miui.powerkeeper.millet.MilletConfig", classLoader);
+        XposedHelpers.setStaticBooleanField(milletConfig, "isGlobal", true);
+        printLog("Set com.miui.powerkeeper.millet.MilletConfig.isGlobal to true");
+    }
+
+    private void hookGmsControl() {
+        Class<?> misc = XposedHelpers.findClass(
+                "com.miui.powerkeeper.provider.SimpleSettings.Misc", classLoader);
+        XposedUtils.findAndHookMethod(misc, "getBoolean", 3, new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                if (param.args.length > 1 && "gms_control".equals(param.args[1])) {
+                    printLog("Disabled PowerKeeper GMS limitation", true);
+                    param.setResult(false);
                 }
-            });
+            }
+        });
+    }
 
-            Class<?> MilletPolicy = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletPolicy", classLoader);
+    private void hookMilletPolicy() {
+        Class<?> milletPolicy = XposedHelpers.findClass(
+                "com.miui.powerkeeper.millet.MilletPolicy", classLoader);
+        XposedHelpers.findAndHookConstructor(milletPolicy, Context.class, new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                removeFromList(param.thisObject, "mSystemBlackList", GMS_PACKAGE);
+                removeFromList(param.thisObject, "whiteApps", GMS_PACKAGE);
+                removeFromList(param.thisObject, "whiteApps", "com.google.android.ext.services");
+                addToList(param.thisObject, "mDataWhiteList", GMS_PACKAGE);
+            }
+        });
+    }
 
-            XC_MethodHook methodHook = new XC_MethodHook() {
-                protected void beforeHookedMethod(XC_MethodHook.MethodHookParam methodHookParam) throws Throwable {
-                    Field[] declaredFields = null;
-                    super.afterHookedMethod(methodHookParam);
-                    boolean mSystemBlackList = false;
-                    boolean whiteApps = false;
-                    boolean mDataWhiteList = false;
+    private static void removeFromList(Object owner, String fieldName, String value) {
+        try {
+            Object field = XposedHelpers.getObjectField(owner, fieldName);
+            if (field instanceof List<?>) {
+                ((List<?>) field).remove(value);
+            }
+        } catch (Throwable e) {
+            printLog("PowerkeeperFix field unavailable: " + fieldName + ": " + e.getMessage());
+        }
+    }
 
-                    for (Field field : MilletPolicy.getDeclaredFields()) {
-                        if (field.getName().equals("mSystemBlackList")) {
-                            mSystemBlackList = true;
-                        } else if (field.getName().equals("whiteApps")) {
-                            whiteApps = true;
-                        } else if (field.getName().equals("mDataWhiteList")) {
-                            mDataWhiteList = true;
-                        }
-                    }
-
-                    if (mSystemBlackList) {
-                        List blackList = (List) XposedHelpers.getObjectField(methodHookParam.thisObject, "mSystemBlackList");
-                        blackList.remove("com.google.android.gms");
-                        XposedHelpers.setObjectField(methodHookParam.thisObject, "mSystemBlackList", blackList);
-                        printLog("Success: MilletPolicy mSystemBlackList.");
-                    } else {
-                        printLog("Error: MilletPolicy. Field not found: com.miui.powerkeeper.millet.MilletPolicy.mSystemBlackList");
-                    }
-                    if (whiteApps) {
-                        List whiteAppList = (List) XposedHelpers.getObjectField(methodHookParam.thisObject, "whiteApps");
-                        whiteAppList.remove("com.google.android.gms");
-                        whiteAppList.remove("com.google.android.ext.services");
-                        XposedHelpers.setObjectField(methodHookParam.thisObject, "whiteApps", whiteAppList);
-                        printLog("Success: MilletPolicy whiteApps.");
-                    } else {
-                        printLog("Error: MilletPolicy. Field not found: com.miui.powerkeeper.millet.MilletPolicy.whiteApps");
-                    }
-                    if (mDataWhiteList) {
-                        List dataWhiteList = (List) XposedHelpers.getObjectField(methodHookParam.thisObject, "mDataWhiteList");
-                        dataWhiteList.add("com.google.android.gms");
-
-                        XposedHelpers.setObjectField(methodHookParam.thisObject, "mDataWhiteList", dataWhiteList);
-                        printLog("Success: MilletPolicy mDataWhiteList.");
-                    }
+    @SuppressWarnings("unchecked")
+    private static void addToList(Object owner, String fieldName, String value) {
+        try {
+            Object field = XposedHelpers.getObjectField(owner, fieldName);
+            if (field instanceof List<?>) {
+                List<Object> list = (List<Object>) field;
+                if (!list.contains(value)) {
+                    list.add(value);
                 }
-            };
-            printLog("[fcmfix] start hook com.miui.powerkeeper.millet.MilletPolicy constructor");
-            XposedHelpers.findAndHookConstructor(MilletPolicy, new Object[]{Context.class, methodHook});
-
-        } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError e) {
-            printLog("No Such Method com.android.server.am.ProcessMemoryCleaner.checkBackgroundAppException");
+            }
+        } catch (Throwable e) {
+            printLog("PowerkeeperFix field unavailable: " + fieldName + ": " + e.getMessage());
         }
     }
 }

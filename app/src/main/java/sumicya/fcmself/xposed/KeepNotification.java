@@ -14,6 +14,11 @@ public class KeepNotification extends XposedModule {
     private static volatile boolean sDisableAutoClean = false;
     private static volatile boolean sConfigCached = false;
 
+    /** Called after remote preferences are refreshed. */
+    public static void onConfigUpdated() {
+        sConfigCached = false;
+    }
+
     public KeepNotification(ClassLoader classLoader) {
         super(classLoader);
         try {
@@ -85,14 +90,19 @@ public class KeepNotification extends XposedModule {
                         sDisableAutoClean = getBooleanConfig("disableAutoCleanNotification", false);
                         sConfigCached = true;
                     }
-                    if (sDisableAutoClean && targetIsAllow((String) param.args[finalPkg_args_index])) {
-                        int reason = (int) param.args[finalReason_args_index];
-                        if (reason == NotificationListenerService.REASON_PACKAGE_CHANGED) {
-                            param.setResult(null);
-                        }
-                        if (reason == 10020 || reason == 10021) { // cos15/oos15
-                            param.setResult(null);
-                        }
+                    if (!sDisableAutoClean
+                            || finalPkg_args_index >= param.args.length
+                            || finalReason_args_index >= param.args.length
+                            || !(param.args[finalPkg_args_index] instanceof String)
+                            || !(param.args[finalReason_args_index] instanceof Integer)) {
+                        return;
+                    }
+                    String packageName = (String) param.args[finalPkg_args_index];
+                    int reason = (Integer) param.args[finalReason_args_index];
+                    if (targetIsAllow(packageName)
+                            && (reason == NotificationListenerService.REASON_PACKAGE_CHANGED
+                            || reason == 10020 || reason == 10021)) { // cos15/oos15
+                        param.setResult(null);
                     }
                 }
             });
