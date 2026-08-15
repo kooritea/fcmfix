@@ -55,9 +55,11 @@ import java.lang.ref.WeakReference;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -135,6 +137,8 @@ public class MainActivity extends AppCompatActivity {
     // TODO(experimental): 进程存活期间新装的 App 不会自动出现在列表（需下次冷启动）。
     //   可考虑加下拉刷新 / 显式刷新入口，或监听 ACTION_PACKAGE_ADDED 后失效此缓存。
     private static List<AppInfo> sCachedAppList;
+    /** Coalesces rotations/recreations while the first package scan is still running. */
+    private static boolean sAppListLoadInProgress;
 
     private final Set<String> allowList = new HashSet<>();
     /** True once the allowList has been read from the remote config at least once. */
@@ -448,7 +452,7 @@ public class MainActivity extends AppCompatActivity {
         if (appListAdapter == null) {
             return;
         }
-        List<AppInfo> filtered = new ArrayList<>();
+        List<AppInfo> filtered = new ArrayList<>(fullAppList.size());
         for (AppInfo info : fullAppList) {
             switch (filterMode) {
                 case FCM_ONLY:
@@ -586,6 +590,8 @@ public class MainActivity extends AppCompatActivity {
     private static class AppInfo {
         final String name;
         final String packageName;
+        /** Precomputed once instead of hashing the package on every RecyclerView ID lookup. */
+        final long stableId;
         /** Lazily loaded; null until first bind requests it. */
         volatile Drawable icon;
         boolean isAllow;
@@ -595,14 +601,28 @@ public class MainActivity extends AppCompatActivity {
         AppInfo(String name, String packageName, Drawable icon, boolean includeFcm, boolean isAllow) {
             this.name = name;
             this.packageName = packageName;
+            this.stableId = stableIdForPackage(packageName);
             this.icon = icon;
             this.includeFcm = includeFcm;
             this.isAllow = isAllow;
+        }
+
+        private static long stableIdForPackage(String packageName) {
+            long hash = 0xcbf29ce484222325L;
+            for (int i = 0; i < packageName.length(); i++) {
+                hash ^= packageName.charAt(i);
+                hash *= 0x100000001b3L;
+            }
+            return hash;
         }
     }
 
     private class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.ViewHolder> {
         private final List<AppInfo> mAppList = new ArrayList<>();
+        /** Current filtered-list index by package; makes asynchronous icon completion O(1). */
+        private final Map<String, Integer> mPositions = new HashMap<>();
+        /** Last status actually submitted to RecyclerView, independent of mutable AppInfo objects. */
+        private final Map<String, Integer> mRenderedStatus = new HashMap<>();
 
         class ViewHolder extends RecyclerView.ViewHolder {
             final View appView;
@@ -626,12 +646,36 @@ public class MainActivity extends AppCompatActivity {
         }
 
         void replaceList(List<AppInfo> list) {
-            // DiffUtil animates add/remove/move so toggling (especially in a filtered view) eases
-            // items in/out instead of them vanishing abruptly or the whole grid flashing.
+            // Most refreshes only update allow-state while retaining the same filtered packages.
+            // Skip DiffUtil's O(n) comparison in that common path and issue status-only payloads.
+            if (hasSameItemOrder(list)) {
+                for (int i = 0; i < list.size(); i++) {
+                    AppInfo previous = mAppList.get(i);
+                    AppInfo current = list.get(i);
+                    int oldStatus = mRenderedStatus.getOrDefault(
+                            previous.packageName, statusState(previous));
+                    int newStatus = statusState(current);
+                    mAppList.set(i, current);
+                    mRenderedStatus.put(current.packageName, newStatus);
+                    if (!previous.name.equals(current.name)
+                            || previous.includeFcm != current.includeFcm) {
+                        notifyItemChanged(i);
+                    } else if (oldStatus != newStatus) {
+                        notifyItemChanged(i, PAYLOAD_STATUS);
+                    }
+                }
+                return;
+            }
+
+            // AppInfo is intentionally mutable. Snapshot the old list and rendered statuses before
+            // replacing it, otherwise DiffUtil can compare an already-mutated object with itself
+            // and miss an undo/config status change.
+            final List<AppInfo> oldList = new ArrayList<>(mAppList);
+            final Map<String, Integer> oldStatuses = new HashMap<>(mRenderedStatus);
             DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
                 @Override
                 public int getOldListSize() {
-                    return mAppList.size();
+                    return oldList.size();
                 }
 
                 @Override
@@ -641,33 +685,76 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                    return mAppList.get(oldItemPosition).packageName
+                    return oldList.get(oldItemPosition).packageName
                             .equals(list.get(newItemPosition).packageName);
                 }
 
                 @Override
                 public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                    AppInfo a = mAppList.get(oldItemPosition);
-                    AppInfo b = list.get(newItemPosition);
-                    return a.isAllow == b.isAllow && a.includeFcm == b.includeFcm;
+                    AppInfo oldItem = oldList.get(oldItemPosition);
+                    AppInfo newItem = list.get(newItemPosition);
+                    return oldItem.name.equals(newItem.name)
+                            && oldItem.includeFcm == newItem.includeFcm
+                            && oldStatuses.getOrDefault(
+                                    oldItem.packageName, statusState(oldItem))
+                            == statusState(newItem);
+                }
+
+                @Override
+                public Object getChangePayload(int oldItemPosition, int newItemPosition) {
+                    AppInfo oldItem = oldList.get(oldItemPosition);
+                    AppInfo newItem = list.get(newItemPosition);
+                    if (oldItem.name.equals(newItem.name)
+                            && oldItem.includeFcm == newItem.includeFcm) {
+                        return PAYLOAD_STATUS;
+                    }
+                    return null;
                 }
             }, true);
             mAppList.clear();
             mAppList.addAll(list);
+            rebuildSubmittedState();
             result.dispatchUpdatesTo(this);
+        }
+
+        private boolean hasSameItemOrder(List<AppInfo> list) {
+            if (mAppList.size() != list.size()) {
+                return false;
+            }
+            for (int i = 0; i < list.size(); i++) {
+                if (!mAppList.get(i).packageName.equals(list.get(i).packageName)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private int statusState(AppInfo appInfo) {
+            if (!appInfo.includeFcm || (!appInfo.isAllow && !allowListLoaded)) {
+                return 0;
+            }
+            return appInfo.isAllow ? 1 : -1;
+        }
+
+        private void rebuildSubmittedState() {
+            mPositions.clear();
+            mRenderedStatus.clear();
+            for (int i = 0; i < mAppList.size(); i++) {
+                AppInfo item = mAppList.get(i);
+                mPositions.put(item.packageName, i);
+                mRenderedStatus.put(item.packageName, statusState(item));
+            }
+        }
+
+        private void notifyStatusChanged(int position) {
+            AppInfo item = mAppList.get(position);
+            mRenderedStatus.put(item.packageName, statusState(item));
+            notifyItemChanged(position, PAYLOAD_STATUS);
         }
 
         @Override
         public long getItemId(int position) {
-            // RecyclerView stable IDs are 64-bit; String.hashCode() needlessly limits package IDs
-            // to 32 bits and can make colliding package names reuse the wrong view state.
-            String packageName = mAppList.get(position).packageName;
-            long hash = 0xcbf29ce484222325L;
-            for (int i = 0; i < packageName.length(); i++) {
-                hash ^= packageName.charAt(i);
-                hash *= 0x100000001b3L;
-            }
-            return hash;
+            return mAppList.get(position).stableId;
         }
 
         @NonNull
@@ -692,7 +779,7 @@ public class MainActivity extends AppCompatActivity {
                 if (filterMode == FilterMode.ENABLED && !appInfo.isAllow) {
                     applyFilter();
                 } else {
-                    notifyItemChanged(position, PAYLOAD_STATUS);
+                    notifyStatusChanged(position);
                 }
                 updateStats();
                 showToggleFeedback(appInfo);
@@ -745,25 +832,29 @@ public class MainActivity extends AppCompatActivity {
             }
             appInfo.iconLoading = true;
             final String pkg = appInfo.packageName;
+            final PackageManager packageManager = getApplicationContext().getPackageManager();
+            final Drawable fallbackIcon = defaultAppIcon;
+            final WeakReference<AppListAdapter> adapterRef = new WeakReference<>(this);
             ICON_EXEC.execute(() -> {
-                Drawable d;
+                Drawable loadedIcon;
                 try {
-                    d = getPackageManager().getApplicationIcon(pkg);
+                    loadedIcon = packageManager.getApplicationIcon(pkg);
                 } catch (Throwable t) {
-                    d = defaultAppIcon;
+                    loadedIcon = fallbackIcon;
                 }
-                appInfo.icon = d;
+                appInfo.icon = loadedIcon;
                 appInfo.iconLoading = false;
                 MAIN_HANDLER.post(() -> {
-                    if (isFinishing() || isDestroyed()) {
+                    AppListAdapter adapter = adapterRef.get();
+                    if (adapter == null) {
                         return;
                     }
-                    // Find current index (list may have been filtered)
-                    for (int i = 0, n = mAppList.size(); i < n; i++) {
-                        if (pkg.equals(mAppList.get(i).packageName)) {
-                            notifyItemChanged(i, PAYLOAD_ICON);
-                            break;
-                        }
+                    Integer position = adapter.mPositions.get(pkg);
+                    if (position != null
+                            && position >= 0
+                            && position < adapter.mAppList.size()
+                            && pkg.equals(adapter.mAppList.get(position).packageName)) {
+                        adapter.notifyItemChanged(position, PAYLOAD_ICON);
                     }
                 });
             });
@@ -828,11 +919,11 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private List<AppInfo> buildAppList(Set<String> allowListSet) {
+    private static List<AppInfo> buildAppList(
+            PackageManager pm, Set<String> allowListSet) {
         List<AppInfo> allow = new ArrayList<>();
         List<AppInfo> notAllow = new ArrayList<>();
         List<AppInfo> noFcm = new ArrayList<>();
-        PackageManager pm = getPackageManager();
 
         List<PackageInfo> packages;
         try {
@@ -893,25 +984,50 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadAppListAsync() {
         // Reuse a completed scan when this process already built it (e.g. rotation/recreation),
-        // so we skip the expensive getInstalledPackages + label + FCM-matching pass.
+        // so we skip the expensive getInstalledPackages + label + FCM-matching pass. If a scan is
+        // already running, its completion is delivered to the latest live Activity via
+        // activeInstance; rotations therefore do not queue duplicate package-manager work.
         final List<AppInfo> cached;
         synchronized (APPS_CACHE_LOCK) {
             cached = sCachedAppList;
+            if (cached == null) {
+                if (sAppListLoadInProgress) {
+                    return;
+                }
+                sAppListLoadInProgress = true;
+            }
         }
         if (cached != null) {
             applyAppList(structuralCopy(cached), false);
             return;
         }
-        // Snapshot on the main thread — HashSet is not safe to read while another thread mutates it.
+
+        // Snapshot state and the application-scoped PackageManager before leaving the main thread.
+        // The worker no longer retains a destroyed Activity during a potentially slow package scan.
         final Set<String> allowSnapshot = new HashSet<>(allowList);
+        final PackageManager packageManager = getApplicationContext().getPackageManager();
         BG.execute(() -> {
-            List<AppInfo> list = buildAppList(allowSnapshot);
+            List<AppInfo> scanned;
+            try {
+                scanned = buildAppList(packageManager, allowSnapshot);
+            } catch (Throwable t) {
+                Log.e(TAG, "buildAppList: " + t);
+                scanned = new ArrayList<>();
+            }
+            final List<AppInfo> result;
             synchronized (APPS_CACHE_LOCK) {
                 if (sCachedAppList == null) {
-                    sCachedAppList = structuralCopy(list);
+                    sCachedAppList = structuralCopy(scanned);
                 }
+                result = sCachedAppList;
+                sAppListLoadInProgress = false;
             }
-            MAIN_HANDLER.post(() -> applyAppList(list, true));
+            MAIN_HANDLER.post(() -> {
+                MainActivity activity = activeInstance.get();
+                if (activity != null && !activity.isFinishing() && !activity.isDestroyed()) {
+                    activity.applyAppList(structuralCopy(result), true);
+                }
+            });
         });
     }
 
