@@ -32,6 +32,7 @@ public class BroadcastFix extends XposedModule {
     // Cached reflection for PowerExemptionManager (hot path on Android 12+)
     private static volatile Class<?> sPemClass;
     private static volatile Method sPemAddMethod;
+    private static volatile Object sPemService;
     private static volatile boolean sPemResolved;
 
     /** Single-thread executor for IceBox activation — avoids unbounded threads under FCM storms. */
@@ -59,17 +60,11 @@ public class BroadcastFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error broadcastIntentLocked:" + e.getMessage());
         }
-        // High-level broadcastIntent / broadcastIntentWithFeature fallback (from FcmFuck)
         try {
             this.startHookBroadcastIntentHighLevel();
         } catch (Throwable e) {
             printLog("hook error high-level broadcastIntent:" + e.getMessage());
         }
-//        try {
-//            this.startHookScheduleResultTo();
-//        } catch (Throwable e) {
-//            printLog("hook error com.android.server.am.BroadcastQueueModernImpl.scheduleResultTo:" + e.getMessage());
-//        }
     }
 
     protected void startHookBroadcastIntentLocked() {
@@ -114,7 +109,6 @@ public class BroadcastFix extends XposedModule {
                 if (intent_args_index == 0 || appOp_args_index == 0) {
                     intent_args_index = 0;
                     appOp_args_index = 0;
-                    // 根据参数名称查找，部分经过混淆的系统无效
                     for (int i = 0; i < parameters.length; i++) {
                         if ("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class) {
                             appOp_args_index = i;
@@ -146,7 +140,6 @@ public class BroadcastFix extends XposedModule {
         XposedBridge.hookMethod(method, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam methodHookParam) {
-                // Cheapest guards first — this runs on every system broadcast
                 if (!isBootComplete) {
                     return;
                 }
@@ -155,7 +148,6 @@ public class BroadcastFix extends XposedModule {
                     return;
                 }
                 Intent intent = (Intent) intentArg;
-                // Skip already-flagged intents; only care about FCM
                 final int flags = intent.getFlags();
                 if ((flags & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) != 0) {
                     return;
@@ -174,17 +166,14 @@ public class BroadcastFix extends XposedModule {
                 if (appOpArg instanceof Integer && ((Integer) appOpArg) == -1) {
                     methodHookParam.args[finalAppOp_args_index] = 11;
                 }
-                // Combine flag adds to avoid two separate getFlags/setFlags cycles
                 int newFlags = Intent.FLAG_INCLUDE_STOPPED_PACKAGES;
                 if ((flags & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
                     newFlags |= Intent.FLAG_RECEIVER_FOREGROUND;
                 }
                 intent.addFlags(newFlags);
 
-                // From FcmFuck: temporary power exemption (Android 12+)
                 applyTemporaryAllowList(target);
 
-                // Prefer cached IceBox config flag to avoid HashMap lookup on every FCM
                 if (!sIceBoxConfigCached) {
                     sIncludeIceBox = getBooleanConfig("includeIceBoxDisableApp", false);
                     sIceBoxConfigCached = true;
@@ -192,7 +181,6 @@ public class BroadcastFix extends XposedModule {
                 if (sIncludeIceBox && !IceboxUtils.isAppEnabled(context, target)) {
                     printLog("Waiting for IceBox to activate the app: " + target, true);
                     methodHookParam.setResult(false);
-                    // Dedup + single worker: avoid spawning a thread per FCM under storm
                     if (iceboxInFlight.add(target)) {
                         final Object thisObject = methodHookParam.thisObject;
                         final Object[] args = methodHookParam.args;
@@ -228,19 +216,13 @@ public class BroadcastFix extends XposedModule {
                         });
                     }
                 } else {
-                    // Success path: diagnostics-only (throttled)
                     printLog("Send Forced Start Broadcast: " + target, true);
                 }
-                // cos15 unfreeze
                 OplusProxyFix.unfreeze(target);
             }
         });
     }
 
-    /**
-     * Fallback: hook higher-level broadcastIntent / broadcastIntentWithFeature
-     * (ported from FcmFuck). Some ROMs may skip or alter broadcastIntentLocked.
-     */
     protected void startHookBroadcastIntentHighLevel() {
         String[] classNames = {
                 "com.android.server.am.ActivityManagerService",
@@ -279,6 +261,11 @@ public class BroadcastFix extends XposedModule {
                             return;
                         }
                         Intent intent = (Intent) arg;
+                        final int flags = intent.getFlags();
+                        // broadcastIntentLocked marks handled FCM intents; do not repeat the expensive work here.
+                        if ((flags & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) != 0) {
+                            return;
+                        }
                         if (!isFCMIntent(intent)) {
                             return;
                         }
@@ -288,9 +275,8 @@ public class BroadcastFix extends XposedModule {
                         if (target == null || !targetIsAllow(target)) {
                             return;
                         }
-                        int f = intent.getFlags();
                         int nf = Intent.FLAG_INCLUDE_STOPPED_PACKAGES;
-                        if ((f & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
+                        if ((flags & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
                             nf |= Intent.FLAG_RECEIVER_FOREGROUND;
                         }
                         intent.addFlags(nf);
@@ -302,10 +288,6 @@ public class BroadcastFix extends XposedModule {
         }
     }
 
-    /**
-     * Android 12+ temporary allowlist (from FcmFuck).
-     * Class/Method resolved once and cached — avoids Class.forName + getMethod on every FCM broadcast.
-     */
     private static void applyTemporaryAllowList(String packageName) {
         if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
             return;
@@ -319,22 +301,20 @@ public class BroadcastFix extends XposedModule {
                             sPemAddMethod = sPemClass.getMethod(
                                     "addToTemporaryAllowList",
                                     String.class, int.class, String.class, long.class);
+                            sPemService = context.getSystemService(sPemClass);
                         } catch (Throwable ignored) {
                             sPemClass = null;
                             sPemAddMethod = null;
+                            sPemService = null;
                         }
                         sPemResolved = true;
                     }
                 }
             }
-            if (sPemClass == null || sPemAddMethod == null) {
+            if (sPemAddMethod == null || sPemService == null) {
                 return;
             }
-            Object pem = context.getSystemService(sPemClass);
-            if (pem == null) {
-                return;
-            }
-            sPemAddMethod.invoke(pem, packageName, 102, "GOOGLE_C2DM", 2000L);
+            sPemAddMethod.invoke(sPemService, packageName, 102, "GOOGLE_C2DM", 2000L);
         } catch (Throwable t) {
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
         }

@@ -35,7 +35,7 @@ public abstract class XposedModule {
     private static String selfPackageName = "UNKNOWN";
 
     protected final ClassLoader classLoader;
-    public static Set<String> allowList = null;
+    public static volatile Set<String> allowList = null;
     static final String TAG = "fcmself";
     private static final HashMap<String, Object> config = new HashMap<>();
 
