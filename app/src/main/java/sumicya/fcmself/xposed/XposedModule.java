@@ -51,6 +51,8 @@ public abstract class XposedModule {
 
     /** Fast-path flag: config has been loaded at least once. Avoids work on every broadcast. */
     private static final AtomicBoolean configReady = new AtomicBoolean(false);
+    /** True once callAllOnCanReadConfig() has run; dedupes the multiple context paths. */
+    private static final AtomicBoolean configInitiated = new AtomicBoolean(false);
 
     /**
      * Monotonic notification ID shared by every fix. System.currentTimeMillis() overflows int in
@@ -77,9 +79,12 @@ public abstract class XposedModule {
         }
         if (first) {
             initContext(classLoader);
-        } else if (context != null && context.getSystemService(UserManager.class).isUserUnlocked()) {
+        } else if (context != null) {
             try {
-                onCanReadConfig();
+                UserManager um = context.getSystemService(UserManager.class);
+                if (um != null && um.isUserUnlocked()) {
+                    onCanReadConfig();
+                }
             } catch (Throwable e) {
                 printLog(e.getMessage());
             }
@@ -91,24 +96,105 @@ public abstract class XposedModule {
     }
 
     private static void initContext(final ClassLoader classLoader) {
-        XposedHelpers.findAndHookMethod("android.content.ContextWrapper", classLoader, "attachBaseContext", Context.class, new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam methodHookParam) {
-                if (context == null) {
-                    context = (Context) methodHookParam.thisObject;
-                    if (context.getSystemService(UserManager.class).isUserUnlocked()) {
-                        callAllOnCanReadConfig();
-                    } else {
-                        IntentFilter userUnlockIntentFilter = new IntentFilter();
-                        userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
-                        context.registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
-                    }
-                }
+        // Primary source for system_server: the framework boots it by calling ActivityThread.attach(true)
+        // inside SystemServer.createSystemContext(); getSystemContext() then returns the real system
+        // Context, which works for PackageManager, system services and broadcasts. Capturing this is far
+        // more reliable than waiting for an arbitrary ContextWrapper.attachBaseContext, whose firing
+        // inside system_server depends on OEM wiring.
+        try {
+            XposedHelpers.findAndHookMethod("android.app.ActivityThread", classLoader,
+                    "attach", boolean.class, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            if (context != null || !(param.args[0] instanceof Boolean)) {
+                                return;
+                            }
+                            // Only system_server boots with system=true. Normal app processes (GMS,
+                            // PowerKeeper) keep the attachBaseContext source below so they get their own
+                            // application context rather than the framework system context.
+                            if (!((Boolean) param.args[0])) {
+                                return;
+                            }
+                            try {
+                                Object sysCtx = XposedHelpers.callMethod(param.thisObject, "getSystemContext");
+                                if (sysCtx instanceof Context) {
+                                    context = (Context) sysCtx;
+                                    onContextAvailable();
+                                }
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                    });
+        } catch (Throwable ignored) {
+            // ActivityThread.attach may be unavailable on a build; the fallback below still applies.
+        }
+
+        // Source for normal app processes and fallback for system_server: the process/application
+        // context surfaces through ContextWrapper.attachBaseContext.
+        try {
+            XposedHelpers.findAndHookMethod("android.content.ContextWrapper", classLoader,
+                    "attachBaseContext", Context.class, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam methodHookParam) {
+                            if (context == null && methodHookParam.thisObject instanceof Context) {
+                                context = (Context) methodHookParam.thisObject;
+                                onContextAvailable();
+                            }
+                        }
+                    });
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void onContextAvailable() {
+        if (tryLoadConfigNow()) {
+            return;
+        }
+        // Device not yet unlocked, or the user service isn't up yet (captured very early in
+        // system_server boot). Wait for the unlock broadcast; system_server's system user never emits
+        // it, so also schedule a bounded retry.
+        try {
+            IntentFilter userUnlockIntentFilter = new IntentFilter();
+            userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
+            context.registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
+        } catch (Throwable ignored) {
+        }
+        scheduleConfigRetry();
+    }
+
+    private static boolean tryLoadConfigNow() {
+        try {
+            UserManager um = context.getSystemService(UserManager.class);
+            if (um != null && um.isUserUnlocked()) {
+                callAllOnCanReadConfig();
+                return true;
             }
-        });
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    /** Bounded retry so system_server loads config even if the context was captured too early. */
+    private static void scheduleConfigRetry() {
+        new Thread(() -> {
+            try {
+                Thread.sleep(5_000);
+                if (context != null && tryLoadConfigNow()) {
+                    return;
+                }
+                Thread.sleep(10_000);
+                if (context != null) {
+                    tryLoadConfigNow();
+                }
+            } catch (Throwable ignored) {
+            }
+        }, "fcmself-context").start();
     }
 
     private static void callAllOnCanReadConfig() {
+        if (!configInitiated.compareAndSet(false, true)) {
+            return;
+        }
         initReceiver();
         // Load eagerly after credential-encrypted storage becomes available. The old lazy-only
         // path dropped the first FCM delivery after every boot because targetIsAllow() returned
