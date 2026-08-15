@@ -1,11 +1,9 @@
 <resources>
     <string name="app_name">fcmself</string>
     <string name="all_apps_title">全部</string>
-    <string name="fcm_title">FCM</string>
-    <string name="all_apps_count">%1$d 个应用</string>
-    <string name="all_apps_count_initial">0 个应用</string>
-    <string name="fcm_enabled_count">%1$d / %2$d 已启用</string>
-    <string name="fcm_enabled_count_initial">0 / 0 已启用</string>
+    <string name="fcm_filter_title">FCM</string>
+    <string name="enabled_filter_title">已启用</string>
+    <string name="compact_count">%1$d</string>
     <string name="app_status_enabled_desc">%1$s，已允许唤醒，点按以停用</string>
     <string name="app_status_disabled_desc">%1$s，检测到 FCM，点按以启用唤醒</string>
     <string name="app_status_pending_desc">%1$s，检测到 FCM，配置尚未就绪</string>

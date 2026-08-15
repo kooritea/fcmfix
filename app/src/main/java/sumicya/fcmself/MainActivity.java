@@ -143,6 +143,7 @@ public class MainActivity extends AppCompatActivity {
             };
     private FloatingActionButton mainFab;
     private TextView allStatsView;
+    private TextView fcmStatsView;
     private TextView statsView;
     private View headerSafe;
     private RecyclerView recyclerView;
@@ -437,9 +438,12 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         if (allStatsView != null) {
-            allStatsView.setText(getString(R.string.all_apps_count, fullAppList.size()));
+            allStatsView.setText(getString(R.string.compact_count, fullAppList.size()));
         }
-        statsView.setText(getString(R.string.fcm_enabled_count, enabled, totalFcm));
+        if (fcmStatsView != null) {
+            fcmStatsView.setText(getString(R.string.compact_count, totalFcm));
+        }
+        statsView.setText(getString(R.string.compact_count, enabled));
     }
 
     private Snackbar createExpressiveSnackbar(
@@ -592,12 +596,13 @@ public class MainActivity extends AppCompatActivity {
         int horizontalMargin = Math.round(12 * getResources().getDisplayMetrics().density);
         int maxWidth = getResources().getDisplayMetrics().widthPixels - horizontalMargin * 2;
         int popupWidth = Math.min(
-                Math.round(336 * getResources().getDisplayMetrics().density), maxWidth);
+                Math.round(316 * getResources().getDisplayMetrics().density), maxWidth);
         PopupWindow popup = new PopupWindow(
                 content, popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
         popup.setElevation(12 * getResources().getDisplayMetrics().density);
+        popup.setAnimationStyle(R.style.Animation_Fcmself_FabMenu);
         popup.setClippingEnabled(true);
 
         addToggleFabMenuItem(
@@ -612,11 +617,13 @@ public class MainActivity extends AppCompatActivity {
                 items,
                 R.string.fab_menu_no_response,
                 "noResponseNotification");
-        addActionFabMenuItem(items, R.string.fab_menu_select_all_fcm, "✓", v -> {
+        addActionFabMenuItem(
+                items, R.string.fab_menu_select_all_fcm, R.drawable.ic_status_check, v -> {
             enableAllFcmApps();
             popup.dismiss();
         });
-        addActionFabMenuItem(items, R.string.fab_menu_diagnostics, "↗", v -> {
+        addActionFabMenuItem(
+                items, R.string.fab_menu_diagnostics, R.drawable.ic_open_external, v -> {
             popup.dismiss();
             openFcmDiagnostics();
         });
@@ -649,7 +656,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void bindToggleFabMenuState(View row, boolean checked) {
         MaterialCardView stateContainer = row.findViewById(R.id.menu_state_container);
-        TextView symbol = row.findViewById(R.id.menu_symbol);
+        ImageView symbol = row.findViewById(R.id.menu_symbol);
         int container = resolveThemeColor(
                 checked
                         ? com.google.android.material.R.attr.colorPrimaryContainer
@@ -661,8 +668,10 @@ public class MainActivity extends AppCompatActivity {
                         : com.google.android.material.R.attr.colorOnSurfaceVariant,
                 checked ? fabConnectedContent : colorOnSurfaceVariant);
         stateContainer.setCardBackgroundColor(container);
-        symbol.setText(checked ? "✓" : "—");
-        symbol.setTextColor(content);
+        symbol.setImageResource(checked
+                ? R.drawable.ic_status_check
+                : R.drawable.ic_status_close);
+        symbol.setImageTintList(ColorStateList.valueOf(content));
         TextView label = row.findViewById(R.id.menu_label);
         row.setContentDescription(label.getText() + "，" + (checked ? "已开启" : "已关闭"));
     }
@@ -679,17 +688,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void addActionFabMenuItem(
-            LinearLayout parent, int labelRes, String symbolText, View.OnClickListener listener) {
+            LinearLayout parent, int labelRes, int iconRes, View.OnClickListener listener) {
         View row = inflateFabMenuItem(parent, labelRes);
         MaterialCardView stateContainer = row.findViewById(R.id.menu_state_container);
-        TextView symbol = row.findViewById(R.id.menu_symbol);
+        ImageView symbol = row.findViewById(R.id.menu_symbol);
         stateContainer.setCardBackgroundColor(resolveThemeColor(
                 com.google.android.material.R.attr.colorSecondaryContainer,
                 fabConnectedContainer));
-        symbol.setText(symbolText);
-        symbol.setTextColor(resolveThemeColor(
+        symbol.setImageResource(iconRes);
+        symbol.setImageTintList(ColorStateList.valueOf(resolveThemeColor(
                 com.google.android.material.R.attr.colorOnSecondaryContainer,
-                fabConnectedContent));
+                fabConnectedContent)));
         row.setContentDescription(((TextView) row.findViewById(R.id.menu_label)).getText());
         row.setOnClickListener(listener);
     }
@@ -1118,18 +1127,6 @@ public class MainActivity extends AppCompatActivity {
         return packages;
     }
 
-    private static boolean requestsFcmPermission(String[] permissions) {
-        if (permissions == null) {
-            return false;
-        }
-        for (String permission : permissions) {
-            if ("com.google.android.c2dm.permission.RECEIVE".equals(permission)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static boolean hasFcmComponent(ActivityInfo[] components) {
         if (components == null) {
             return false;
@@ -1166,7 +1163,6 @@ public class MainActivity extends AppCompatActivity {
             packages = pm.getInstalledPackages(
                     PackageManager.GET_RECEIVERS
                             | PackageManager.GET_SERVICES
-                            | PackageManager.GET_PERMISSIONS
                             | PackageManager.MATCH_DISABLED_COMPONENTS);
         } catch (Throwable t) {
             Log.e(TAG, "getInstalledPackages: " + t);
@@ -1177,11 +1173,10 @@ public class MainActivity extends AppCompatActivity {
             if (packageInfo.applicationInfo == null) {
                 continue;
             }
-            // Combine three signals: manifest action filters, the standard C2DM permission, and
-            // component-name heuristics. This catches custom/obfuscated PushService names while
-            // retaining compatibility with unusual legacy integrations.
+            // Require observable messaging wiring: a matching manifest action or an identifiable
+            // receiver/service class. Merely requesting the broad C2DM permission is not enough;
+            // libraries can leave that permission behind in apps that do not actually use FCM.
             boolean hasFcm = packagesResolvedForFcm.contains(packageInfo.packageName)
-                    || requestsFcmPermission(packageInfo.requestedPermissions)
                     || hasFcmComponent(packageInfo.receivers)
                     || hasFcmComponent(packageInfo.services);
 
@@ -1453,6 +1448,7 @@ public class MainActivity extends AppCompatActivity {
 
         headerSafe = findViewById(R.id.header_safe);
         allStatsView = findViewById(R.id.all_stats);
+        fcmStatsView = findViewById(R.id.fcm_stats);
         statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
         filterChips = findViewById(R.id.filter_chips);
