@@ -1,6 +1,5 @@
 package sumicya.fcmself;
 
-import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -27,7 +26,6 @@ import android.util.LruCache;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -205,8 +203,6 @@ public class MainActivity extends AppCompatActivity {
     private String healthNonce;
     private AlertDialog healthDialog;
     private final Map<String, HealthResponse> healthResponses = new HashMap<>();
-    private float fabTouchDownY;
-    private boolean fabSwipeTriggered;
 
     private static final class HealthResponse {
         final boolean bootComplete;
@@ -307,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
         appendHealthProcess(status, "android", "system_server（核心）");
         appendHealthProcess(status, "com.miui.powerkeeper", "PowerKeeper（可选）");
         appendHealthProcess(status, "com.google.android.gms", "GMS 重连（可选）");
-        status.append("\n上滑 FAB 可重新查询。模块已加载不等同于所有 OEM 私有方法都存在。");
+        status.append("\n再次打开菜单中的 Hook 健康状态可重新查询。模块已加载不等同于所有 OEM 私有方法都存在。");
         healthDialog.setMessage(status.toString());
     }
 
@@ -323,35 +319,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         status.append('\n');
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private void setupFabGestures() {
-        float threshold = 48 * getResources().getDisplayMetrics().density;
-        mainFab.setOnTouchListener((view, event) -> {
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    fabTouchDownY = event.getRawY();
-                    fabSwipeTriggered = false;
-                    return true;
-                case MotionEvent.ACTION_MOVE:
-                    if (!fabSwipeTriggered && fabTouchDownY - event.getRawY() >= threshold) {
-                        fabSwipeTriggered = true;
-                        showHookHealthPanel();
-                    }
-                    return true;
-                case MotionEvent.ACTION_UP:
-                    if (!fabSwipeTriggered) {
-                        view.performClick();
-                    }
-                    return true;
-                case MotionEvent.ACTION_CANCEL:
-                    fabSwipeTriggered = false;
-                    return true;
-                default:
-                    return true;
-            }
-        });
     }
 
     private SharedPreferences getRemotePreferencesOrNull() {
@@ -758,12 +725,12 @@ public class MainActivity extends AppCompatActivity {
             boolean selected = i == selectedIndex;
             int content = selected ? fabConnectedContent : colorOnSurfaceVariant;
             applyPrimarySurface(filterCards[i], selected, colorSurfaceContainerHigh);
-            filterCards[i].setSelected(selected);
             filterLabels[i].setTextColor(content);
             if (counts[i] != null) {
                 counts[i].setTextColor(content);
                 filterCards[i].setContentDescription(
-                        filterLabels[i].getText() + "，" + counts[i].getText());
+                        filterLabels[i].getText() + "，" + counts[i].getText()
+                                + (selected ? "，当前筛选" : ""));
             }
         }
     }
@@ -810,6 +777,11 @@ public class MainActivity extends AppCompatActivity {
             popup.dismiss();
             openFcmDiagnostics();
         });
+        addActionFabMenuItem(
+                items, R.string.fab_menu_hook_health, R.drawable.ic_health, v -> {
+            popup.dismiss();
+            showHookHealthPanel();
+        });
         applyFabMenuEdgeShapes(items);
 
         content.measure(
@@ -825,9 +797,11 @@ public class MainActivity extends AppCompatActivity {
         }
         x = Math.max(horizontalMargin, Math.min(x, maxWidth - popupWidth + horizontalMargin));
         int verticalGap = Math.round(8 * getResources().getDisplayMetrics().density);
-        int y = Math.max(
-                horizontalMargin,
-                location[1] - content.getMeasuredHeight() - verticalGap);
+        int availableHeight = Math.max(
+                1, location[1] - verticalGap - horizontalMargin);
+        int popupHeight = Math.min(content.getMeasuredHeight(), availableHeight);
+        popup.setHeight(popupHeight);
+        int y = Math.max(horizontalMargin, location[1] - popupHeight - verticalGap);
         popup.showAtLocation(mainFab, Gravity.NO_GRAVITY, x, y);
     }
 
@@ -1652,12 +1626,16 @@ public class MainActivity extends AppCompatActivity {
                 com.google.android.material.R.attr.colorPrimaryContainer, fallbackPrimary);
         fabConnectedContent = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnPrimaryContainer, Color.WHITE);
-        translucentPrimaryContainer = ColorUtils.setAlphaComponent(fabConnectedContainer, 184);
+        // Pre-composite a 72% primary layer onto the surface. It keeps the translucent look without
+        // allowing child bounds or recycled content to bleed through the card.
+        translucentPrimaryContainer = ColorUtils.compositeColors(
+                ColorUtils.setAlphaComponent(fabConnectedContainer, 184),
+                colorSurfaceContainerLow);
         colorErrorContainer = resolveThemeColor(
                 com.google.android.material.R.attr.colorErrorContainer, colorError);
         colorOnErrorContainer = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnErrorContainer, Color.WHITE);
-        primaryElevation = 4 * getResources().getDisplayMetrics().density;
+        primaryElevation = 2 * getResources().getDisplayMetrics().density;
         tintError = ColorStateList.valueOf(colorError);
         tintDisconnected = ColorStateList.valueOf(colorOnSurfaceVariant);
         tintOnPrimaryContainer = ColorStateList.valueOf(fabConnectedContent);
@@ -1687,7 +1665,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable ignored) {
         }
         mainFab.setOnClickListener(v -> showFabMenu());
-        setupFabGestures();
         refreshFabStatus();
 
         recyclerView = findViewById(R.id.recycler_view);

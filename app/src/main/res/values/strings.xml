@@ -19,7 +19,8 @@
     <string name="fab_menu_select_all_fcm">启用全部 FCM 应用</string>
     <string name="fab_menu_diagnostics">打开 FCM Diagnostics</string>
     <string name="fab_content_description">功能与状态</string>
-    <string name="fab_status_connected">功能菜单，服务已连接；向上滑动查看 Hook 健康状态</string>
-    <string name="fab_status_error">功能菜单，检测到配置或 FCM 状态异常；向上滑动查看 Hook 健康状态</string>
-    <string name="fab_status_disconnected">功能菜单，服务尚未连接；向上滑动查看 Hook 健康状态</string>
+    <string name="fab_status_connected">功能菜单，服务已连接</string>
+    <string name="fab_status_error">功能菜单，检测到配置或 FCM 状态异常</string>
+    <string name="fab_status_disconnected">功能菜单，服务尚未连接</string>
+    <string name="fab_menu_hook_health">Hook 健康状态</string>
 </resources>
