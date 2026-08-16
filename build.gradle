@@ -1,8 +1,8 @@
 // Top-level build file
 plugins {
     id 'com.android.application' version '9.3.0' apply false
-    id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
-    id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21' apply false
+    id 'org.jetbrains.kotlin.android' version '2.2.20' apply false
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.20' apply false
 }
 
 // ── CI compile-error annotations ───────────────────────────────────────────
@@ -81,8 +81,21 @@ if (System.getenv('CI') != null) {
         }
 
         if (emitted.isEmpty() && result.failure != null) {
-            String message = String.valueOf(result.failure)
-            emit('Build failure', '', '', message.readLines().first())
+            // Include the nested cause chain so the annotation carries the
+            // actual reason, not just the outermost "Build file ..." wrapper.
+            def failureLines = []
+            def walk
+            walk = { Throwable t ->
+                if (t == null || failureLines.size() >= 12) {
+                    return
+                }
+                if (t.message != null) {
+                    failureLines.addAll(t.message.readLines().take(6))
+                }
+                walk(t.cause)
+            }
+            walk(result.failure)
+            emit('Build failure', '', '', failureLines.join(' | '))
         }
         emitted.each { println(it) }
     }
