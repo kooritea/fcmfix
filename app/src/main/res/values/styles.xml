@@ -1,4 +1,8 @@
 <resources>
+    <!--
+        Legacy AppCompat theme; Compose takes over the visual layer but this
+        is still required by the Activity base class and for edge-to-edge setup.
+    -->
     <style name="AppTheme" parent="Theme.Material3Expressive.DynamicColors.DayNight">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
@@ -6,53 +10,9 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
+    <!-- Shape styles (kept for compatibility, no longer used by Compose UI) -->
     <style name="ShapeAppearance.Fcmself.Control" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">16dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.FilterMiddle" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">0dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.AppCard" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">0dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.PopupClip" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">16dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.Search" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">24dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.Feedback" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">22dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.BottomDock" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">16dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.MenuItem" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">0dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.MenuSegment" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">0dp</item>
-    </style>
-
-    <style name="Animation.Fcmself.FabMenu" parent="">
-        <item name="android:windowEnterAnimation">@anim/fab_menu_enter</item>
-        <item name="android:windowExitAnimation">@anim/fab_menu_exit</item>
     </style>
 </resources>

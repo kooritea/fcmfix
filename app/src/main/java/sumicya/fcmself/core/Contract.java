@@ -18,6 +18,7 @@ public final class Contract {
     public static final String UPDATE_CONFIG_ACTION = "sumicya.fcmself.update.config";
     public static final String HEALTH_REQUEST_ACTION = "sumicya.fcmself.health.request";
     public static final String HEALTH_RESPONSE_ACTION = "sumicya.fcmself.health.response";
+    public static final String FCM_EVENT_ACTION = "sumicya.fcmself.fcm.event";
     public static final String LOG_ACTION = "sumicya.fcmself.log";
     public static final String UPDATE_CONFIG_PERMISSION =
             "sumicya.fcmself.permission.UPDATE_CONFIG";
@@ -43,6 +44,12 @@ public final class Contract {
     public static final String EXTRA_CONFIG_READY = "configReady";
     public static final String EXTRA_MODULES = "modules";
     public static final String EXTRA_DETAILS = "details";
+
+    /** FCM event extras */
+    public static final String EXTRA_FCM_PACKAGE = "fcmPackage";
+    public static final String EXTRA_FCM_ACTION = "fcmAction";
+    public static final String EXTRA_FCM_FIX = "fcmFix";
+    public static final String EXTRA_FCM_TIMESTAMP = "fcmTimestamp";
 
     /** Separates hook name and hook state inside one {@link #EXTRA_DETAILS} entry. */
     public static final char DETAIL_SEPARATOR = '\u0000';

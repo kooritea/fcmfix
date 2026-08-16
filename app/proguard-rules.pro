@@ -32,3 +32,16 @@
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
+
+# Jetpack Compose
+-keepclassmembers class * {
+    @androidx.compose.runtime.Composable <methods>;
+}
+-keepclassmembers class * {
+    @androidx.compose.runtime.Stable <fields>;
+}
+-keepclassmembers class * {
+    @androidx.compose.runtime.Immutable <fields>;
+}
+-dontwarn androidx.compose.**
+-keep class androidx.compose.** { *; }
