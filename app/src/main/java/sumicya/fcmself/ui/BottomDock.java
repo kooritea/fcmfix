@@ -62,11 +62,11 @@ public final class BottomDock {
     private final ImageButton searchToggle;
     private final FloatingActionButton fab;
 
-    private final Runnable applySearch = () -> callbacks.onSearchQueryChanged(pendingQuery);
     private ValueAnimator searchWidthAnimator;
     private String pendingQuery = "";
     private boolean searchExpanded;
     private FilterMode filterMode = FilterMode.ALL;
+    private final Runnable applySearch = () -> callbacks.onSearchQueryChanged(pendingQuery);
 
     public BottomDock(Activity activity, AppTheme theme, Callbacks callbacks) {
         this.activity = activity;
