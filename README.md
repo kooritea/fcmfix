@@ -23,5 +23,3 @@ System Server 和其他已启用作用域。灰色状态表示服务或配置尚
 ```bash
 ./gradlew testDebugUnitTest lint assembleRelease
 ```
-
-Release APK 位于 `app/build/outputs/apk/release/`。
