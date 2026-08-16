@@ -10,6 +10,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Process;
+import android.os.SystemClock;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -39,9 +40,14 @@ public class BroadcastFix extends XposedModule {
     private static volatile Method sPemAddMethod;
     private static volatile Object sPemService;
     private static volatile boolean sPemResolved;
+    private static final long TEMP_ALLOWLIST_DURATION_MS = 5_000L;
+    private static final long TEMP_ALLOWLIST_REAPPLY_MS = 2_500L;
+    /** Suppress redundant reflection/binder work during a same-package FCM burst. */
+    private static final ConcurrentHashMap<String, Long> LAST_TEMP_ALLOWLIST =
+            new ConcurrentHashMap<>();
 
-    /** Single-thread executor for IceBox activation — avoids unbounded threads under FCM storms. */
-    private static final ExecutorService ICEBOX_EXEC = Executors.newSingleThreadExecutor(r -> {
+    /** Two bounded workers prevent one 30s IceBox timeout from blocking every other package. */
+    private static final ExecutorService ICEBOX_EXEC = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "fcmself-icebox");
         t.setDaemon(true);
         return t;
@@ -123,7 +129,9 @@ public class BroadcastFix extends XposedModule {
                 : "核心 Hook 未命中";
         reportHookHealth(
                 "BroadcastFix",
-                core + (resultHookInstalled ? "；结果回调已安装" : "；结果回调不适用"));
+                core
+                        + (resultHookInstalled ? "；结果回调已安装" : "；结果回调不适用")
+                        + "；临时豁免 5 秒");
     }
 
     /** @return true when a usable broadcastIntentLocked hook was installed. */
@@ -285,12 +293,19 @@ public class BroadcastFix extends XposedModule {
             try {
                 if (!IceboxUtils.isAppEnabled(context, packageName)) {
                     IceboxUtils.activeApp(context, packageName);
-                    for (int attempt = 0; attempt < 300; attempt++) {
-                        if (IceboxUtils.isAppEnabled(context, packageName)) {
+                    long startedAt = SystemClock.elapsedRealtime();
+                    long deadline = startedAt + 30_000L;
+                    while (!IceboxUtils.isAppEnabled(context, packageName)) {
+                        long now = SystemClock.elapsedRealtime();
+                        if (now >= deadline) {
                             break;
                         }
+                        long elapsed = now - startedAt;
+                        long pollInterval = elapsed < 2_000L
+                                ? 100L
+                                : elapsed < 10_000L ? 250L : 500L;
                         try {
-                            Thread.sleep(100);
+                            Thread.sleep(Math.min(pollInterval, deadline - now));
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                             break;
@@ -418,6 +433,12 @@ public class BroadcastFix extends XposedModule {
         if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
             return;
         }
+        long now = SystemClock.elapsedRealtime();
+        Long previous = LAST_TEMP_ALLOWLIST.get(packageName);
+        if (previous != null && now - previous < TEMP_ALLOWLIST_REAPPLY_MS) {
+            return;
+        }
+        boolean marked = false;
         try {
             if (!sPemResolved) {
                 synchronized (BroadcastFix.class) {
@@ -457,9 +478,14 @@ public class BroadcastFix extends XposedModule {
             // does not exist on single-user devices, silently making the temporary allow list a
             // no-op. Process.myUserHandle().hashCode() is the public-API equivalent of the hidden
             // Context.getUserId() on recent SDKs (the latter fails to compile on compileSdk 37).
+            LAST_TEMP_ALLOWLIST.put(packageName, now);
+            marked = true;
             sPemAddMethod.invoke(service, packageName, Process.myUserHandle().hashCode(),
-                    "GOOGLE_C2DM", 2000L);
+                    "GOOGLE_C2DM", TEMP_ALLOWLIST_DURATION_MS);
         } catch (Throwable t) {
+            if (marked) {
+                LAST_TEMP_ALLOWLIST.remove(packageName, now);
+            }
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
         }
     }
