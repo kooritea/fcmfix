@@ -21,12 +21,15 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.util.LruCache;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -51,6 +54,8 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.snackbar.Snackbar;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 
 import io.github.libxposed.service.XposedService;
 import io.github.libxposed.service.XposedServiceHelper;
@@ -156,9 +161,17 @@ public class MainActivity extends AppCompatActivity {
     private int gridSpanCount = 3;
     private MaterialCardView[] filterCards;
     private TextView[] filterLabels;
+    private TextInputLayout searchContainer;
+    private TextInputEditText searchInput;
     private TextView emptyHint;
     private boolean lastConfigError = false;
     private FilterMode filterMode = FilterMode.ALL;
+    private String searchQuery = "";
+    private String pendingSearchQuery = "";
+    private final Runnable applySearch = () -> {
+        searchQuery = pendingSearchQuery;
+        applyFilter();
+    };
 
     private int colorError;
     private int colorOnSurface;
@@ -681,6 +694,11 @@ public class MainActivity extends AppCompatActivity {
         }
         List<AppInfo> filtered = new ArrayList<>(fullAppList.size());
         for (AppInfo info : fullAppList) {
+            if (!searchQuery.isEmpty()
+                    && !info.searchableName.contains(searchQuery)
+                    && !info.searchablePackage.contains(searchQuery)) {
+                continue;
+            }
             switch (filterMode) {
                 case FCM_ONLY:
                     if (info.includeFcm) {
@@ -703,6 +721,46 @@ public class MainActivity extends AppCompatActivity {
             boolean showEmpty = filtered.isEmpty();
             emptyHint.setVisibility(showEmpty ? View.VISIBLE : View.GONE);
             recyclerView.setVisibility(showEmpty ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    private void setupSearch() {
+        View searchToggle = findViewById(R.id.search_toggle);
+        searchToggle.setOnClickListener(v -> toggleSearch());
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                pendingSearchQuery = s.toString().trim().toLowerCase(Locale.ROOT);
+                MAIN_HANDLER.removeCallbacks(applySearch);
+                MAIN_HANDLER.postDelayed(applySearch, 120L);
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+    }
+
+    private void toggleSearch() {
+        boolean show = searchContainer.getVisibility() != View.VISIBLE;
+        searchContainer.setVisibility(show ? View.VISIBLE : View.GONE);
+        InputMethodManager keyboard =
+                (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (show) {
+            searchInput.requestFocus();
+            if (keyboard != null) {
+                keyboard.showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT);
+            }
+        } else {
+            searchInput.setText("");
+            searchInput.clearFocus();
+            if (keyboard != null) {
+                keyboard.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
+            }
         }
     }
 
@@ -990,6 +1048,8 @@ public class MainActivity extends AppCompatActivity {
     private static class AppInfo {
         final String name;
         final String packageName;
+        final String searchableName;
+        final String searchablePackage;
         /** Precomputed once instead of hashing the package on every RecyclerView ID lookup. */
         final long stableId;
         boolean isAllow;
@@ -999,6 +1059,8 @@ public class MainActivity extends AppCompatActivity {
         AppInfo(String name, String packageName, boolean includeFcm, boolean isAllow) {
             this.name = name;
             this.packageName = packageName;
+            this.searchableName = name.toLowerCase(Locale.ROOT);
+            this.searchablePackage = packageName.toLowerCase(Locale.ROOT);
             this.stableId = stableIdForPackage(packageName);
             this.includeFcm = includeFcm;
             this.isAllow = isAllow;
@@ -1746,8 +1808,11 @@ public class MainActivity extends AppCompatActivity {
                 findViewById(R.id.filter_fcm_label),
                 findViewById(R.id.filter_enabled_label)
         };
+        searchContainer = findViewById(R.id.search_container);
+        searchInput = findViewById(R.id.search_input);
         emptyHint = findViewById(R.id.empty_hint);
         applyHeaderScrim();
+        setupSearch();
         setupFilterTabs();
         setupEdgeToEdgeInsets();
 
@@ -1831,6 +1896,7 @@ public class MainActivity extends AppCompatActivity {
         }
         healthNonce = null;
         healthStatusView = null;
+        MAIN_HANDLER.removeCallbacks(applySearch);
         super.onDestroy();
     }
 
