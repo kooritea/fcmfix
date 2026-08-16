@@ -21,6 +21,7 @@ public class AutoStartFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error AutoStartFix:" + e.getMessage());
         }
+        reportHookHealth("AutoStartFix", "OEM 自启动兼容探测完成");
     }
 
     private static String packageFromIntent(Intent intent) {

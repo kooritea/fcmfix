@@ -10,10 +10,13 @@ public class MiuiLocalNotificationFix extends XposedModule {
 
     public MiuiLocalNotificationFix(ClassLoader classLoader) {
         super(classLoader);
-        this.startHook();
+        boolean installed = this.startHook();
+        reportHookHealth(
+                "MiuiLocalNotificationFix",
+                installed ? "MIUI 本地通知 Hook 已安装" : "当前 ROM 不适用");
     }
 
-    private void startHook() {
+    private boolean startHook() {
         try {
             Class<?> clazz;
             try {
@@ -45,11 +48,13 @@ public class MiuiLocalNotificationFix extends XposedModule {
                         }
                     }
                 });
+                return true;
             } else {
                 printLog("Not found [isAllowLocalNotification/isDeniedLocalNotification] in com.android.server.notification.[NotificationManagerServiceInjector/NotificationManagerServiceImpl]");
             }
         } catch (XposedHelpers.ClassNotFoundError e) {
             printLog("Not found [isAllowLocalNotification/isDeniedLocalNotification] in com.android.server.notification.[NotificationManagerServiceInjector/NotificationManagerServiceImpl]");
         }
+        return false;
     }
 }

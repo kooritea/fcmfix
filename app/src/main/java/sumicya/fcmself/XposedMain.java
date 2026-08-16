@@ -22,6 +22,8 @@ public class XposedMain extends io.github.libxposed.api.XposedModule {
             module.activate();
             XposedBridge.log("[fcmself] loaded " + name);
         } catch (Throwable t) {
+            XposedModule.reportHookHealth(
+                    name, "加载失败：" + t.getClass().getSimpleName());
             XposedBridge.log("[fcmself] failed " + name + ": " + t);
         }
     }

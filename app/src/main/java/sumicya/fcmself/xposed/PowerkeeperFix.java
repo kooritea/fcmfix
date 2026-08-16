@@ -13,18 +13,22 @@ public class PowerkeeperFix extends XposedModule {
 
     public PowerkeeperFix(ClassLoader classLoader) {
         super(classLoader);
-        installSafely("MilletConfig", this::configureMilletGlobalMode);
-        installSafely("SimpleSettings.Misc#getBoolean", this::hookGmsControl);
-        installSafely("MilletPolicy", this::hookMilletPolicy);
+        int installed = 0;
+        if (installSafely("MilletConfig", this::configureMilletGlobalMode)) installed++;
+        if (installSafely("SimpleSettings.Misc#getBoolean", this::hookGmsControl)) installed++;
+        if (installSafely("MilletPolicy", this::hookMilletPolicy)) installed++;
+        reportHookHealth("PowerkeeperFix", "PowerKeeper 兼容项 " + installed + "/3");
     }
 
-    private void installSafely(String name, Runnable installer) {
+    private boolean installSafely(String name, Runnable installer) {
         try {
             installer.run();
+            return true;
         } catch (Throwable e) {
             // PowerKeeper internals vary significantly between MIUI releases. One missing class or
             // field must not prevent the other independent compatibility hooks from loading.
             printLog("PowerkeeperFix " + name + " unavailable: " + e);
+            return false;
         }
     }
 

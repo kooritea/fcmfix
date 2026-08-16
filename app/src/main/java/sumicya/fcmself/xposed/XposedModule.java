@@ -26,7 +26,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -90,6 +92,9 @@ public abstract class XposedModule {
     private static final long DIAG_LOG_MIN_INTERVAL_MS = 200L;
     private static final AtomicLong lastDiagLogElapsed = new AtomicLong(0);
 
+    /** Process-local Hook installation details, queried on demand by the app health panel. */
+    private static final Map<String, String> HEALTH_DETAILS = new ConcurrentHashMap<>();
+
     /** True once callAllOnCanReadConfig() has run; dedupes the multiple context paths. */
     private static final AtomicBoolean configInitiated = new AtomicBoolean(false);
 
@@ -132,6 +137,7 @@ public abstract class XposedModule {
             instances.add(this);
             first = instances.size() == 1;
         }
+        HEALTH_DETAILS.putIfAbsent(getClass().getSimpleName(), "模块已激活");
         if (first) {
             initContext(classLoader);
         } else if (context != null) {
@@ -148,6 +154,12 @@ public abstract class XposedModule {
 
     public static void setSelfPackageName(String packageName) {
         selfPackageName = packageName;
+    }
+
+    public static void reportHookHealth(String module, String status) {
+        if (module != null && status != null) {
+            HEALTH_DETAILS.put(module, status);
+        }
     }
 
     private static void initContext(final ClassLoader classLoader) {
@@ -443,12 +455,14 @@ public abstract class XposedModule {
             // Retained as a public compatibility alias; internal readers use configSnapshot.
             allowList = newAllowList;
 
+            reportHookHealth("Config", "已加载，允许 " + newAllowList.size() + " 个应用");
             if ("android".equals(getSelfPackageName())) {
                 printLog("[Modern Xposed API]onUpdateConfig allowList size: " + newAllowList.size());
             }
             BroadcastFix.onConfigUpdated();
             KeepNotification.onConfigUpdated();
         } catch (Throwable e) {
+            reportHookHealth("Config", "读取失败：" + e.getClass().getSimpleName());
             printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
         }
     }
@@ -485,6 +499,12 @@ public abstract class XposedModule {
         response.putExtra("bootComplete", isBootComplete);
         response.putExtra("configReady", configSnapshot.ready);
         response.putStringArrayListExtra("modules", modules);
+        ArrayList<String> details = new ArrayList<>();
+        for (Map.Entry<String, String> entry : HEALTH_DETAILS.entrySet()) {
+            details.add(entry.getKey() + "\u0000" + entry.getValue());
+        }
+        Collections.sort(details);
+        response.putStringArrayListExtra("details", details);
         try {
             context.sendBroadcast(response);
         } catch (Throwable e) {

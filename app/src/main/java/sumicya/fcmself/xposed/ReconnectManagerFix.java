@@ -55,6 +55,7 @@ public class ReconnectManagerFix extends XposedModule {
         super(classLoader);
         this.addButton();
         this.startHookGcmServiceStart();
+        reportHookHealth("ReconnectManagerFix", "等待 GMS 计时器配置");
     }
 
     @Override
@@ -284,6 +285,7 @@ public class ReconnectManagerFix extends XposedModule {
         });
 
         hooksInstalled = true;
+        reportHookHealth("ReconnectManagerFix", "GMS 心跳/重连 Hook 已安装");
     }
 
     private void updateCachedAlarmTypePath(String path) {

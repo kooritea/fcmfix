@@ -97,22 +97,33 @@ public class BroadcastFix extends XposedModule {
         // so on devices where it installed successfully the high-level broadcastIntent hook would
         // only double-intercept each broadcast (an extra allocation + callback per send). Install it
         // only as a fallback for OEM/older builds that lack the locked hook.
+        int fallbackHookCount = 0;
         if (!lockedInstalled) {
             try {
-                this.startHookBroadcastIntentHighLevel();
+                fallbackHookCount = this.startHookBroadcastIntentHighLevel();
             } catch (Throwable e) {
                 printLog("hook error high-level broadcastIntent:" + e.getMessage());
             }
         }
         // TODO(experimental): 目前策略是「锁定钩子为主，高层钩子仅在锁定钩子装不上时兜底」。
-        //   若想保留双保险（两者都装，以韧性优先于省一次拦截开销），可改为无条件都装并观察。 
+        //   若想保留双保险（两者都装，以韧性优先于省一次拦截开销），可改为无条件都装并观察。
+        boolean resultHookInstalled = false;
         try {
             this.startHookScheduleResultTo();
+            resultHookInstalled = true;
         } catch (Throwable e) {
             // Only modern broadcast queues expose this hook point. Keep the core FCM fix active
             // when an OEM or older Android release does not provide it.
             printLog("hook error scheduleResultTo:" + e.getMessage());
         }
+        String core = lockedInstalled
+                ? "核心 locked Hook"
+                : fallbackHookCount > 0
+                ? "高层 fallback ×" + fallbackHookCount
+                : "核心 Hook 未命中";
+        reportHookHealth(
+                "BroadcastFix",
+                core + (resultHookInstalled ? "；结果回调已安装" : "；结果回调不适用"));
     }
 
     /** @return true when a usable broadcastIntentLocked hook was installed. */
@@ -334,7 +345,8 @@ public class BroadcastFix extends XposedModule {
         return null;
     }
 
-    private void startHookBroadcastIntentHighLevel() {
+    private int startHookBroadcastIntentHighLevel() {
+        int hookCount = 0;
         String[] classNames = {
                 "com.android.server.am.ActivityManagerService",
                 "com.android.server.am.BroadcastController"
@@ -394,9 +406,11 @@ public class BroadcastFix extends XposedModule {
                         applyTemporaryAllowList(target);
                     }
                 });
+                hookCount++;
                 printLog("hooked high-level: " + className + "#" + name);
             }
         }
+        return hookCount;
     }
 
     @SuppressLint("PrivateApi")

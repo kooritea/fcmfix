@@ -209,11 +209,17 @@ public class MainActivity extends AppCompatActivity {
         final boolean bootComplete;
         final boolean configReady;
         final List<String> modules;
+        final List<String> details;
 
-        HealthResponse(boolean bootComplete, boolean configReady, List<String> modules) {
+        HealthResponse(
+                boolean bootComplete,
+                boolean configReady,
+                List<String> modules,
+                List<String> details) {
             this.bootComplete = bootComplete;
             this.configReady = configReady;
             this.modules = modules;
+            this.details = details;
         }
     }
 
@@ -227,11 +233,13 @@ public class MainActivity extends AppCompatActivity {
             }
             String process = intent.getStringExtra("process");
             ArrayList<String> modules = intent.getStringArrayListExtra("modules");
+            ArrayList<String> details = intent.getStringArrayListExtra("details");
             if (process != null) {
                 healthResponses.put(process, new HealthResponse(
                         intent.getBooleanExtra("bootComplete", false),
                         intent.getBooleanExtra("configReady", false),
-                        modules != null ? modules : new ArrayList<>()));
+                        modules != null ? modules : new ArrayList<>(),
+                        details != null ? details : new ArrayList<>()));
                 updateHealthPanel();
             }
         }
@@ -310,7 +318,17 @@ public class MainActivity extends AppCompatActivity {
             status.append("未响应");
         } else {
             status.append(response.bootComplete && response.configReady ? "就绪" : "初始化中");
-            if (!response.modules.isEmpty()) {
+            if (!response.details.isEmpty()) {
+                for (String detail : response.details) {
+                    int separator = detail.indexOf('\u0000');
+                    if (separator > 0) {
+                        status.append("\n  ")
+                                .append(detail, 0, separator)
+                                .append("：")
+                                .append(detail.substring(separator + 1));
+                    }
+                }
+            } else if (!response.modules.isEmpty()) {
                 status.append("\n  ").append(String.join("、", response.modules));
             }
         }

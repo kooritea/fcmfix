@@ -20,39 +20,47 @@ public class OplusProxyFix extends XposedModule {
 
     public OplusProxyFix(ClassLoader classLoader) {
         super(classLoader);
+        int installed = 0;
         // ColorOS internals vary by release. Install every independent hook even if an unrelated
         // class is missing; in particular, absence of the wake-lock proxy must not disable the
         // broadcast bypass.
         try {
             this.startHookOplusProxyWakeLock();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error OplusProxyWakeLock:" + e.getMessage());
         }
         try {
             this.startHookOplusProxyBroadcast();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error OplusProxyBroadcast:" + e.getMessage());
         }
         try {
             this.startHookRegisterGmsRestrictObserver();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error registerGmsRestrictObserver:" + e.getMessage());
         }
         try {
             this.startHookUpdateGmsRestrict();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error updateGmsRestrict:" + e.getMessage());
         }
         try {
             this.startHookIsGoogleRestricInfoOn();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error isGoogleRestricInfoOn:" + e.getMessage());
         }
         try {
             this.startHookIsGmsApp();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error isGmsApp:" + e.getMessage());
         }
+        reportHookHealth("OplusProxyFix", "ColorOS Hook 已安装 " + installed + "/6");
     }
 
     private void startHookOplusProxyBroadcast() throws Exception {
