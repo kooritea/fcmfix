@@ -6,7 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -146,16 +146,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application),
 
     private fun registerFcmEventReceiver() {
         try {
-            val filter = IntentFilter(Contract.FCM_EVENT_ACTION)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                getApplication<Application>().registerReceiver(
-                    fcmEventReceiver,
-                    filter,
-                    Context.RECEIVER_EXPORTED,
-                )
-            } else {
-                getApplication<Application>().registerReceiver(fcmEventReceiver, filter)
-            }
+            // ContextCompat handles the API-33 flag requirement internally and
+            // keeps the receiver exported across the whole supported range.
+            ContextCompat.registerReceiver(
+                getApplication<Application>(),
+                fcmEventReceiver,
+                IntentFilter(Contract.FCM_EVENT_ACTION),
+                ContextCompat.RECEIVER_EXPORTED,
+            )
         } catch (e: Exception) {
             android.util.Log.w("AppViewModel", "注册 FCM 事件接收器失败", e)
         }
