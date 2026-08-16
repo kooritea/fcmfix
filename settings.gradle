@@ -45,6 +45,18 @@ if (System.getenv('CI') != null) {
     } catch (Throwable ignored) {
     }
 
+    // Per-project logging managers capture task console output; the global
+    // router above does not cover everything in every Gradle version. Attach
+    // to every project once evaluation finishes (configuration cache is
+    // disabled, so this runs on every build).
+    gradle.projectsEvaluated {
+        gradle.rootProject.allprojects { p ->
+            def listener = sink as org.gradle.api.logging.StandardOutputListener
+            p.logging.addStandardOutputListener(listener)
+            p.logging.addStandardErrorListener(listener)
+        }
+    }
+
     gradle.buildFinished { result ->
         def emitted = []
         def seen = new HashSet<String>()
