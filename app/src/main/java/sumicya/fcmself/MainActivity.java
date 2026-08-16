@@ -259,11 +259,11 @@ public class MainActivity extends AppCompatActivity {
         }
         try {
             IntentFilter filter = new IntentFilter(HEALTH_RESPONSE_ACTION);
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(healthResponseReceiver, filter, Context.RECEIVER_EXPORTED);
-            } else {
-                registerReceiver(healthResponseReceiver, filter);
-            }
+            ContextCompat.registerReceiver(
+                    this,
+                    healthResponseReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_EXPORTED);
             healthReceiverRegistered = true;
         } catch (Throwable e) {
             Log.w(TAG, "registerHealthResponseReceiver: " + e);
