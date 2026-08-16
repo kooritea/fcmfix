@@ -12,11 +12,14 @@ import sumicya.fcmself.xposed.XposedModule;
 
 import io.github.libxposed.api.XposedModuleInterface;
 
+import java.util.function.Supplier;
+
 public class XposedMain extends io.github.libxposed.api.XposedModule {
 
-    private void safeHook(String name, Runnable hook) {
+    private void safeHook(String name, Supplier<? extends XposedModule> moduleFactory) {
         try {
-            hook.run();
+            XposedModule module = moduleFactory.get();
+            module.activate();
             XposedBridge.log("[fcmself] loaded " + name);
         } catch (Throwable t) {
             XposedBridge.log("[fcmself] failed " + name + ": " + t);

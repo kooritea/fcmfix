@@ -26,7 +26,6 @@ public class KeepNotification extends XposedModule {
         } catch (Throwable e) {
             printLog("No Such Method com.android.server.notification.NotificationManagerService.cancelAllNotificationsInt");
         }
-        registerModuleInstance();
     }
 
     private void startHook() throws NoSuchMethodError, XposedHelpers.ClassNotFoundError {

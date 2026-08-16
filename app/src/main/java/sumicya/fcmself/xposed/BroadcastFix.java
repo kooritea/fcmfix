@@ -113,7 +113,6 @@ public class BroadcastFix extends XposedModule {
             // when an OEM or older Android release does not provide it.
             printLog("hook error scheduleResultTo:" + e.getMessage());
         }
-        registerModuleInstance();
     }
 
     /** @return true when a usable broadcastIntentLocked hook was installed. */

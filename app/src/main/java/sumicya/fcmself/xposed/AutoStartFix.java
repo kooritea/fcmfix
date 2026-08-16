@@ -21,7 +21,6 @@ public class AutoStartFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error AutoStartFix:" + e.getMessage());
         }
-        registerModuleInstance();
     }
 
     private static String packageFromIntent(Intent intent) {

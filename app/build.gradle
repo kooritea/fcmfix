@@ -39,7 +39,7 @@ android {
 }
 
 tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
-    options.compilerArgs += ['-Xlint:all']
+    options.compilerArgs += ['-Xlint:all', '-Werror']
 }
 
 dependencies {

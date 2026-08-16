@@ -16,7 +16,6 @@ public class PowerkeeperFix extends XposedModule {
         installSafely("MilletConfig", this::configureMilletGlobalMode);
         installSafely("SimpleSettings.Misc#getBoolean", this::hookGmsControl);
         installSafely("MilletPolicy", this::hookMilletPolicy);
-        registerModuleInstance();
     }
 
     private void installSafely(String name, Runnable installer) {

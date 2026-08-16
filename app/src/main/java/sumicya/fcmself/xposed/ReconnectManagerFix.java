@@ -55,7 +55,6 @@ public class ReconnectManagerFix extends XposedModule {
         super(classLoader);
         this.addButton();
         this.startHookGcmServiceStart();
-        registerModuleInstance();
     }
 
     @Override

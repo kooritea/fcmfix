@@ -118,10 +118,10 @@ public abstract class XposedModule {
     }
 
     /**
-     * Registers a fully initialized module. Subclasses call this as their final constructor step so
-     * config callbacks can never observe partially initialized hook state.
+     * Registers a fully constructed module. The entry point calls this only after the constructor
+     * returns, so config callbacks can never observe partially initialized hook state.
      */
-    protected final void registerModuleInstance() {
+    public final void activate() {
         final boolean first;
         synchronized (instances) {
             if (instances.contains(this)) {
