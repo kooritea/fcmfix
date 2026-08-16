@@ -76,10 +76,12 @@
         android:paddingBottom="6dp">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="248dp"
             android:layout_height="wrap_content"
+            android:gravity="center"
             android:letterSpacing="0.03"
             android:text="@string/app_name"
+            android:textAlignment="center"
             android:textAppearance="?attr/textAppearanceTitleSmall"
             android:textColor="?attr/colorOnSurface"
             android:textStyle="bold" />

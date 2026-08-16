@@ -4,10 +4,8 @@ import java.util.Locale;
 
 /**
  * FCM/GCM component-name checks used by the app browser; kept Android-free so it can be unit
- * tested. Matching is deliberately a superset of the canonical class names because apps rename the
- * manifest receiver/service (e.g. {@code .MyFirebaseMessagingService}) while keeping a name that
- * still reveals its purpose. False positives are harmless here: the flag only controls which apps
- * are offered in the "FCM" filter, never the module's runtime behaviour.
+ * tested. Matching covers canonical names and explicit Firebase/GCM renames. Broader generic push
+ * names are exposed separately so callers can require corroborating C2DM permission evidence.
  */
 public final class FcmReceiverDetector {
     private static final String FIREBASE_IID_RECEIVER =
@@ -49,5 +47,20 @@ public final class FcmReceiverDetector {
         }
         // Generic "fcm..." receiver/service names used by many apps.
         return lower.endsWith("fcmreceiver") || lower.endsWith("fcmpushreceiver");
+    }
+
+    /**
+     * A weaker component-name signal which must be combined with the C2DM receive permission.
+     */
+    public static boolean isGenericPushComponent(String className) {
+        if (className == null) {
+            return false;
+        }
+        int separator = Math.max(className.lastIndexOf('.'), className.lastIndexOf('$'));
+        String simpleName = className.substring(separator + 1).toLowerCase(Locale.ROOT);
+        boolean componentType = simpleName.endsWith("service")
+                || simpleName.endsWith("receiver");
+        return componentType
+                && (simpleName.contains("push") || simpleName.contains("messaging"));
     }
 }

@@ -160,9 +160,6 @@ public class MainActivity extends AppCompatActivity {
     private int colorSurfaceContainerHigh;
     private int fabConnectedContainer;
     private int fabConnectedContent;
-    private int fabErrorContainer;
-    private int fabErrorContent;
-    private int fabDisconnectedContainer;
     /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
     private ColorStateList tintPrimary;
     private ColorStateList tintError;
@@ -326,20 +323,19 @@ public class MainActivity extends AppCompatActivity {
         if (mainFab == null) {
             return;
         }
-        int container;
-        int content;
+        // Keep the main action visually stable; connection diagnostics are conveyed through the
+        // accessible label rather than changing the button palette underneath the user's finger.
+        mainFab.setBackgroundTintList(ColorStateList.valueOf(fabConnectedContainer));
+        mainFab.setImageTintList(ColorStateList.valueOf(fabConnectedContent));
+        int description;
         if (xposedService == null) {
-            container = fabDisconnectedContainer;
-            content = colorOnSurfaceVariant;
+            description = R.string.fab_status_disconnected;
         } else if (lastConfigError || hasFcmDiagnosticsIssueCached()) {
-            container = fabErrorContainer;
-            content = fabErrorContent;
+            description = R.string.fab_status_error;
         } else {
-            container = fabConnectedContainer;
-            content = fabConnectedContent;
+            description = R.string.fab_status_connected;
         }
-        mainFab.setBackgroundTintList(ColorStateList.valueOf(container));
-        mainFab.setImageTintList(ColorStateList.valueOf(content));
+        mainFab.setContentDescription(getString(description));
     }
 
     private boolean hasFcmDiagnosticsIssueCached() {
@@ -708,23 +704,27 @@ public class MainActivity extends AppCompatActivity {
 
     private void bindToggleFabMenuState(View row, boolean checked) {
         MaterialCardView stateContainer = row.findViewById(R.id.menu_state_container);
+        MaterialCardView labelContainer = row.findViewById(R.id.menu_label_container);
         ImageView symbol = row.findViewById(R.id.menu_symbol);
+        TextView label = row.findViewById(R.id.menu_label);
         int container = resolveThemeColor(
                 checked
                         ? com.google.android.material.R.attr.colorPrimaryContainer
-                        : com.google.android.material.R.attr.colorSurfaceContainerHighest,
-                checked ? fabConnectedContainer : fabDisconnectedContainer);
+                        : com.google.android.material.R.attr.colorSurfaceContainerHigh,
+                checked ? fabConnectedContainer : colorSurfaceContainerHigh);
         int content = resolveThemeColor(
                 checked
                         ? com.google.android.material.R.attr.colorOnPrimaryContainer
-                        : com.google.android.material.R.attr.colorOnSurfaceVariant,
-                checked ? fabConnectedContent : colorOnSurfaceVariant);
+                        : com.google.android.material.R.attr.colorOnSurface,
+                checked ? fabConnectedContent : colorOnSurface);
+        // A toggle is one segmented row, so both halves use the same tonal pair.
         stateContainer.setCardBackgroundColor(container);
+        labelContainer.setCardBackgroundColor(container);
         symbol.setImageResource(checked
                 ? R.drawable.ic_status_check
                 : R.drawable.ic_status_close);
         symbol.setImageTintList(ColorStateList.valueOf(content));
-        TextView label = row.findViewById(R.id.menu_label);
+        label.setTextColor(content);
         row.setContentDescription(label.getText() + "，" + (checked ? "已开启" : "已关闭"));
     }
 
@@ -743,15 +743,21 @@ public class MainActivity extends AppCompatActivity {
             LinearLayout parent, int labelRes, int iconRes, View.OnClickListener listener) {
         View row = inflateFabMenuItem(parent, labelRes);
         MaterialCardView stateContainer = row.findViewById(R.id.menu_state_container);
+        MaterialCardView labelContainer = row.findViewById(R.id.menu_label_container);
         ImageView symbol = row.findViewById(R.id.menu_symbol);
-        stateContainer.setCardBackgroundColor(resolveThemeColor(
+        TextView label = row.findViewById(R.id.menu_label);
+        int container = resolveThemeColor(
                 com.google.android.material.R.attr.colorSecondaryContainer,
-                fabConnectedContainer));
-        symbol.setImageResource(iconRes);
-        symbol.setImageTintList(ColorStateList.valueOf(resolveThemeColor(
+                fabConnectedContainer);
+        int content = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnSecondaryContainer,
-                fabConnectedContent)));
-        row.setContentDescription(((TextView) row.findViewById(R.id.menu_label)).getText());
+                fabConnectedContent);
+        stateContainer.setCardBackgroundColor(container);
+        labelContainer.setCardBackgroundColor(container);
+        symbol.setImageResource(iconRes);
+        symbol.setImageTintList(ColorStateList.valueOf(content));
+        label.setTextColor(content);
+        row.setContentDescription(label.getText());
         row.setOnClickListener(listener);
     }
 
@@ -1183,8 +1189,8 @@ public class MainActivity extends AppCompatActivity {
         if (components == null) {
             return false;
         }
-        for (ActivityInfo c : components) {
-            if (c != null && c.name != null && FcmReceiverDetector.isFcmComponent(c.name)) {
+        for (ActivityInfo component : components) {
+            if (component != null && FcmReceiverDetector.isFcmComponent(component.name)) {
                 return true;
             }
         }
@@ -1195,8 +1201,44 @@ public class MainActivity extends AppCompatActivity {
         if (components == null) {
             return false;
         }
-        for (ServiceInfo c : components) {
-            if (c != null && c.name != null && FcmReceiverDetector.isFcmComponent(c.name)) {
+        for (ServiceInfo component : components) {
+            if (component != null && FcmReceiverDetector.isFcmComponent(component.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasGenericPushComponent(ActivityInfo[] components) {
+        if (components == null) {
+            return false;
+        }
+        for (ActivityInfo component : components) {
+            if (component != null && FcmReceiverDetector.isGenericPushComponent(component.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasGenericPushComponent(ServiceInfo[] components) {
+        if (components == null) {
+            return false;
+        }
+        for (ServiceInfo component : components) {
+            if (component != null && FcmReceiverDetector.isGenericPushComponent(component.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean requestsC2dmReceivePermission(String[] permissions) {
+        if (permissions == null) {
+            return false;
+        }
+        for (String permission : permissions) {
+            if ("com.google.android.c2dm.permission.RECEIVE".equals(permission)) {
                 return true;
             }
         }
@@ -1215,6 +1257,7 @@ public class MainActivity extends AppCompatActivity {
             packages = pm.getInstalledPackages(
                     PackageManager.GET_RECEIVERS
                             | PackageManager.GET_SERVICES
+                            | PackageManager.GET_PERMISSIONS
                             | PackageManager.MATCH_DISABLED_COMPONENTS);
         } catch (Throwable t) {
             Log.e(TAG, "getInstalledPackages: " + t);
@@ -1225,12 +1268,17 @@ public class MainActivity extends AppCompatActivity {
             if (packageInfo.applicationInfo == null) {
                 continue;
             }
-            // Require observable messaging wiring: a matching manifest action or an identifiable
-            // receiver/service class. Merely requesting the broad C2DM permission is not enough;
-            // libraries can leave that permission behind in apps that do not actually use FCM.
+            // Strong evidence is sufficient by itself. Generic PushService/Receiver names are only
+            // accepted when corroborated by the C2DM receive permission; permission-only matches
+            // remain rejected because libraries can leave stale declarations behind.
+            boolean genericPushWithPermission = requestsC2dmReceivePermission(
+                    packageInfo.requestedPermissions)
+                    && (hasGenericPushComponent(packageInfo.receivers)
+                    || hasGenericPushComponent(packageInfo.services));
             boolean hasFcm = packagesResolvedForFcm.contains(packageInfo.packageName)
                     || hasFcmComponent(packageInfo.receivers)
-                    || hasFcmComponent(packageInfo.services);
+                    || hasFcmComponent(packageInfo.services)
+                    || genericPushWithPermission;
 
             String label;
             try {
@@ -1487,13 +1535,6 @@ public class MainActivity extends AppCompatActivity {
                 com.google.android.material.R.attr.colorPrimaryContainer, fallbackPrimary);
         fabConnectedContent = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnPrimaryContainer, Color.WHITE);
-        fabErrorContainer = resolveThemeColor(
-                com.google.android.material.R.attr.colorErrorContainer, colorError);
-        fabErrorContent = resolveThemeColor(
-                com.google.android.material.R.attr.colorOnErrorContainer, Color.WHITE);
-        fabDisconnectedContainer = resolveThemeColor(
-                com.google.android.material.R.attr.colorSurfaceContainerHighest,
-                colorSurfaceContainerHigh);
         tintPrimary = ColorStateList.valueOf(colorPrimary);
         tintError = ColorStateList.valueOf(colorError);
         tintDisconnected = ColorStateList.valueOf(colorOnSurfaceVariant);
