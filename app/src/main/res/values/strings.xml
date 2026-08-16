@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">fcmself</string>
+    <string name="app_name">Fcmself</string>
     <string name="all_apps_title">全部</string>
     <string name="fcm_filter_title">FCM</string>
     <string name="compact_count">%1$d</string>

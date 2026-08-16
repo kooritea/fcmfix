@@ -622,16 +622,35 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateSearchToggleStyle(boolean active) {
-        searchToggleContainer.setShapeAppearanceModel(
-                searchToggleContainer.getShapeAppearanceModel()
-                        .toBuilder()
-                        .setAllCornerSizes(0f)
-                        .build());
         applyPrimarySurface(searchToggleContainer, active, Color.TRANSPARENT);
         searchToggle.setImageResource(
                 active ? R.drawable.ic_status_close : R.drawable.ic_search);
         searchToggle.setImageTintList(ColorStateList.valueOf(
                 active ? fabConnectedContent : colorOnSurfaceVariant));
+        updateMiddleControlShapes();
+    }
+
+    private void updateMiddleControlShapes() {
+        if (filterCards == null || filterCards.length < 2 || searchToggleContainer == null) {
+            return;
+        }
+        float radius = 16 * getResources().getDisplayMetrics().density;
+        boolean merge = filterMode == FilterMode.FCM_ONLY && searchExpanded;
+
+        ShapeAppearanceModel.Builder fcmShape = filterCards[1].getShapeAppearanceModel()
+                .toBuilder()
+                .setAllCornerSizes(radius);
+        ShapeAppearanceModel.Builder searchShape = searchToggleContainer.getShapeAppearanceModel()
+                .toBuilder()
+                .setAllCornerSizes(radius);
+        if (merge) {
+            fcmShape.setTopRightCornerSize(0f)
+                    .setBottomRightCornerSize(0f);
+            searchShape.setTopLeftCornerSize(0f)
+                    .setBottomLeftCornerSize(0f);
+        }
+        filterCards[1].setShapeAppearanceModel(fcmShape.build());
+        searchToggleContainer.setShapeAppearanceModel(searchShape.build());
     }
 
     private void applyHeaderScrim() {
@@ -647,12 +666,12 @@ public class MainActivity extends AppCompatActivity {
 
             int[] colors = new int[]{
                     Color.argb(0xF2, r, g, b),
-                    Color.argb(0xF2, r, g, b),
-                    Color.argb(0xE6, r, g, b),
-                    Color.argb(0x80, r, g, b),
+                    Color.argb(0xE8, r, g, b),
+                    Color.argb(0xC0, r, g, b),
+                    Color.argb(0x60, r, g, b),
                     Color.argb(0x00, r, g, b)
             };
-            float[] offsets = {0f, 0.78f, 0.86f, 0.94f, 1f};
+            float[] offsets = {0f, 0.50f, 0.72f, 0.90f, 1f};
             GradientDrawable gd = new GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM, colors);
             gd.setColors(colors, offsets);
@@ -970,15 +989,15 @@ public class MainActivity extends AppCompatActivity {
             boolean selected = i == selectedIndex;
             int content = selected ? fabConnectedContent : colorOnSurfaceVariant;
             applyPrimarySurface(filterCards[i], selected, Color.TRANSPARENT);
-            ShapeAppearanceModel.Builder segmentShape = filterCards[i]
-                    .getShapeAppearanceModel()
-                    .toBuilder()
-                    .setAllCornerSizes(0f);
             if (i == 0) {
-                segmentShape.setTopLeftCornerSize(segmentRadius)
-                        .setBottomLeftCornerSize(segmentRadius);
+                filterCards[i].setShapeAppearanceModel(filterCards[i]
+                        .getShapeAppearanceModel()
+                        .toBuilder()
+                        .setAllCornerSizes(0f)
+                        .setTopLeftCornerSize(segmentRadius)
+                        .setBottomLeftCornerSize(segmentRadius)
+                        .build());
             }
-            filterCards[i].setShapeAppearanceModel(segmentShape.build());
             filterLabels[i].setTextColor(content);
             if (counts[i] != null) {
                 counts[i].setTextColor(content);
@@ -987,6 +1006,7 @@ public class MainActivity extends AppCompatActivity {
                                 + (selected ? "，当前筛选" : ""));
             }
         }
+        updateMiddleControlShapes();
     }
 
     private int calculateFabMenuWidth(
@@ -2001,8 +2021,8 @@ public class MainActivity extends AppCompatActivity {
 
 
     /**
-     * Header extends into the status-bar region. Recycler padding stops below the title while the
-     * gradient tail overlays the first row, keeping fcmself inside the safe zone without a gap.
+     * Header extends into the status-bar region. A compact 8dp fade ends before the first row, so
+     * Fcmself remains readable without letting the grid's top corners enter the safe area.
      */
     private void setupEdgeToEdgeInsets() {
         if (headerSafe == null) {
@@ -2026,9 +2046,9 @@ public class MainActivity extends AppCompatActivity {
             if (h <= 0) {
                 return;
             }
-            // Keep the title inside the opaque safe zone while allowing the 16dp gradient tail to
-            // overlay the first row instead of creating extra blank space below fcmself.
-            int contentTop = Math.max(0, h - basePadBottom);
+            // The first row starts after the full header; no rounded card edge is drawn under the
+            // compact gradient tail.
+            int contentTop = h;
             int pl = recyclerView.getPaddingLeft();
             int pr = recyclerView.getPaddingRight();
             int pb = recyclerView.getPaddingBottom();

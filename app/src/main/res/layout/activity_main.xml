@@ -68,7 +68,7 @@
         android:elevation="0dp"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingBottom="16dp">
+        android:paddingBottom="8dp">
 
         <TextView
             android:id="@+id/app_title"
