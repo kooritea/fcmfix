@@ -18,6 +18,19 @@ if (System.getenv('CI') != null) {
         captured.add(output.toString())
     }
 
+    // Attach to the global output router: worker-compiled diagnostics (Kotlin,
+    // javac) can bypass per-project logging managers.
+    try {
+        def internal = gradle.services.get(
+                Class.forName('org.gradle.internal.logging.LoggingManagerInternal'))
+        internal.addStandardOutputListener(
+                sink as org.gradle.api.logging.StandardOutputListener)
+        internal.addStandardErrorListener(
+                sink as org.gradle.api.logging.StandardOutputListener)
+    } catch (Throwable ignored) {
+        // Fall back to per-project logging managers below.
+    }
+
     gradle.projectsEvaluated {
         rootProject.allprojects { p ->
             def listener = sink as org.gradle.api.logging.StandardOutputListener
