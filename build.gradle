@@ -1,9 +1,10 @@
 // Top-level build file
 plugins {
     id 'com.android.application' version '9.3.0' apply false
-    // AGP 9 has built-in Kotlin support and supplies the matching Compose
-    // compiler automatically; neither kotlin.android nor the Compose compiler
-    // Gradle plugin may be applied (they conflict with the embedded toolchain).
+    // AGP 9 has built-in Kotlin support; org.jetbrains.kotlin.android must NOT
+    // be applied. The Compose compiler Gradle plugin is still required, and its
+    // version must match the KGP embedded by AGP (2.2.10 for AGP 9.3.0).
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.10' apply false
 }
 
 // ── CI compile-error annotations ───────────────────────────────────────────
