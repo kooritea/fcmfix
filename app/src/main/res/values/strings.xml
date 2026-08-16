@@ -4,6 +4,8 @@
     <string name="fcm_filter_title">FCM</string>
     <string name="enabled_filter_title">已启用</string>
     <string name="compact_count">%1$d</string>
+    <string name="initial_count">0</string>
+    <string name="scanning_apps">正在扫描应用…</string>
     <string name="app_status_enabled_desc">%1$s，已允许唤醒，点按以停用</string>
     <string name="app_status_disabled_desc">%1$s，检测到 FCM，点按以启用唤醒</string>
     <string name="app_status_pending_desc">%1$s，检测到 FCM，配置尚未就绪</string>
@@ -17,5 +19,4 @@
     <string name="fab_menu_select_all_fcm">启用全部 FCM 应用</string>
     <string name="fab_menu_diagnostics">打开 FCM Diagnostics</string>
     <string name="fab_content_description">功能与状态</string>
-    <string name="xposed_description">Allow FCM/GCM to wake stopped apps; includes FcmFuck FOREGROUND flag + PowerExemptionManager</string>
 </resources>
