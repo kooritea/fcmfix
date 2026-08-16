@@ -1,5 +1,8 @@
 package sumicya.fcmself;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -30,7 +33,9 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
+import android.view.animation.PathInterpolator;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -55,7 +60,6 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
 
 import io.github.libxposed.service.XposedService;
 import io.github.libxposed.service.XposedServiceHelper;
@@ -161,8 +165,11 @@ public class MainActivity extends AppCompatActivity {
     private int gridSpanCount = 3;
     private MaterialCardView[] filterCards;
     private TextView[] filterLabels;
-    private TextInputLayout searchContainer;
+    private MaterialCardView searchContainer;
     private TextInputEditText searchInput;
+    private ImageButton searchToggle;
+    private ValueAnimator searchWidthAnimator;
+    private boolean searchExpanded;
     private TextView emptyHint;
     private boolean lastConfigError = false;
     private FilterMode filterMode = FilterMode.ALL;
@@ -725,7 +732,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupSearch() {
-        View searchToggle = findViewById(R.id.search_toggle);
         searchToggle.setOnClickListener(v -> toggleSearch());
         searchInput.addTextChangedListener(new TextWatcher() {
             @Override
@@ -737,6 +743,9 @@ public class MainActivity extends AppCompatActivity {
                 pendingSearchQuery = s.toString().trim().toLowerCase(Locale.ROOT);
                 MAIN_HANDLER.removeCallbacks(applySearch);
                 MAIN_HANDLER.postDelayed(applySearch, 120L);
+                if (searchExpanded) {
+                    animateSearchWidth(desiredSearchWidth(s), null);
+                }
             }
 
             @Override
@@ -745,22 +754,85 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private int desiredSearchWidth(CharSequence text) {
+        float density = getResources().getDisplayMetrics().density;
+        String displayText = text.length() == 0 ? getString(R.string.search_hint) : text.toString();
+        float textWidth = searchInput.getPaint().measureText(displayText);
+        int desired = Math.round(textWidth + 68 * density);
+        int minimum = Math.round(120 * density);
+        int maximum = Math.round(176 * density);
+        return Math.max(minimum, Math.min(maximum, desired));
+    }
+
+    private void animateSearchWidth(int targetWidth, Runnable onEnd) {
+        if (searchWidthAnimator != null) {
+            searchWidthAnimator.cancel();
+        }
+        int startWidth = searchContainer.getLayoutParams().width;
+        if (startWidth == targetWidth) {
+            if (onEnd != null) {
+                onEnd.run();
+            }
+            return;
+        }
+        searchWidthAnimator = ValueAnimator.ofInt(startWidth, targetWidth);
+        searchWidthAnimator.setDuration(200L);
+        searchWidthAnimator.setInterpolator(new PathInterpolator(0.2f, 0f, 0f, 1f));
+        searchWidthAnimator.addUpdateListener(animation -> {
+            ViewGroup.LayoutParams params = searchContainer.getLayoutParams();
+            params.width = (Integer) animation.getAnimatedValue();
+            searchContainer.setLayoutParams(params);
+        });
+        if (onEnd != null) {
+            searchWidthAnimator.addListener(new AnimatorListenerAdapter() {
+                private boolean cancelled;
+
+                @Override
+                public void onAnimationCancel(Animator animation) {
+                    cancelled = true;
+                }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    if (!cancelled) {
+                        onEnd.run();
+                    }
+                }
+            });
+        }
+        searchWidthAnimator.start();
+    }
+
     private void toggleSearch() {
-        boolean show = searchContainer.getVisibility() != View.VISIBLE;
-        searchContainer.setVisibility(show ? View.VISIBLE : View.GONE);
         InputMethodManager keyboard =
                 (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (show) {
+        if (!searchExpanded) {
+            searchExpanded = true;
+            searchContainer.setCardBackgroundColor(translucentPrimaryContainer);
+            searchInput.setTextColor(fabConnectedContent);
+            searchInput.setHintTextColor(fabConnectedContent);
+            searchInput.setVisibility(View.VISIBLE);
+            searchToggle.setImageResource(R.drawable.ic_status_close);
+            searchToggle.setImageTintList(ColorStateList.valueOf(fabConnectedContent));
+            animateSearchWidth(desiredSearchWidth(searchInput.getText()), null);
             searchInput.requestFocus();
             if (keyboard != null) {
                 keyboard.showSoftInput(searchInput, 0);
             }
         } else {
+            searchExpanded = false;
             searchInput.setText("");
             searchInput.clearFocus();
+            searchContainer.setCardBackgroundColor(colorSurfaceContainerHigh);
+            searchInput.setTextColor(colorOnSurface);
+            searchInput.setHintTextColor(colorOnSurfaceVariant);
+            searchToggle.setImageResource(R.drawable.ic_search);
+            searchToggle.setImageTintList(ColorStateList.valueOf(colorOnSurfaceVariant));
             if (keyboard != null) {
                 keyboard.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
             }
+            int collapsedWidth = Math.round(48 * getResources().getDisplayMetrics().density);
+            animateSearchWidth(collapsedWidth, () -> searchInput.setVisibility(View.INVISIBLE));
         }
     }
 
@@ -1810,6 +1882,7 @@ public class MainActivity extends AppCompatActivity {
         };
         searchContainer = findViewById(R.id.search_container);
         searchInput = findViewById(R.id.search_input);
+        searchToggle = findViewById(R.id.search_toggle);
         emptyHint = findViewById(R.id.empty_hint);
         applyHeaderScrim();
         setupSearch();
@@ -1897,6 +1970,10 @@ public class MainActivity extends AppCompatActivity {
         healthNonce = null;
         healthStatusView = null;
         MAIN_HANDLER.removeCallbacks(applySearch);
+        if (searchWidthAnimator != null) {
+            searchWidthAnimator.cancel();
+            searchWidthAnimator = null;
+        }
         super.onDestroy();
     }
 
