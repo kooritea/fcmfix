@@ -46,7 +46,6 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 
@@ -147,7 +146,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView statsView;
     private View headerSafe;
     private RecyclerView recyclerView;
-    private ChipGroup filterChips;
+    private MaterialCardView[] filterCards;
+    private TextView[] filterLabels;
     private TextView emptyHint;
     private boolean lastConfigError = false;
     private FilterMode filterMode = FilterMode.ALL;
@@ -444,6 +444,7 @@ public class MainActivity extends AppCompatActivity {
             fcmStatsView.setText(getString(R.string.compact_count, totalFcm));
         }
         statsView.setText(getString(R.string.compact_count, enabled));
+        updateFilterTabStyle();
     }
 
     private Snackbar createExpressiveSnackbar(
@@ -566,24 +567,46 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void setupFilterChips() {
-        if (filterChips == null) {
+    private void setupFilterTabs() {
+        if (filterCards == null || filterLabels == null) {
             return;
         }
-        filterChips.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (checkedIds.isEmpty()) {
-                return;
+        FilterMode[] modes = FilterMode.values();
+        for (int i = 0; i < filterCards.length; i++) {
+            final FilterMode mode = modes[i];
+            filterCards[i].setOnClickListener(v -> selectFilter(mode));
+        }
+        updateFilterTabStyle();
+    }
+
+    private void selectFilter(FilterMode mode) {
+        if (filterMode == mode) {
+            return;
+        }
+        filterMode = mode;
+        updateFilterTabStyle();
+        applyFilter();
+    }
+
+    private void updateFilterTabStyle() {
+        if (filterCards == null || filterLabels == null) {
+            return;
+        }
+        TextView[] counts = {allStatsView, fcmStatsView, statsView};
+        int selectedIndex = filterMode.ordinal();
+        for (int i = 0; i < filterCards.length; i++) {
+            boolean selected = i == selectedIndex;
+            int container = selected ? fabConnectedContainer : colorSurfaceContainerHigh;
+            int content = selected ? fabConnectedContent : colorOnSurfaceVariant;
+            filterCards[i].setCardBackgroundColor(container);
+            filterCards[i].setSelected(selected);
+            filterLabels[i].setTextColor(content);
+            if (counts[i] != null) {
+                counts[i].setTextColor(content);
+                filterCards[i].setContentDescription(
+                        filterLabels[i].getText() + "，" + counts[i].getText());
             }
-            int id = checkedIds.get(0);
-            if (id == R.id.chip_fcm) {
-                filterMode = FilterMode.FCM_ONLY;
-            } else if (id == R.id.chip_enabled) {
-                filterMode = FilterMode.ENABLED;
-            } else {
-                filterMode = FilterMode.ALL;
-            }
-            applyFilter();
-        });
+        }
     }
 
     private void showFabMenu() {
@@ -596,7 +619,7 @@ public class MainActivity extends AppCompatActivity {
         int horizontalMargin = Math.round(12 * getResources().getDisplayMetrics().density);
         int maxWidth = getResources().getDisplayMetrics().widthPixels - horizontalMargin * 2;
         int popupWidth = Math.min(
-                Math.round(316 * getResources().getDisplayMetrics().density), maxWidth);
+                Math.round(304 * getResources().getDisplayMetrics().density), maxWidth);
         PopupWindow popup = new PopupWindow(
                 content, popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -1451,10 +1474,19 @@ public class MainActivity extends AppCompatActivity {
         fcmStatsView = findViewById(R.id.fcm_stats);
         statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
-        filterChips = findViewById(R.id.filter_chips);
+        filterCards = new MaterialCardView[]{
+                findViewById(R.id.filter_all),
+                findViewById(R.id.filter_fcm),
+                findViewById(R.id.filter_enabled)
+        };
+        filterLabels = new TextView[]{
+                findViewById(R.id.filter_all_label),
+                findViewById(R.id.filter_fcm_label),
+                findViewById(R.id.filter_enabled_label)
+        };
         emptyHint = findViewById(R.id.empty_hint);
         applyHeaderScrim();
-        setupFilterChips();
+        setupFilterTabs();
         setupEdgeToEdgeInsets();
 
         try {

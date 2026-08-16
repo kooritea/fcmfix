@@ -4,8 +4,6 @@
     android:id="@+id/menu_row"
     android:layout_width="match_parent"
     android:layout_height="48dp"
-    android:layout_marginTop="3dp"
-    android:layout_marginBottom="3dp"
     android:clickable="true"
     android:focusable="true"
     app:cardBackgroundColor="@android:color/transparent"

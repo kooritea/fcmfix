@@ -6,16 +6,9 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
-    <style name="Widget.Fcmself.FilterChip" parent="Widget.Material3.Chip.Filter">
-        <item name="android:gravity">center</item>
-        <item name="android:textAlignment">center</item>
-        <item name="checkedIconVisible">false</item>
-        <item name="chipIconVisible">false</item>
-        <item name="chipStartPadding">0dp</item>
-        <item name="chipEndPadding">0dp</item>
-        <item name="textStartPadding">0dp</item>
-        <item name="textEndPadding">0dp</item>
-        <item name="chipStrokeWidth">0dp</item>
+    <style name="ShapeAppearance.Fcmself.FilterTab" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">18dp</item>
     </style>
 
     <style name="ShapeAppearance.Fcmself.Popup" parent="">
