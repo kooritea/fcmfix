@@ -488,7 +488,9 @@ public class MainActivity extends AppCompatActivity {
         mainFab.setBackgroundTintList(ColorStateList.valueOf(translucentPrimaryContainer));
         mainFab.setImageTintList(ColorStateList.valueOf(fabConnectedContent));
         mainFab.setCompatElevation(0f);
+        mainFab.setCompatHoveredFocusedTranslationZ(0f);
         mainFab.setCompatPressedTranslationZ(0f);
+        removeViewShadow(mainFab);
         int description;
         if (xposedService == null) {
             description = R.string.fab_status_disconnected;
@@ -552,41 +554,47 @@ public class MainActivity extends AppCompatActivity {
         return fallback;
     }
 
+    private static void removeViewShadow(View view) {
+        view.setElevation(0f);
+        view.setTranslationZ(0f);
+        view.setStateListAnimator(null);
+    }
+
     private void applyPrimarySurface(
             MaterialCardView card, boolean active, int inactiveContainer) {
         card.setCardBackgroundColor(active ? translucentPrimaryContainer : inactiveContainer);
         card.setCardElevation(0f);
+        card.setMaxCardElevation(0f);
+        removeViewShadow(card);
     }
 
     private void setupGlassSurfaces() {
-        // One shared MD3 background tone creates the glass effect; child controls remain borderless.
-        int glassColor = ColorUtils.setAlphaComponent(colorSurfaceContainerHigh, 220);
+        // Apply transparency directly to the M3E dynamic Primary Container. Surface Container High
+        // is intentionally not used here because its neutral layer gives the dock a grey cast.
+        int glassColor = ColorUtils.setAlphaComponent(fabConnectedContainer, 152);
         bottomDock.setCardBackgroundColor(glassColor);
+        bottomDock.setStrokeColor(Color.TRANSPARENT);
         bottomDock.setStrokeWidth(0);
-        searchContainer.setCardBackgroundColor(glassColor);
-        searchContainer.setStrokeWidth(0);
-        searchInput.setTextColor(colorOnSurface);
-        searchInput.setHintTextColor(colorOnSurfaceVariant);
-        updateDockShape(false);
-    }
-
-    private void updateDockShape(boolean searchVisible) {
-        float dockRadius = 28 * getResources().getDisplayMetrics().density;
-        ShapeAppearanceModel.Builder dockShape = bottomDock.getShapeAppearanceModel()
+        bottomDock.setShapeAppearanceModel(bottomDock.getShapeAppearanceModel()
                 .toBuilder()
-                .setAllCornerSizes(dockRadius);
-        if (searchVisible) {
-            dockShape.setTopRightCornerSize(0f);
-        }
-        bottomDock.setShapeAppearanceModel(dockShape.build());
+                .setAllCornerSizes(0f)
+                .build());
+        removeViewShadow(bottomDock);
 
+        searchContainer.setCardBackgroundColor(glassColor);
+        searchContainer.setStrokeColor(Color.TRANSPARENT);
+        searchContainer.setStrokeWidth(0);
         float searchRadius = 20 * getResources().getDisplayMetrics().density;
-        ShapeAppearanceModel.Builder searchShape = searchContainer.getShapeAppearanceModel()
+        searchContainer.setShapeAppearanceModel(searchContainer.getShapeAppearanceModel()
                 .toBuilder()
                 .setAllCornerSizes(0f)
                 .setTopLeftCornerSize(searchRadius)
-                .setTopRightCornerSize(searchRadius);
-        searchContainer.setShapeAppearanceModel(searchShape.build());
+                .setTopRightCornerSize(searchRadius)
+                .build());
+        removeViewShadow(searchContainer);
+
+        searchInput.setTextColor(colorOnSurface);
+        searchInput.setHintTextColor(colorOnSurfaceVariant);
     }
 
     private void applyHeaderScrim() {
@@ -672,14 +680,25 @@ public class MainActivity extends AppCompatActivity {
         background.setCornerRadius(radius);
         snackbarView.setBackgroundTintList(null);
         snackbarView.setBackground(background);
-        snackbarView.setElevation(0f);
+        removeViewShadow(snackbarView);
 
         if (snackbarView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams layoutParams =
                     (ViewGroup.MarginLayoutParams) snackbarView.getLayoutParams();
             int sideMargin = Math.round(12 * getResources().getDisplayMetrics().density);
-            layoutParams.setMarginStart(Math.max(layoutParams.getMarginStart(), sideMargin));
-            layoutParams.setMarginEnd(Math.max(layoutParams.getMarginEnd(), sideMargin));
+            int preferredWidth = Math.round(280 * getResources().getDisplayMetrics().density);
+            layoutParams.width = Math.min(
+                    preferredWidth,
+                    getResources().getDisplayMetrics().widthPixels - sideMargin * 2);
+            layoutParams.setMarginStart(sideMargin);
+            layoutParams.setMarginEnd(sideMargin);
+            if (layoutParams
+                    instanceof androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams) {
+                androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams coordinatorParams =
+                        (androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams)
+                                layoutParams;
+                coordinatorParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM;
+            }
             snackbarView.setLayoutParams(layoutParams);
         }
 
@@ -688,6 +707,8 @@ public class MainActivity extends AppCompatActivity {
         Drawable icon = ContextCompat.getDrawable(this, iconRes);
         if (snackbarText != null) {
             snackbarText.setTextColor(contentColor);
+            snackbarText.setGravity(Gravity.CENTER);
+            snackbarText.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             if (icon != null) {
                 icon = icon.mutate();
                 icon.setTint(contentColor);
@@ -815,7 +836,6 @@ public class MainActivity extends AppCompatActivity {
         float offset = 12 * getResources().getDisplayMetrics().density;
         if (!searchExpanded) {
             searchExpanded = true;
-            updateDockShape(true);
             searchContainer.setVisibility(View.VISIBLE);
             searchContainer.setPivotY(48 * getResources().getDisplayMetrics().density);
             searchContainer.setAlpha(0f);
@@ -856,7 +876,6 @@ public class MainActivity extends AppCompatActivity {
                         searchContainer.setScaleX(1f);
                         searchContainer.setScaleY(1f);
                         searchContainer.setTranslationY(0f);
-                        updateDockShape(false);
                     })
                     .start();
         }
@@ -901,10 +920,16 @@ public class MainActivity extends AppCompatActivity {
         }
         TextView[] counts = {allStatsView, fcmStatsView, statsView};
         int selectedIndex = filterMode.ordinal();
+        float selectedRadius = 16 * getResources().getDisplayMetrics().density;
         for (int i = 0; i < filterCards.length; i++) {
             boolean selected = i == selectedIndex;
             int content = selected ? fabConnectedContent : colorOnSurfaceVariant;
             applyPrimarySurface(filterCards[i], selected, Color.TRANSPARENT);
+            // The active label is one complete tonal pill regardless of its segment position.
+            filterCards[i].setShapeAppearanceModel(filterCards[i].getShapeAppearanceModel()
+                    .toBuilder()
+                    .setAllCornerSizes(selected ? selectedRadius : 0f)
+                    .build());
             filterLabels[i].setTextColor(content);
             if (counts[i] != null) {
                 counts[i].setTextColor(content);
@@ -1061,7 +1086,7 @@ public class MainActivity extends AppCompatActivity {
         TextView label = row.findViewById(R.id.menu_label);
         int content = checked ? fabConnectedContent : colorOnErrorContainer;
         applyPrimarySurface(rowCard, checked, colorErrorContainer);
-        // Child segments stay transparent; the row owns one continuous tonal surface and shadow.
+        // Child segments stay transparent; the row owns one continuous, shadow-free tonal surface.
         stateContainer.setCardBackgroundColor(Color.TRANSPARENT);
         labelContainer.setCardBackgroundColor(Color.TRANSPARENT);
         symbol.setImageResource(checked
@@ -1966,11 +1991,10 @@ public class MainActivity extends AppCompatActivity {
                 com.google.android.material.R.attr.colorPrimaryContainer, fallbackPrimary);
         fabConnectedContent = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnPrimaryContainer, Color.WHITE);
-        // Pre-composite a 72% primary layer onto the surface. It keeps the translucent look without
-        // allowing child bounds or recycled content to bleed through the card.
-        translucentPrimaryContainer = ColorUtils.compositeColors(
-                ColorUtils.setAlphaComponent(fabConnectedContainer, 184),
-                colorSurfaceContainerLow);
+        // Keep the M3E dynamic Primary Container itself translucent. Do not pre-composite it onto
+        // a neutral surface: that introduces a grey cast and defeats the lightweight glass effect.
+        translucentPrimaryContainer =
+                ColorUtils.setAlphaComponent(fabConnectedContainer, 184);
         colorErrorContainer = resolveThemeColor(
                 com.google.android.material.R.attr.colorErrorContainer, colorError);
         colorOnErrorContainer = resolveThemeColor(

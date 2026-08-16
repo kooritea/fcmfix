@@ -7,6 +7,9 @@
     android:clickable="true"
     android:focusable="true"
     app:cardBackgroundColor="@android:color/transparent"
+    android:elevation="0dp"
+    android:stateListAnimator="@null"
+    android:translationZ="0dp"
     app:cardElevation="0dp"
     app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuItem"
     app:strokeWidth="0dp">
@@ -22,6 +25,9 @@
             android:layout_width="48dp"
             android:layout_height="match_parent"
             app:cardBackgroundColor="?attr/colorSurfaceContainerHighest"
+            android:elevation="0dp"
+            android:stateListAnimator="@null"
+            android:translationZ="0dp"
             app:cardElevation="0dp"
             app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuSegment"
             app:strokeWidth="0dp">
@@ -42,6 +48,9 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            android:elevation="0dp"
+            android:stateListAnimator="@null"
+            android:translationZ="0dp"
             app:cardElevation="0dp"
             app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuSegment"
             app:strokeWidth="0dp">

@@ -99,6 +99,9 @@
             android:layout_gravity="end"
             android:visibility="gone"
             app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+            android:elevation="0dp"
+            android:stateListAnimator="@null"
+            android:translationZ="0dp"
             app:cardElevation="0dp"
             app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.Search"
             app:strokeWidth="0dp">
@@ -126,6 +129,9 @@
             android:layout_width="280dp"
             android:layout_height="56dp"
             app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+            android:elevation="0dp"
+            android:stateListAnimator="@null"
+            android:translationZ="0dp"
             app:cardElevation="0dp"
             app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.BottomDock"
             app:strokeWidth="0dp">
@@ -144,8 +150,11 @@
                     android:clickable="true"
                     android:focusable="true"
                     app:cardBackgroundColor="?attr/colorPrimaryContainer"
+                    android:elevation="0dp"
+                    android:stateListAnimator="@null"
+                    android:translationZ="0dp"
                     app:cardElevation="0dp"
-                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterStart"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
                     app:strokeWidth="0dp">
 
                     <LinearLayout
@@ -179,6 +188,9 @@
                     android:clickable="true"
                     android:focusable="true"
                     app:cardBackgroundColor="@android:color/transparent"
+                    android:elevation="0dp"
+                    android:stateListAnimator="@null"
+                    android:translationZ="0dp"
                     app:cardElevation="0dp"
                     app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
                     app:strokeWidth="0dp">
@@ -214,6 +226,9 @@
                     android:clickable="true"
                     android:focusable="true"
                     app:cardBackgroundColor="@android:color/transparent"
+                    android:elevation="0dp"
+                    android:stateListAnimator="@null"
+                    android:translationZ="0dp"
                     app:cardElevation="0dp"
                     app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
                     app:strokeWidth="0dp">
@@ -257,6 +272,9 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:contentDescription="@string/fab_content_description"
+                    android:elevation="0dp"
+                    android:stateListAnimator="@null"
+                    android:translationZ="0dp"
                     app:borderWidth="0dp"
                     app:elevation="0dp"
                     app:fabCustomSize="48dp"

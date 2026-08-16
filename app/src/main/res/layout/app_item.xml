@@ -10,6 +10,9 @@
     android:clickable="true"
     android:focusable="true"
     app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+    android:elevation="0dp"
+    android:stateListAnimator="@null"
+    android:translationZ="0dp"
     app:cardElevation="0dp"
     app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.AppCard"
     app:strokeWidth="0dp">

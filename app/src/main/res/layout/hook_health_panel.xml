@@ -6,6 +6,9 @@
     android:layout_height="wrap_content"
     android:visibility="gone"
     app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+    android:elevation="0dp"
+    android:stateListAnimator="@null"
+    android:translationZ="0dp"
     app:cardElevation="0dp"
     app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuSegment"
     app:strokeWidth="0dp">
