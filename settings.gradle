@@ -45,14 +45,6 @@ if (System.getenv('CI') != null) {
     } catch (Throwable ignored) {
     }
 
-    gradle.projectsEvaluated {
-        rootProject.allprojects { p ->
-            def listener = sink as org.gradle.api.logging.StandardOutputListener
-            p.logging.addStandardOutputListener(listener)
-            p.logging.addStandardErrorListener(listener)
-        }
-    }
-
     gradle.buildFinished { result ->
         def emitted = []
         def seen = new HashSet<String>()
