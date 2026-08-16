@@ -51,10 +51,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:ellipsize="end"
-                android:gravity="center_vertical"
+                android:gravity="center"
                 android:maxLines="2"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:textAlignment="center"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
                 android:textColor="?attr/colorOnSurface" />
         </com.google.android.material.card.MaterialCardView>

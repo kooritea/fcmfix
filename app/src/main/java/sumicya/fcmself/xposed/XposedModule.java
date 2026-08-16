@@ -42,6 +42,8 @@ public abstract class XposedModule {
     public static volatile Set<String> allowList = null;
     static final String TAG = "fcmself";
     private static final String UPDATE_CONFIG_ACTION = "sumicya.fcmself.update.config";
+    private static final String HEALTH_REQUEST_ACTION = "sumicya.fcmself.health.request";
+    private static final String HEALTH_RESPONSE_ACTION = "sumicya.fcmself.health.response";
     private static final String UPDATE_CONFIG_PERMISSION =
             "sumicya.fcmself.permission.UPDATE_CONFIG";
     /** Atomically published so hook threads never observe a mixture of two config versions. */
@@ -466,32 +468,60 @@ public abstract class XposedModule {
         }
     }
 
+    private static void sendHealthResponse(String nonce) {
+        if (context == null || nonce == null) {
+            return;
+        }
+        ArrayList<String> modules = new ArrayList<>();
+        synchronized (instances) {
+            for (XposedModule instance : instances) {
+                modules.add(instance.getClass().getSimpleName());
+            }
+        }
+        Intent response = new Intent(HEALTH_RESPONSE_ACTION);
+        response.setPackage("sumicya.fcmself");
+        response.putExtra("nonce", nonce);
+        response.putExtra("process", getSelfPackageName());
+        response.putExtra("bootComplete", isBootComplete);
+        response.putExtra("configReady", configSnapshot.ready);
+        response.putStringArrayListExtra("modules", modules);
+        try {
+            context.sendBroadcast(response);
+        } catch (Throwable e) {
+            printLog("发送 Hook 健康状态失败: " + e.getMessage());
+        }
+    }
+
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private static synchronized void initReceiver() {
         if (isInitReceiver || context == null) {
             return;
         }
 
-        IntentFilter updateConfigIntentFilter = new IntentFilter(UPDATE_CONFIG_ACTION);
-        BroadcastReceiver configReceiver = new BroadcastReceiver() {
+        IntentFilter moduleIntentFilter = new IntentFilter(UPDATE_CONFIG_ACTION);
+        moduleIntentFilter.addAction(HEALTH_REQUEST_ACTION);
+        BroadcastReceiver moduleReceiver = new BroadcastReceiver() {
             public void onReceive(Context context, Intent intent) {
-                if (UPDATE_CONFIG_ACTION.equals(intent.getAction())) {
+                String action = intent.getAction();
+                if (UPDATE_CONFIG_ACTION.equals(action)) {
                     onUpdateConfig();
+                } else if (HEALTH_REQUEST_ACTION.equals(action)) {
+                    sendHealthResponse(intent.getStringExtra("nonce"));
                 }
             }
         };
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(
-                        configReceiver,
-                        updateConfigIntentFilter,
+                        moduleReceiver,
+                        moduleIntentFilter,
                         UPDATE_CONFIG_PERMISSION,
                         null,
                         Context.RECEIVER_EXPORTED);
             } else {
                 context.registerReceiver(
-                        configReceiver,
-                        updateConfigIntentFilter,
+                        moduleReceiver,
+                        moduleIntentFilter,
                         UPDATE_CONFIG_PERMISSION,
                         null);
             }

@@ -1,5 +1,6 @@
 package sumicya.fcmself;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -26,6 +27,7 @@ import android.util.LruCache;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -68,6 +70,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -78,6 +81,8 @@ import sumicya.fcmself.util.IceboxUtils;
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
     private static final String UPDATE_CONFIG_ACTION = "sumicya.fcmself.update.config";
+    private static final String HEALTH_REQUEST_ACTION = "sumicya.fcmself.health.request";
+    private static final String HEALTH_RESPONSE_ACTION = "sumicya.fcmself.health.response";
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final ExecutorService BG = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "fcmself-apps");
@@ -163,7 +168,8 @@ public class MainActivity extends AppCompatActivity {
     private int fabConnectedContainer;
     private int fabConnectedContent;
     private int translucentPrimaryContainer;
-    private int primaryShadowColor;
+    private int colorErrorContainer;
+    private int colorOnErrorContainer;
     private float primaryElevation;
     /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
     private ColorStateList tintError;
@@ -195,6 +201,45 @@ public class MainActivity extends AppCompatActivity {
     private boolean allowListLoaded = false;
     private final JSONObject config = new JSONObject();
     private boolean packageReceiverRegistered;
+    private boolean healthReceiverRegistered;
+    private String healthNonce;
+    private AlertDialog healthDialog;
+    private final Map<String, HealthResponse> healthResponses = new HashMap<>();
+    private float fabTouchDownY;
+    private boolean fabSwipeTriggered;
+
+    private static final class HealthResponse {
+        final boolean bootComplete;
+        final boolean configReady;
+        final List<String> modules;
+
+        HealthResponse(boolean bootComplete, boolean configReady, List<String> modules) {
+            this.bootComplete = bootComplete;
+            this.configReady = configReady;
+            this.modules = modules;
+        }
+    }
+
+    private final BroadcastReceiver healthResponseReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!HEALTH_RESPONSE_ACTION.equals(intent.getAction())
+                    || healthNonce == null
+                    || !healthNonce.equals(intent.getStringExtra("nonce"))) {
+                return;
+            }
+            String process = intent.getStringExtra("process");
+            ArrayList<String> modules = intent.getStringArrayListExtra("modules");
+            if (process != null) {
+                healthResponses.put(process, new HealthResponse(
+                        intent.getBooleanExtra("bootComplete", false),
+                        intent.getBooleanExtra("configReady", false),
+                        modules != null ? modules : new ArrayList<>()));
+                updateHealthDialog();
+            }
+        }
+    };
+
     private final BroadcastReceiver packageChangeReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -207,6 +252,107 @@ public class MainActivity extends AppCompatActivity {
             loadAppListAsync();
         }
     };
+
+    private void registerHealthResponseReceiver() {
+        if (healthReceiverRegistered) {
+            return;
+        }
+        try {
+            IntentFilter filter = new IntentFilter(HEALTH_RESPONSE_ACTION);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(healthResponseReceiver, filter, Context.RECEIVER_EXPORTED);
+            } else {
+                registerReceiver(healthResponseReceiver, filter);
+            }
+            healthReceiverRegistered = true;
+        } catch (Throwable e) {
+            Log.w(TAG, "registerHealthResponseReceiver: " + e);
+        }
+    }
+
+    private void showHookHealthPanel() {
+        registerHealthResponseReceiver();
+        healthNonce = UUID.randomUUID().toString();
+        healthResponses.clear();
+        healthDialog = new AlertDialog.Builder(this)
+                .setTitle("Hook 健康状态")
+                .setMessage("正在查询已启用作用域…")
+                .setPositiveButton("关闭", null)
+                .create();
+        healthDialog.setOnDismissListener(dialog -> healthDialog = null);
+        healthDialog.show();
+
+        Intent request = new Intent(HEALTH_REQUEST_ACTION);
+        request.putExtra("nonce", healthNonce);
+        sendBroadcast(request);
+        String expectedNonce = healthNonce;
+        MAIN_HANDLER.postDelayed(() -> {
+            if (expectedNonce.equals(healthNonce)) {
+                updateHealthDialog();
+            }
+        }, 700L);
+    }
+
+    private void updateHealthDialog() {
+        if (healthDialog == null || !healthDialog.isShowing()) {
+            return;
+        }
+        StringBuilder status = new StringBuilder();
+        status.append("应用服务：")
+                .append(xposedService != null ? "已连接" : "未连接")
+                .append('\n')
+                .append("应用配置：")
+                .append(allowListLoaded && !lastConfigError ? "正常" : "未就绪")
+                .append("\n\n");
+        appendHealthProcess(status, "android", "system_server（核心）");
+        appendHealthProcess(status, "com.miui.powerkeeper", "PowerKeeper（可选）");
+        appendHealthProcess(status, "com.google.android.gms", "GMS 重连（可选）");
+        status.append("\n上滑 FAB 可重新查询。模块已加载不等同于所有 OEM 私有方法都存在。");
+        healthDialog.setMessage(status.toString());
+    }
+
+    private void appendHealthProcess(StringBuilder status, String process, String label) {
+        HealthResponse response = healthResponses.get(process);
+        status.append(label).append("：");
+        if (response == null) {
+            status.append("未响应");
+        } else {
+            status.append(response.bootComplete && response.configReady ? "就绪" : "初始化中");
+            if (!response.modules.isEmpty()) {
+                status.append("\n  ").append(String.join("、", response.modules));
+            }
+        }
+        status.append('\n');
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private void setupFabGestures() {
+        float threshold = 48 * getResources().getDisplayMetrics().density;
+        mainFab.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    fabTouchDownY = event.getRawY();
+                    fabSwipeTriggered = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (!fabSwipeTriggered && fabTouchDownY - event.getRawY() >= threshold) {
+                        fabSwipeTriggered = true;
+                        showHookHealthPanel();
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (!fabSwipeTriggered) {
+                        view.performClick();
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    fabSwipeTriggered = false;
+                    return true;
+                default:
+                    return true;
+            }
+        });
+    }
 
     private SharedPreferences getRemotePreferencesOrNull() {
         if (xposedService == null) {
@@ -399,17 +545,12 @@ public class MainActivity extends AppCompatActivity {
     private void applyPrimarySurface(
             MaterialCardView card, boolean active, int inactiveContainer) {
         card.setCardBackgroundColor(active ? translucentPrimaryContainer : inactiveContainer);
+        // Let the platform render its standard neutral elevation shadow.
         card.setCardElevation(active ? primaryElevation : 0f);
-        int shadow = active ? primaryShadowColor : Color.TRANSPARENT;
-        card.setOutlineAmbientShadowColor(shadow);
-        card.setOutlineSpotShadowColor(shadow);
     }
 
     private void applyPrimaryShadow(View view, boolean active) {
         view.setElevation(active ? primaryElevation : 0f);
-        int shadow = active ? primaryShadowColor : Color.TRANSPARENT;
-        view.setOutlineAmbientShadowColor(shadow);
-        view.setOutlineSpotShadowColor(shadow);
     }
 
     private void applyHeaderScrim() {
@@ -635,7 +776,7 @@ public class MainActivity extends AppCompatActivity {
         ViewGroup popupParent = (ViewGroup) mainFab.getParent();
         View content = inflater.inflate(R.layout.fab_menu_popup, popupParent, false);
         LinearLayout items = content.findViewById(R.id.fab_menu_items);
-        int horizontalMargin = Math.round(12 * getResources().getDisplayMetrics().density);
+        int horizontalMargin = Math.round(8 * getResources().getDisplayMetrics().density);
         int maxWidth = getResources().getDisplayMetrics().widthPixels - horizontalMargin * 2;
         int popupWidth = Math.min(
                 Math.round(280 * getResources().getDisplayMetrics().density), maxWidth);
@@ -683,7 +824,7 @@ public class MainActivity extends AppCompatActivity {
             x = location[0] + mainFab.getWidth() - popupWidth;
         }
         x = Math.max(horizontalMargin, Math.min(x, maxWidth - popupWidth + horizontalMargin));
-        int verticalGap = Math.round(12 * getResources().getDisplayMetrics().density);
+        int verticalGap = Math.round(8 * getResources().getDisplayMetrics().density);
         int y = Math.max(
                 horizontalMargin,
                 location[1] - content.getMeasuredHeight() - verticalGap);
@@ -723,8 +864,8 @@ public class MainActivity extends AppCompatActivity {
         MaterialCardView labelContainer = row.findViewById(R.id.menu_label_container);
         ImageView symbol = row.findViewById(R.id.menu_symbol);
         TextView label = row.findViewById(R.id.menu_label);
-        int content = checked ? fabConnectedContent : colorOnSurface;
-        applyPrimarySurface(rowCard, checked, colorSurfaceContainerHigh);
+        int content = checked ? fabConnectedContent : colorOnErrorContainer;
+        applyPrimarySurface(rowCard, checked, colorErrorContainer);
         // Child segments stay transparent; the row owns one continuous tonal surface and shadow.
         stateContainer.setCardBackgroundColor(Color.TRANSPARENT);
         labelContainer.setCardBackgroundColor(Color.TRANSPARENT);
@@ -1469,8 +1610,8 @@ public class MainActivity extends AppCompatActivity {
         });
 
         if (mainFab != null) {
-            final int fabEnd = (int) (36 * getResources().getDisplayMetrics().density + 0.5f);
-            final int fabBottom = (int) (24 * getResources().getDisplayMetrics().density + 0.5f);
+            final int fabEnd = (int) (24 * getResources().getDisplayMetrics().density + 0.5f);
+            final int fabBottom = (int) (16 * getResources().getDisplayMetrics().density + 0.5f);
             ViewCompat.setOnApplyWindowInsetsListener(mainFab, (v, windowInsets) -> {
                 Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
                 ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
@@ -1512,7 +1653,10 @@ public class MainActivity extends AppCompatActivity {
         fabConnectedContent = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnPrimaryContainer, Color.WHITE);
         translucentPrimaryContainer = ColorUtils.setAlphaComponent(fabConnectedContainer, 184);
-        primaryShadowColor = ColorUtils.setAlphaComponent(fabConnectedContainer, 92);
+        colorErrorContainer = resolveThemeColor(
+                com.google.android.material.R.attr.colorErrorContainer, colorError);
+        colorOnErrorContainer = resolveThemeColor(
+                com.google.android.material.R.attr.colorOnErrorContainer, Color.WHITE);
         primaryElevation = 4 * getResources().getDisplayMetrics().density;
         tintError = ColorStateList.valueOf(colorError);
         tintDisconnected = ColorStateList.valueOf(colorOnSurfaceVariant);
@@ -1543,6 +1687,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable ignored) {
         }
         mainFab.setOnClickListener(v -> showFabMenu());
+        setupFabGestures();
         refreshFabStatus();
 
         recyclerView = findViewById(R.id.recycler_view);
@@ -1608,6 +1753,19 @@ public class MainActivity extends AppCompatActivity {
             } finally {
                 packageReceiverRegistered = false;
             }
+        }
+        if (healthReceiverRegistered) {
+            try {
+                unregisterReceiver(healthResponseReceiver);
+            } catch (Throwable ignored) {
+            } finally {
+                healthReceiverRegistered = false;
+            }
+        }
+        healthNonce = null;
+        if (healthDialog != null) {
+            healthDialog.dismiss();
+            healthDialog = null;
         }
         super.onDestroy();
     }
