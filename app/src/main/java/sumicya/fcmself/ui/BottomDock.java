@@ -66,7 +66,7 @@ public final class BottomDock {
     private String pendingQuery = "";
     private boolean searchExpanded;
     private FilterMode filterMode = FilterMode.ALL;
-    private final Runnable applySearch = () -> callbacks.onSearchQueryChanged(pendingQuery);
+    private final Runnable applySearch = this::dispatchSearchQuery;
 
     public BottomDock(Activity activity, AppTheme theme, Callbacks callbacks) {
         this.activity = activity;
@@ -175,6 +175,10 @@ public final class BottomDock {
         searchInput.setTextColor(theme.onPrimaryContainer);
         searchInput.setHintTextColor(theme.onPrimaryContainer);
         updateSearchToggleStyle(false);
+    }
+
+    private void dispatchSearchQuery() {
+        callbacks.onSearchQueryChanged(pendingQuery);
     }
 
     private void wireSearch() {
