@@ -90,6 +90,7 @@
                 android:includeFontPadding="false"
                 android:letterSpacing="0.03"
                 android:paddingStart="8dp"
+                android:paddingEnd="8dp"
                 android:text="@string/app_name"
                 android:textAppearance="?attr/textAppearanceTitleSmall"
                 android:textColor="?attr/colorOnSurface"
