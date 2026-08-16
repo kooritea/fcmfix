@@ -1,7 +1,6 @@
 plugins {
     id 'com.android.application'
-    // Kotlin compilation is built into AGP 9; only the Compose compiler plugin is needed.
-    id 'org.jetbrains.kotlin.plugin.compose'
+    // Kotlin compilation and the matching Compose compiler are built into AGP 9.
 }
 
 android {
