@@ -41,6 +41,29 @@ tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
     options.compilerArgs += ['-Xlint:all,-processing,-options,-path']
 }
 
+// Surface lint findings as GitHub annotations even when warningsAsErrors fails the lint task.
+def lintBuildPath = layout.buildDirectory.get().asFile.absolutePath
+tasks.register('annotateLintReports') {
+    doLast {
+        new File(lintBuildPath).eachFileRecurse { report ->
+            if (!report.name.startsWith('lint-results') || !report.name.endsWith('.xml')) {
+                return
+            }
+            new groovy.xml.XmlSlurper(false, false).parse(report).issue.each { issue ->
+                def location = issue.location[0]
+                def message = String.valueOf(issue.@message)
+                        .replace('%', '%25')
+                        .replace('\r', '%0D')
+                        .replace('\n', '%0A')
+                println "::error file=${location.@file},line=${location.@line},col=${location.@column},title=Android Lint ${issue.@id}::${message}"
+            }
+        }
+    }
+}
+tasks.matching { it.name == 'lint' }.configureEach {
+    finalizedBy('annotateLintReports')
+}
+
 dependencies {
     compileOnly 'io.github.libxposed:api:102.0.0'
     implementation 'io.github.libxposed:interface:102.0.0'
