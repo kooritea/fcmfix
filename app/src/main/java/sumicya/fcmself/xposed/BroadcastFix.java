@@ -147,7 +147,8 @@ public class BroadcastFix extends XposedModule {
                 } else if (Build.VERSION.SDK_INT == 33) {
                     intent_args_index = 3;
                     appOp_args_index = 12;
-                } else if (Build.VERSION.SDK_INT >= 34) {
+                } else {
+                    // All remaining supported releases are Android 14+ (minSdk is Android 10).
                     intent_args_index = 3;
                     if (parameters.length > 13 && parameters[13].getType() == int.class) {
                         appOp_args_index = 13;
@@ -398,6 +399,7 @@ public class BroadcastFix extends XposedModule {
         }
     }
 
+    @SuppressLint("PrivateApi")
     private static void applyTemporaryAllowList(String packageName) {
         if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
             return;
