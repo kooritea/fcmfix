@@ -157,13 +157,14 @@ public class MainActivity extends AppCompatActivity {
     private int colorError;
     private int colorOnSurface;
     private int colorOnSurfaceVariant;
+    private int colorSurfaceContainerLow;
     private int colorSurfaceContainerHigh;
     private int fabConnectedContainer;
     private int fabConnectedContent;
     /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
-    private ColorStateList tintPrimary;
     private ColorStateList tintError;
     private ColorStateList tintDisconnected;
+    private ColorStateList tintOnPrimaryContainer;
 
     private Boolean cachedDiagIssue;
     private long diagCacheAtMs;
@@ -834,7 +835,7 @@ public class MainActivity extends AppCompatActivity {
         private final Map<String, Integer> mRenderedStatus = new HashMap<>();
 
         class ViewHolder extends RecyclerView.ViewHolder {
-            final View appView;
+            final MaterialCardView appView;
             final ImageView icon;
             final TextView name;
             final TextView appPkg;
@@ -842,7 +843,7 @@ public class MainActivity extends AppCompatActivity {
 
             ViewHolder(View view) {
                 super(view);
-                appView = view;
+                appView = (MaterialCardView) view;
                 icon = view.findViewById(R.id.icon);
                 name = view.findViewById(R.id.name);
                 appPkg = view.findViewById(R.id.app_pkg);
@@ -1086,7 +1087,20 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        private void bindCardAppearance(ViewHolder holder, AppInfo appInfo) {
+            if (appInfo.isAllow) {
+                holder.appView.setCardBackgroundColor(fabConnectedContainer);
+                holder.name.setTextColor(fabConnectedContent);
+                holder.appPkg.setTextColor(fabConnectedContent);
+            } else {
+                holder.appView.setCardBackgroundColor(colorSurfaceContainerLow);
+                holder.name.setTextColor(colorOnSurface);
+                holder.appPkg.setTextColor(colorOnSurfaceVariant);
+            }
+        }
+
         private void bindStatus(ViewHolder holder, AppInfo appInfo) {
+            bindCardAppearance(holder, appInfo);
             // Vector marks are tinted so the icon follows the theme instead of being re-drawn as
             // an emoji glyph by the OEM font on the device. Manually allowed apps keep a check even
             // when heuristic component scanning did not identify FCM; otherwise the Enabled filter
@@ -1094,7 +1108,7 @@ public class MainActivity extends AppCompatActivity {
             final int description;
             if (appInfo.isAllow) {
                 holder.status.setImageResource(R.drawable.ic_status_check);
-                holder.status.setImageTintList(tintPrimary);
+                holder.status.setImageTintList(tintOnPrimaryContainer);
                 description = R.string.app_status_enabled_desc;
             } else if (appInfo.includeFcm && allowListLoaded) {
                 holder.status.setImageResource(R.drawable.ic_status_close);
@@ -1475,15 +1489,17 @@ public class MainActivity extends AppCompatActivity {
         colorOnSurfaceVariant = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnSurfaceVariant,
                 ContextCompat.getColor(this, R.color.status_disconnected));
+        colorSurfaceContainerLow = resolveThemeColor(
+                com.google.android.material.R.attr.colorSurfaceContainerLow, Color.WHITE);
         colorSurfaceContainerHigh = resolveThemeColor(
                 com.google.android.material.R.attr.colorSurfaceContainerHigh, Color.WHITE);
         fabConnectedContainer = resolveThemeColor(
                 com.google.android.material.R.attr.colorPrimaryContainer, fallbackPrimary);
         fabConnectedContent = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnPrimaryContainer, Color.WHITE);
-        tintPrimary = ColorStateList.valueOf(colorPrimary);
         tintError = ColorStateList.valueOf(colorError);
         tintDisconnected = ColorStateList.valueOf(colorOnSurfaceVariant);
+        tintOnPrimaryContainer = ColorStateList.valueOf(fabConnectedContent);
 
         headerSafe = findViewById(R.id.header_safe);
         allStatsView = findViewById(R.id.all_stats);

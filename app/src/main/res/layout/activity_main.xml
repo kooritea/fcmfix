@@ -70,13 +70,13 @@
         android:focusable="false"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingStart="12dp"
+        android:paddingStart="0dp"
         android:paddingTop="0dp"
-        android:paddingEnd="12dp"
+        android:paddingEnd="0dp"
         android:paddingBottom="6dp">
 
         <TextView
-            android:layout_width="248dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
             android:letterSpacing="0.03"

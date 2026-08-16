@@ -11,6 +11,11 @@
         <item name="cornerSize">16dp</item>
     </style>
 
+    <style name="ShapeAppearance.Fcmself.AppCard" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
+    </style>
+
     <style name="ShapeAppearance.Fcmself.Popup" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">24dp</item>
