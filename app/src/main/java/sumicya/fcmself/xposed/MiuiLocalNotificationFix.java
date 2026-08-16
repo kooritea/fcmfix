@@ -11,9 +11,10 @@ public class MiuiLocalNotificationFix extends XposedModule {
     public MiuiLocalNotificationFix(ClassLoader classLoader) {
         super(classLoader);
         this.startHook();
+        registerModuleInstance();
     }
 
-    protected void startHook() {
+    private void startHook() {
         try {
             Class<?> clazz;
             try {

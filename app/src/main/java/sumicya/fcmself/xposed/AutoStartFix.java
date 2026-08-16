@@ -21,6 +21,7 @@ public class AutoStartFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error AutoStartFix:" + e.getMessage());
         }
+        registerModuleInstance();
     }
 
     private static String packageFromIntent(Intent intent) {
@@ -74,7 +75,7 @@ public class AutoStartFix extends XposedModule {
         return targetIsAllow(target) ? target : null;
     }
 
-    protected void startHook() {
+    private void startHook() {
         try {
             Class<?> BroadcastQueueInjector = XposedHelpers.findClass("com.android.server.am.BroadcastQueueInjector", classLoader);
             XposedUtils.findAndHookMethodAnyParam(BroadcastQueueInjector, "checkApplicationAutoStart", new XC_MethodHook() {
@@ -210,7 +211,7 @@ public class AutoStartFix extends XposedModule {
         }
     }
 
-    protected void startHookRemovePowerPolicy() {
+    private void startHookRemovePowerPolicy() {
         try {
             Class<?> AutoStartManagerService = XposedHelpers.findClass("com.miui.server.smartpower.SmartPowerPolicyManager", classLoader);
             XposedUtils.findAndHookMethodAnyParam(AutoStartManagerService, "shouldInterceptService", new XC_MethodHook() {

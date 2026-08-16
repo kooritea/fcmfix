@@ -113,10 +113,11 @@ public class BroadcastFix extends XposedModule {
             // when an OEM or older Android release does not provide it.
             printLog("hook error scheduleResultTo:" + e.getMessage());
         }
+        registerModuleInstance();
     }
 
     /** @return true when a usable broadcastIntentLocked hook was installed. */
-    protected boolean startHookBroadcastIntentLocked() {
+    private boolean startHookBroadcastIntentLocked() {
         Method targetMethod = null;
         int intent_args_index = 0;
         int appOp_args_index = 0;
@@ -179,7 +180,7 @@ public class BroadcastFix extends XposedModule {
         return false;
     }
 
-    protected void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method) {
+    private void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method) {
         printLog("Android API: " + Build.VERSION.SDK_INT);
         printLog("appOp_args_index: " + appOp_args_index);
         printLog("intent_args_index: " + intent_args_index);
@@ -333,7 +334,7 @@ public class BroadcastFix extends XposedModule {
         return null;
     }
 
-    protected void startHookBroadcastIntentHighLevel() {
+    private void startHookBroadcastIntentHighLevel() {
         String[] classNames = {
                 "com.android.server.am.ActivityManagerService",
                 "com.android.server.am.BroadcastController"
@@ -449,7 +450,7 @@ public class BroadcastFix extends XposedModule {
     }
 
     @SuppressLint({"MissingPermission", "NotificationPermission"})
-    protected void startHookScheduleResultTo() {
+    private void startHookScheduleResultTo() {
         // This code is injected into system_server, so notification permission is determined by
         // that host process rather than this module APK. Keep the runtime SecurityException guard
         // below for OEM implementations that apply additional notification restrictions.

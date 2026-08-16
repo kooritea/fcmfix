@@ -115,8 +115,18 @@ public abstract class XposedModule {
 
     protected XposedModule(final ClassLoader classLoader) {
         this.classLoader = classLoader;
+    }
+
+    /**
+     * Registers a fully initialized module. Subclasses call this as their final constructor step so
+     * config callbacks can never observe partially initialized hook state.
+     */
+    protected final void registerModuleInstance() {
         final boolean first;
         synchronized (instances) {
+            if (instances.contains(this)) {
+                return;
+            }
             instances.add(this);
             first = instances.size() == 1;
         }

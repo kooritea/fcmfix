@@ -53,6 +53,7 @@ public class OplusProxyFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error isGmsApp:" + e.getMessage());
         }
+        registerModuleInstance();
     }
 
     private void startHookOplusProxyBroadcast() throws Exception {
