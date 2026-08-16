@@ -625,7 +625,7 @@ public class MainActivity extends AppCompatActivity {
                 content, popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
-        popup.setElevation(12 * getResources().getDisplayMetrics().density);
+        popup.setElevation(0f);
         popup.setAnimationStyle(R.style.Animation_Fcmself_FabMenu);
         popup.setClippingEnabled(true);
 
