@@ -80,7 +80,7 @@
             android:text="@string/app_name"
             android:textAppearance="?attr/textAppearanceTitleSmall"
             android:textColor="?attr/colorOnSurface"
-            android:textStyle="bold" />
+            android:textStyle="normal" />
     </LinearLayout>
 
     <LinearLayout
@@ -214,7 +214,7 @@
                     android:stateListAnimator="@null"
                     android:translationZ="0dp"
                     app:cardElevation="0dp"
-                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.DockStart"
                     app:strokeWidth="0dp">
 
                     <LinearLayout
@@ -315,7 +315,8 @@
                     app:elevation="0dp"
                     app:fabCustomSize="48dp"
                     app:maxImageSize="24dp"
-                    app:pressedTranslationZ="0dp" />
+                    app:pressedTranslationZ="0dp"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.DockEnd" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
