@@ -707,16 +707,8 @@ public class MainActivity extends AppCompatActivity {
         MaterialCardView labelContainer = row.findViewById(R.id.menu_label_container);
         ImageView symbol = row.findViewById(R.id.menu_symbol);
         TextView label = row.findViewById(R.id.menu_label);
-        int container = resolveThemeColor(
-                checked
-                        ? com.google.android.material.R.attr.colorPrimaryContainer
-                        : com.google.android.material.R.attr.colorSurfaceContainerHigh,
-                checked ? fabConnectedContainer : colorSurfaceContainerHigh);
-        int content = resolveThemeColor(
-                checked
-                        ? com.google.android.material.R.attr.colorOnPrimaryContainer
-                        : com.google.android.material.R.attr.colorOnSurface,
-                checked ? fabConnectedContent : colorOnSurface);
+        int container = checked ? fabConnectedContainer : colorSurfaceContainerHigh;
+        int content = checked ? fabConnectedContent : colorOnSurface;
         // A toggle is one segmented row, so both halves use the same tonal pair.
         stateContainer.setCardBackgroundColor(container);
         labelContainer.setCardBackgroundColor(container);
@@ -746,12 +738,9 @@ public class MainActivity extends AppCompatActivity {
         MaterialCardView labelContainer = row.findViewById(R.id.menu_label_container);
         ImageView symbol = row.findViewById(R.id.menu_symbol);
         TextView label = row.findViewById(R.id.menu_label);
-        int container = resolveThemeColor(
-                com.google.android.material.R.attr.colorSecondaryContainer,
-                fabConnectedContainer);
-        int content = resolveThemeColor(
-                com.google.android.material.R.attr.colorOnSecondaryContainer,
-                fabConnectedContent);
+        // Actions share the exact same tonal pair as an enabled toggle.
+        int container = fabConnectedContainer;
+        int content = fabConnectedContent;
         stateContainer.setCardBackgroundColor(container);
         labelContainer.setCardBackgroundColor(container);
         symbol.setImageResource(iconRes);
@@ -1209,42 +1198,6 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private static boolean hasGenericPushComponent(ActivityInfo[] components) {
-        if (components == null) {
-            return false;
-        }
-        for (ActivityInfo component : components) {
-            if (component != null && FcmReceiverDetector.isGenericPushComponent(component.name)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean hasGenericPushComponent(ServiceInfo[] components) {
-        if (components == null) {
-            return false;
-        }
-        for (ServiceInfo component : components) {
-            if (component != null && FcmReceiverDetector.isGenericPushComponent(component.name)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean requestsC2dmReceivePermission(String[] permissions) {
-        if (permissions == null) {
-            return false;
-        }
-        for (String permission : permissions) {
-            if ("com.google.android.c2dm.permission.RECEIVE".equals(permission)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static List<AppInfo> buildAppList(
             PackageManager pm, Set<String> allowListSet) {
         List<AppInfo> allow = new ArrayList<>();
@@ -1257,7 +1210,6 @@ public class MainActivity extends AppCompatActivity {
             packages = pm.getInstalledPackages(
                     PackageManager.GET_RECEIVERS
                             | PackageManager.GET_SERVICES
-                            | PackageManager.GET_PERMISSIONS
                             | PackageManager.MATCH_DISABLED_COMPONENTS);
         } catch (Throwable t) {
             Log.e(TAG, "getInstalledPackages: " + t);
@@ -1268,17 +1220,11 @@ public class MainActivity extends AppCompatActivity {
             if (packageInfo.applicationInfo == null) {
                 continue;
             }
-            // Strong evidence is sufficient by itself. Generic PushService/Receiver names are only
-            // accepted when corroborated by the C2DM receive permission; permission-only matches
-            // remain rejected because libraries can leave stale declarations behind.
-            boolean genericPushWithPermission = requestsC2dmReceivePermission(
-                    packageInfo.requestedPermissions)
-                    && (hasGenericPushComponent(packageInfo.receivers)
-                    || hasGenericPushComponent(packageInfo.services));
+            // Accept only strong evidence: a matching manifest action or an explicit
+            // Firebase/GCM component name. Generic push names and permission-only hints are ignored.
             boolean hasFcm = packagesResolvedForFcm.contains(packageInfo.packageName)
                     || hasFcmComponent(packageInfo.receivers)
-                    || hasFcmComponent(packageInfo.services)
-                    || genericPushWithPermission;
+                    || hasFcmComponent(packageInfo.services);
 
             String label;
             try {

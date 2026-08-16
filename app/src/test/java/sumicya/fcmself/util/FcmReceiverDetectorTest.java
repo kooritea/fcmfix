@@ -55,18 +55,9 @@ public class FcmReceiverDetectorTest {
     }
 
     @Test
-    public void detectsGenericPushCandidatesOnlyAsWeakEvidence() {
-        assertTrue(FcmReceiverDetector.isGenericPushComponent("example.PushService"));
-        assertTrue(FcmReceiverDetector.isGenericPushComponent("example.MessagePushReceiver"));
-        assertTrue(FcmReceiverDetector.isGenericPushComponent("example.MessagingService"));
-        assertFalse(FcmReceiverDetector.isGenericPushComponent("example.BootReceiver"));
-        assertFalse(FcmReceiverDetector.isGenericPushComponent("example.PushActivity"));
-    }
-
-    @Test
     public void handlesMissingAndUnrelatedNames() {
         assertFalse(FcmReceiverDetector.isFcmComponent(null));
         assertFalse(FcmReceiverDetector.isFcmComponent("example.push.BootReceiver"));
-        assertFalse(FcmReceiverDetector.isGenericPushComponent(null));
+        assertFalse(FcmReceiverDetector.isFcmComponent("example.push.PushService"));
     }
 }
