@@ -101,7 +101,7 @@
                 android:contentDescription="@string/search_apps"
                 android:padding="6dp"
                 android:src="@drawable/ic_search"
-                android:tint="?attr/colorOnSurfaceVariant" />
+                app:tint="?attr/colorOnSurfaceVariant" />
         </FrameLayout>
 
         <LinearLayout

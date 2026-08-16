@@ -753,7 +753,7 @@ public class MainActivity extends AppCompatActivity {
         if (show) {
             searchInput.requestFocus();
             if (keyboard != null) {
-                keyboard.showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT);
+                keyboard.showSoftInput(searchInput, 0);
             }
         } else {
             searchInput.setText("");
