@@ -16,6 +16,23 @@ System Server 和其他已启用作用域。灰色状态表示服务或配置尚
 模块作用域含 `system_server`（无法干净地软重载），因此 `module.prop` 关闭了自动热重载
 （`autoHotReload=false`）：应用内改配置会通过配置广播即时生效，只有升级 APK 后才需要重启。
 
+## 代码结构
+
+界面进程与被 Hook 的进程共用一份「协议」常量，其余代码按职责分层，`MainActivity` 只负责
+把这些组件接起来：
+
+| 包 | 职责 | 依赖框架 |
+| --- | --- | --- |
+| `core` | `Contract`：跨进程广播 Action、权限、远程配置键、健康检查 extra | 无 |
+| `model` | `AppInfo`、`FilterMode`、`AppFilter`（搜索/筛选）、`AppCatalogOrder`（分组排序） | 无 |
+| `data` | `AppCatalog`（应用扫描与进程级缓存）、`IconLoader`（有界图标缓存）、`ConfigStore`（允许列表与开关，写穿远程配置）、`XposedServiceBridge`（框架服务绑定）、`PackageChangeWatcher` | Android |
+| `health` | `HookHealthReport`（纯文本渲染）、`HookHealthMonitor`（nonce 广播问答） | 部分 |
+| `ui` | `AppTheme`（M3E 取色）、`AppListAdapter`、`BottomDock`（筛选段 + 搜索 + FAB）、`FabMenuController`、`FeedbackBar`、`WindowChrome` | Android |
+| `xposed` | 各 Hook 实现，运行在 `system_server` 等被注入进程中 | Xposed |
+
+`core`、`model` 与 `HookHealthReport` 不引用任何 Android 类，因此排序、筛选、状态标记和
+健康面板文案都由 JVM 单元测试覆盖（`./gradlew testDebugUnitTest`）。
+
 ## 本地编译
 
 ### 环境要求

@@ -18,6 +18,7 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import sumicya.fcmself.core.Contract;
 import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
@@ -43,11 +44,11 @@ public abstract class XposedModule {
     protected final ClassLoader classLoader;
     public static volatile Set<String> allowList = null;
     static final String TAG = "fcmself";
-    private static final String UPDATE_CONFIG_ACTION = "sumicya.fcmself.update.config";
-    private static final String HEALTH_REQUEST_ACTION = "sumicya.fcmself.health.request";
-    private static final String HEALTH_RESPONSE_ACTION = "sumicya.fcmself.health.response";
-    private static final String UPDATE_CONFIG_PERMISSION =
-            "sumicya.fcmself.permission.UPDATE_CONFIG";
+    // Wire protocol shared with the app process; see sumicya.fcmself.core.Contract.
+    private static final String UPDATE_CONFIG_ACTION = Contract.UPDATE_CONFIG_ACTION;
+    private static final String HEALTH_REQUEST_ACTION = Contract.HEALTH_REQUEST_ACTION;
+    private static final String HEALTH_RESPONSE_ACTION = Contract.HEALTH_RESPONSE_ACTION;
+    private static final String UPDATE_CONFIG_PERMISSION = Contract.UPDATE_CONFIG_PERMISSION;
     /** Atomically published so hook threads never observe a mixture of two config versions. */
     private static volatile ConfigSnapshot configSnapshot = ConfigSnapshot.EMPTY;
 
@@ -76,11 +77,11 @@ public abstract class XposedModule {
 
         boolean getBoolean(String key, boolean defaultValue) {
             switch (key) {
-                case "disableAutoCleanNotification":
+                case Contract.KEY_DISABLE_AUTO_CLEAN:
                     return disableAutoCleanNotification;
-                case "includeIceBoxDisableApp":
+                case Contract.KEY_INCLUDE_ICEBOX:
                     return includeIceBoxDisableApp;
-                case "noResponseNotification":
+                case Contract.KEY_NO_RESPONSE_NOTIFICATION:
                     return noResponseNotification;
                 default:
                     return defaultValue;
@@ -317,7 +318,7 @@ public abstract class XposedModule {
                 Log.d(TAG, msg);
                 if (context != null) {
                     try {
-                        Intent log = new Intent("sumicya.fcmself.log");
+                        Intent log = new Intent(Contract.LOG_ACTION);
                         // Only GMS hosts the diagnostics receiver. Restrict resolution so package
                         // names in diagnostic messages are not exposed to unrelated receivers.
                         log.setPackage("com.google.android.gms");
@@ -416,13 +417,14 @@ public abstract class XposedModule {
 
     private static void loadConfigOnce() {
         try {
-            SharedPreferences remotePreferences = XposedBridge.getRemotePreferences("config");
+            SharedPreferences remotePreferences =
+                    XposedBridge.getRemotePreferences(Contract.PREFERENCES_NAME);
             if (remotePreferences == null) {
                 throw new IllegalStateException("remotePreferences 不可用");
             }
 
-            Set<String> loaded = remotePreferences.getStringSet("allowList", null);
-            boolean initialized = remotePreferences.getBoolean("init", false);
+            Set<String> loaded = remotePreferences.getStringSet(Contract.KEY_ALLOW_LIST, null);
+            boolean initialized = remotePreferences.getBoolean(Contract.KEY_INIT, false);
             ConfigSnapshot currentSnapshot = configSnapshot;
             Set<String> currentAllowList = currentSnapshot.ready
                     ? currentSnapshot.allowList
@@ -437,11 +439,11 @@ public abstract class XposedModule {
                 newAllowList = currentAllowList;
             }
             boolean disableAutoClean = remotePreferences.getBoolean(
-                    "disableAutoCleanNotification", false);
+                    Contract.KEY_DISABLE_AUTO_CLEAN, false);
             boolean includeIceBox = remotePreferences.getBoolean(
-                    "includeIceBoxDisableApp", false);
+                    Contract.KEY_INCLUDE_ICEBOX, false);
             boolean noResponseNotification = remotePreferences.getBoolean(
-                    "noResponseNotification", false);
+                    Contract.KEY_NO_RESPONSE_NOTIFICATION, false);
 
             // Publish one immutable snapshot only after every preference read succeeds. A hook
             // therefore sees either the complete old config or the complete new config, never a
@@ -493,18 +495,18 @@ public abstract class XposedModule {
             }
         }
         Intent response = new Intent(HEALTH_RESPONSE_ACTION);
-        response.setPackage("sumicya.fcmself");
-        response.putExtra("nonce", nonce);
-        response.putExtra("process", getSelfPackageName());
-        response.putExtra("bootComplete", isBootComplete);
-        response.putExtra("configReady", configSnapshot.ready);
-        response.putStringArrayListExtra("modules", modules);
+        response.setPackage(Contract.PACKAGE_SELF);
+        response.putExtra(Contract.EXTRA_NONCE, nonce);
+        response.putExtra(Contract.EXTRA_PROCESS, getSelfPackageName());
+        response.putExtra(Contract.EXTRA_BOOT_COMPLETE, isBootComplete);
+        response.putExtra(Contract.EXTRA_CONFIG_READY, configSnapshot.ready);
+        response.putStringArrayListExtra(Contract.EXTRA_MODULES, modules);
         ArrayList<String> details = new ArrayList<>();
         for (Map.Entry<String, String> entry : HEALTH_DETAILS.entrySet()) {
-            details.add(entry.getKey() + "\u0000" + entry.getValue());
+            details.add(entry.getKey() + Contract.DETAIL_SEPARATOR + entry.getValue());
         }
         Collections.sort(details);
-        response.putStringArrayListExtra("details", details);
+        response.putStringArrayListExtra(Contract.EXTRA_DETAILS, details);
         try {
             context.sendBroadcast(response);
         } catch (Throwable e) {
@@ -526,7 +528,7 @@ public abstract class XposedModule {
                 if (UPDATE_CONFIG_ACTION.equals(action)) {
                     onUpdateConfig();
                 } else if (HEALTH_REQUEST_ACTION.equals(action)) {
-                    sendHealthResponse(intent.getStringExtra("nonce"));
+                    sendHealthResponse(intent.getStringExtra(Contract.EXTRA_NONCE));
                 }
             }
         };
