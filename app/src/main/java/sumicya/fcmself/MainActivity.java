@@ -1907,8 +1907,11 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(Intent.ACTION_PACKAGE_REPLACED);
         filter.addDataScheme("package");
         try {
+            // These are protected system broadcasts (only the OS can send them), so the receiver
+            // must not be exported: RECEIVER_NOT_EXPORTED narrows attack surface and still receives
+            // every system package event. Exporting it would let no legitimate extra sender in.
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(packageChangeReceiver, filter, Context.RECEIVER_EXPORTED);
+                registerReceiver(packageChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
             } else {
                 registerReceiver(packageChangeReceiver, filter);
             }

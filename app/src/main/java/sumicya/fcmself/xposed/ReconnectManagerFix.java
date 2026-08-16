@@ -375,6 +375,12 @@ public class ReconnectManagerFix extends XposedModule {
             if (!"sumicya.fcmself.log".equals(intent.getAction())) {
                 return;
             }
+            if (GcmChimeraServiceLogMethodName == null) {
+                // The (String, Object[]) log method was never resolved on this GMS build; skip the
+                // reflective call instead of throwing an NPE for every diagnostic broadcast.
+                XposedBridge.log("[fcmfix] " + intent.getStringExtra("text"));
+                return;
+            }
             try {
                 XposedHelpers.callStaticMethod(GcmChimeraService, GcmChimeraServiceLogMethodName,
                         new Class<?>[]{String.class, Object[].class},
