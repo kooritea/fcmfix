@@ -37,6 +37,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -161,6 +162,9 @@ public class MainActivity extends AppCompatActivity {
     private int colorSurfaceContainerHigh;
     private int fabConnectedContainer;
     private int fabConnectedContent;
+    private int translucentPrimaryContainer;
+    private int primaryShadowColor;
+    private float primaryElevation;
     /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
     private ColorStateList tintError;
     private ColorStateList tintDisconnected;
@@ -326,8 +330,9 @@ public class MainActivity extends AppCompatActivity {
         }
         // Keep the main action visually stable; connection diagnostics are conveyed through the
         // accessible label rather than changing the button palette underneath the user's finger.
-        mainFab.setBackgroundTintList(ColorStateList.valueOf(fabConnectedContainer));
+        mainFab.setBackgroundTintList(ColorStateList.valueOf(translucentPrimaryContainer));
         mainFab.setImageTintList(ColorStateList.valueOf(fabConnectedContent));
+        applyPrimaryShadow(mainFab, true);
         int description;
         if (xposedService == null) {
             description = R.string.fab_status_disconnected;
@@ -389,6 +394,22 @@ public class MainActivity extends AppCompatActivity {
             return tv.data;
         }
         return fallback;
+    }
+
+    private void applyPrimarySurface(
+            MaterialCardView card, boolean active, int inactiveContainer) {
+        card.setCardBackgroundColor(active ? translucentPrimaryContainer : inactiveContainer);
+        card.setCardElevation(active ? primaryElevation : 0f);
+        int shadow = active ? primaryShadowColor : Color.TRANSPARENT;
+        card.setOutlineAmbientShadowColor(shadow);
+        card.setOutlineSpotShadowColor(shadow);
+    }
+
+    private void applyPrimaryShadow(View view, boolean active) {
+        view.setElevation(active ? primaryElevation : 0f);
+        int shadow = active ? primaryShadowColor : Color.TRANSPARENT;
+        view.setOutlineAmbientShadowColor(shadow);
+        view.setOutlineSpotShadowColor(shadow);
     }
 
     private void applyHeaderScrim() {
@@ -594,9 +615,8 @@ public class MainActivity extends AppCompatActivity {
         int selectedIndex = filterMode.ordinal();
         for (int i = 0; i < filterCards.length; i++) {
             boolean selected = i == selectedIndex;
-            int container = selected ? fabConnectedContainer : colorSurfaceContainerHigh;
             int content = selected ? fabConnectedContent : colorOnSurfaceVariant;
-            filterCards[i].setCardBackgroundColor(container);
+            applyPrimarySurface(filterCards[i], selected, colorSurfaceContainerHigh);
             filterCards[i].setSelected(selected);
             filterLabels[i].setTextColor(content);
             if (counts[i] != null) {
@@ -674,25 +694,19 @@ public class MainActivity extends AppCompatActivity {
         int last = items.getChildCount() - 1;
         float radius = 16 * getResources().getDisplayMetrics().density;
         for (int i = 0; i <= last; i++) {
-            View row = items.getChildAt(i);
-            MaterialCardView state = row.findViewById(R.id.menu_state_container);
-            MaterialCardView label = row.findViewById(R.id.menu_label_container);
-            ShapeAppearanceModel.Builder stateShape = state.getShapeAppearanceModel()
-                    .toBuilder()
-                    .setAllCornerSizes(0f);
-            ShapeAppearanceModel.Builder labelShape = label.getShapeAppearanceModel()
+            MaterialCardView row = (MaterialCardView) items.getChildAt(i);
+            ShapeAppearanceModel.Builder shape = row.getShapeAppearanceModel()
                     .toBuilder()
                     .setAllCornerSizes(0f);
             if (i == 0) {
-                stateShape.setTopLeftCornerSize(radius);
-                labelShape.setTopRightCornerSize(radius);
+                shape.setTopLeftCornerSize(radius);
+                shape.setTopRightCornerSize(radius);
             }
             if (i == last) {
-                stateShape.setBottomLeftCornerSize(radius);
-                labelShape.setBottomRightCornerSize(radius);
+                shape.setBottomLeftCornerSize(radius);
+                shape.setBottomRightCornerSize(radius);
             }
-            state.setShapeAppearanceModel(stateShape.build());
-            label.setShapeAppearanceModel(labelShape.build());
+            row.setShapeAppearanceModel(shape.build());
         }
     }
 
@@ -704,15 +718,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void bindToggleFabMenuState(View row, boolean checked) {
+        MaterialCardView rowCard = (MaterialCardView) row;
         MaterialCardView stateContainer = row.findViewById(R.id.menu_state_container);
         MaterialCardView labelContainer = row.findViewById(R.id.menu_label_container);
         ImageView symbol = row.findViewById(R.id.menu_symbol);
         TextView label = row.findViewById(R.id.menu_label);
-        int container = checked ? fabConnectedContainer : colorSurfaceContainerHigh;
         int content = checked ? fabConnectedContent : colorOnSurface;
-        // A toggle is one segmented row, so both halves use the same tonal pair.
-        stateContainer.setCardBackgroundColor(container);
-        labelContainer.setCardBackgroundColor(container);
+        applyPrimarySurface(rowCard, checked, colorSurfaceContainerHigh);
+        // Child segments stay transparent; the row owns one continuous tonal surface and shadow.
+        stateContainer.setCardBackgroundColor(Color.TRANSPARENT);
+        labelContainer.setCardBackgroundColor(Color.TRANSPARENT);
         symbol.setImageResource(checked
                 ? R.drawable.ic_status_check
                 : R.drawable.ic_status_close);
@@ -735,15 +750,16 @@ public class MainActivity extends AppCompatActivity {
     private void addActionFabMenuItem(
             LinearLayout parent, int labelRes, int iconRes, View.OnClickListener listener) {
         View row = inflateFabMenuItem(parent, labelRes);
+        MaterialCardView rowCard = (MaterialCardView) row;
         MaterialCardView stateContainer = row.findViewById(R.id.menu_state_container);
         MaterialCardView labelContainer = row.findViewById(R.id.menu_label_container);
         ImageView symbol = row.findViewById(R.id.menu_symbol);
         TextView label = row.findViewById(R.id.menu_label);
-        // Actions share the exact same tonal pair as an enabled toggle.
-        int container = fabConnectedContainer;
+        // Actions share the exact same translucent primary surface as an enabled toggle.
         int content = fabConnectedContent;
-        stateContainer.setCardBackgroundColor(container);
-        labelContainer.setCardBackgroundColor(container);
+        applyPrimarySurface(rowCard, true, colorSurfaceContainerHigh);
+        stateContainer.setCardBackgroundColor(Color.TRANSPARENT);
+        labelContainer.setCardBackgroundColor(Color.TRANSPARENT);
         symbol.setImageResource(iconRes);
         symbol.setImageTintList(ColorStateList.valueOf(content));
         label.setTextColor(content);
@@ -1089,11 +1105,11 @@ public class MainActivity extends AppCompatActivity {
 
         private void bindCardAppearance(ViewHolder holder, AppInfo appInfo) {
             if (appInfo.isAllow) {
-                holder.appView.setCardBackgroundColor(fabConnectedContainer);
+                applyPrimarySurface(holder.appView, true, colorSurfaceContainerLow);
                 holder.name.setTextColor(fabConnectedContent);
                 holder.appPkg.setTextColor(fabConnectedContent);
             } else {
-                holder.appView.setCardBackgroundColor(colorSurfaceContainerLow);
+                applyPrimarySurface(holder.appView, false, colorSurfaceContainerLow);
                 holder.name.setTextColor(colorOnSurface);
                 holder.appPkg.setTextColor(colorOnSurfaceVariant);
             }
@@ -1495,6 +1511,9 @@ public class MainActivity extends AppCompatActivity {
                 com.google.android.material.R.attr.colorPrimaryContainer, fallbackPrimary);
         fabConnectedContent = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnPrimaryContainer, Color.WHITE);
+        translucentPrimaryContainer = ColorUtils.setAlphaComponent(fabConnectedContainer, 184);
+        primaryShadowColor = ColorUtils.setAlphaComponent(fabConnectedContainer, 92);
+        primaryElevation = 4 * getResources().getDisplayMetrics().density;
         tintError = ColorStateList.valueOf(colorError);
         tintDisconnected = ColorStateList.valueOf(colorOnSurfaceVariant);
         tintOnPrimaryContainer = ColorStateList.valueOf(fabConnectedContent);
@@ -1533,6 +1552,7 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new GridLayoutManager(this, spanCount));
         recyclerView.setHasFixedSize(true);
         recyclerView.setItemViewCacheSize(32);
+        recyclerView.setClipChildren(false);
         recyclerView.setClipToPadding(false);
         // Prefetch a row ahead while flinging
         RecyclerView.RecycledViewPool pool = new RecyclerView.RecycledViewPool();
