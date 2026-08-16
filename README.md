@@ -15,3 +15,73 @@ System Server 和其他已启用作用域。灰色状态表示服务或配置尚
 
 模块作用域含 `system_server`（无法干净地软重载），因此 `module.prop` 关闭了自动热重载
 （`autoHotReload=false`）：应用内改配置会通过配置广播即时生效，只有升级 APK 后才需要重启。
+
+## 本地编译
+
+### 环境要求
+
+- 64 位 Linux、macOS 或 Windows
+- **JDK 21**（推荐 [Eclipse Temurin 21](https://adoptium.net/temurin/releases/?version=21)）
+- Android SDK Platform 37
+- Android SDK Build Tools 37.0.0
+- 网络能够访问 Google Maven、Maven Central、Xposed API 仓库和 Gradle 分发站点
+
+项目已经包含 Gradle Wrapper，不需要单独安装 Gradle。请勿使用系统 Gradle 代替
+`./gradlew`。
+
+### Linux / macOS 命令行
+
+先安装 JDK 21 并确保 `java -version` 显示 21。若系统中有多个 JDK，需要先选择
+正确版本，例如：
+
+```bash
+export JAVA_HOME=/path/to/jdk-21
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
+然后在项目根目录执行：
+
+```bash
+./scripts/setup-android-sdk.sh
+./scripts/check-build-environment.sh
+./gradlew testDebugUnitTest assembleDebug
+```
+
+初始化脚本会将 Android 命令行工具和所需 SDK 组件安装到标准用户目录（Linux 为
+`~/Android/Sdk`，macOS 为 `~/Library/Android/sdk`），接受 Android SDK 许可证，并生成
+不纳入版本控制的 `local.properties`。也可以提前通过 `ANDROID_SDK_ROOT` 指定已有 SDK：
+
+```bash
+ANDROID_SDK_ROOT=/path/to/android-sdk ./scripts/setup-android-sdk.sh
+```
+
+完整执行与 CI 相同的检查和 release 构建：
+
+```bash
+./gradlew testDebugUnitTest assembleRelease lint --stacktrace
+```
+
+常用产物位置：
+
+- Debug APK：`app/build/outputs/apk/debug/app-debug.apk`
+- Release APK：`app/build/outputs/apk/release/app-release.apk`
+- Lint 报告：`app/build/reports/lint-results-*.html`
+
+Release 构建默认未配置发布签名。如需直接安装或分发，请使用自己的密钥签名，且不要将
+密钥或密码提交到仓库。
+
+### Android Studio / Windows
+
+1. 使用支持 AGP 9.3 的新版 Android Studio 打开项目根目录。
+2. 在 **Settings > Build, Execution, Deployment > Build Tools > Gradle** 中将 Gradle JDK
+   设为 JDK 21。
+3. 在 **SDK Manager** 中安装 Android API 37、Build Tools 37.0.0 和 Platform Tools，并
+   接受许可证。
+4. 等待 Gradle Sync 完成后选择 **Build > Build APK(s)**；也可在 PowerShell 中执行：
+
+```powershell
+.\gradlew.bat testDebugUnitTest assembleDebug
+```
+
+若首次同步失败，先检查代理是否允许访问 `google()`、Maven Central、
+`https://api.xposed.info/` 和 `https://services.gradle.org/`。
