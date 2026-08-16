@@ -700,6 +700,21 @@ public class MainActivity extends AppCompatActivity {
         updateFilterTabStyle();
     }
 
+    private void updateFeedbackWidth(String text) {
+        float density = getResources().getDisplayMetrics().density;
+        int desiredWidth = Math.round(feedbackText.getPaint().measureText(text))
+                + Math.round(112 * density);
+        int minimumWidth = Math.round(160 * density);
+        int maximumWidth = Math.round(280 * density);
+        desiredWidth = Math.max(minimumWidth, Math.min(desiredWidth, maximumWidth));
+
+        ViewGroup.LayoutParams params = feedbackContainer.getLayoutParams();
+        if (params.width != desiredWidth) {
+            params.width = desiredWidth;
+            feedbackContainer.setLayoutParams(params);
+        }
+    }
+
     private void showFeedback(
             String text,
             int iconRes,
@@ -718,6 +733,7 @@ public class MainActivity extends AppCompatActivity {
         feedbackIcon.setImageTintList(ColorStateList.valueOf(contentColor));
         feedbackText.setText(text);
         feedbackText.setTextColor(contentColor);
+        updateFeedbackWidth(text);
         feedbackAction.setTextColor(contentColor);
         feedbackAction.setEnabled(undoAction != null);
         // Keep an equal-width trailing rail even without Undo, so the message remains truly centred.
@@ -842,8 +858,8 @@ public class MainActivity extends AppCompatActivity {
                 ? getString(R.string.search_hint)
                 : query;
         int desiredWidth = Math.round(searchInput.getPaint().measureText(
-                measuredText.toString())) + Math.round(72 * density);
-        int minimumWidth = Math.round(200 * density);
+                measuredText.toString())) + Math.round(40 * density);
+        int minimumWidth = Math.round(144 * density);
         int maximumWidth = Math.round(280 * density);
         desiredWidth = Math.max(minimumWidth, Math.min(desiredWidth, maximumWidth));
 
@@ -1045,6 +1061,9 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout items = content.findViewById(R.id.fab_menu_items);
         int horizontalMargin = Math.round(8 * getResources().getDisplayMetrics().density);
         int popupWidth = calculateFabMenuWidth(inflater, items, horizontalMargin);
+        int expandedPopupWidth = Math.min(
+                Math.round(280 * getResources().getDisplayMetrics().density),
+                getResources().getDisplayMetrics().widthPixels - horizontalMargin * 2);
         PopupWindow popup = new PopupWindow(
                 content, popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -1099,7 +1118,11 @@ public class MainActivity extends AppCompatActivity {
                 healthNonce = null;
             }
             applyFabMenuEdgeShapes(items);
-            positionFabPopup(popup, content, popupWidth, horizontalMargin);
+            positionFabPopup(
+                    popup,
+                    content,
+                    expand ? expandedPopupWidth : popupWidth,
+                    horizontalMargin);
             if (expand) {
                 healthPanel.post(() -> menuScroll.smoothScrollTo(0, healthPanel.getBottom()));
             }
