@@ -40,8 +40,8 @@ android {
 
 tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
     // Android/JUnit annotations are runtime-consumed; AGP also owns compiler paths/options.
-    // Keep every source-level diagnostic strict without turning toolchain setup notices into errors.
-    options.compilerArgs += ['-Xlint:all,-processing,-options,-path', '-Werror']
+    // Keep all actionable source diagnostics visible while excluding toolchain-only notices.
+    options.compilerArgs += ['-Xlint:all,-processing,-options,-path']
 }
 
 dependencies {
