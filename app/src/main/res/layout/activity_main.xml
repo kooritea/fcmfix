@@ -94,14 +94,14 @@
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/search_container"
-            android:layout_width="280dp"
+            android:layout_width="232dp"
             android:layout_height="48dp"
-            android:layout_marginBottom="4dp"
+            android:layout_gravity="end"
             android:visibility="gone"
             app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
             app:cardElevation="0dp"
             app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.Search"
-            app:strokeWidth="1dp">
+            app:strokeWidth="0dp">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/search_input"
@@ -128,7 +128,7 @@
             app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
             app:cardElevation="0dp"
             app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.BottomDock"
-            app:strokeWidth="1dp">
+            app:strokeWidth="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"

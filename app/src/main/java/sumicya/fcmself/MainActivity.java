@@ -152,6 +152,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             };
     private FloatingActionButton mainFab;
+    private Snackbar activeToggleSnackbar;
     private TextView allStatsView;
     private TextView fcmStatsView;
     private TextView statsView;
@@ -558,17 +559,34 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupGlassSurfaces() {
+        // One shared MD3 background tone creates the glass effect; child controls remain borderless.
         int glassColor = ColorUtils.setAlphaComponent(colorSurfaceContainerHigh, 220);
-        int edgeColor = ColorUtils.setAlphaComponent(colorOnSurfaceVariant, 56);
-        int strokeWidth = Math.max(1, Math.round(getResources().getDisplayMetrics().density));
         bottomDock.setCardBackgroundColor(glassColor);
-        bottomDock.setStrokeColor(edgeColor);
-        bottomDock.setStrokeWidth(strokeWidth);
+        bottomDock.setStrokeWidth(0);
         searchContainer.setCardBackgroundColor(glassColor);
-        searchContainer.setStrokeColor(edgeColor);
-        searchContainer.setStrokeWidth(strokeWidth);
+        searchContainer.setStrokeWidth(0);
         searchInput.setTextColor(colorOnSurface);
         searchInput.setHintTextColor(colorOnSurfaceVariant);
+        updateDockShape(false);
+    }
+
+    private void updateDockShape(boolean searchVisible) {
+        float dockRadius = 28 * getResources().getDisplayMetrics().density;
+        ShapeAppearanceModel.Builder dockShape = bottomDock.getShapeAppearanceModel()
+                .toBuilder()
+                .setAllCornerSizes(dockRadius);
+        if (searchVisible) {
+            dockShape.setTopRightCornerSize(0f);
+        }
+        bottomDock.setShapeAppearanceModel(dockShape.build());
+
+        float searchRadius = 20 * getResources().getDisplayMetrics().density;
+        ShapeAppearanceModel.Builder searchShape = searchContainer.getShapeAppearanceModel()
+                .toBuilder()
+                .setAllCornerSizes(0f)
+                .setTopLeftCornerSize(searchRadius)
+                .setTopRightCornerSize(searchRadius);
+        searchContainer.setShapeAppearanceModel(searchShape.build());
     }
 
     private void applyHeaderScrim() {
@@ -628,6 +646,20 @@ public class MainActivity extends AppCompatActivity {
     private Snackbar createExpressiveSnackbar(
             String text, int iconRes, int containerColor, int contentColor, int duration) {
         Snackbar snackbar = Snackbar.make(recyclerView, text, duration);
+        configureExpressiveSnackbar(
+                snackbar, text, iconRes, containerColor, contentColor, duration);
+        return snackbar;
+    }
+
+    private void configureExpressiveSnackbar(
+            Snackbar snackbar,
+            String text,
+            int iconRes,
+            int containerColor,
+            int contentColor,
+            int duration) {
+        snackbar.setText(text);
+        snackbar.setDuration(duration);
         if (mainFab != null) {
             // Anchor above the FAB instead of letting CoordinatorLayout translate the FAB while the
             // Snackbar animates. This removes the two animations fighting over the same space.
@@ -667,7 +699,6 @@ public class MainActivity extends AppCompatActivity {
         }
         snackbar.setActionTextColor(contentColor);
         snackbar.setTextMaxLines(2);
-        return snackbar;
     }
 
     /**
@@ -681,7 +712,12 @@ public class MainActivity extends AppCompatActivity {
         final String name = appInfo.name;
         String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
 
-        Snackbar snackbar = createExpressiveSnackbar(
+        if (activeToggleSnackbar == null || !activeToggleSnackbar.isShownOrQueued()) {
+            activeToggleSnackbar = Snackbar.make(recyclerView, text, 4_000);
+        }
+        Snackbar snackbar = activeToggleSnackbar;
+        configureExpressiveSnackbar(
+                snackbar,
                 text,
                 nowAllow ? R.drawable.ic_status_check : R.drawable.ic_status_close,
                 nowAllow ? translucentPrimaryContainer : colorErrorContainer,
@@ -779,7 +815,9 @@ public class MainActivity extends AppCompatActivity {
         float offset = 12 * getResources().getDisplayMetrics().density;
         if (!searchExpanded) {
             searchExpanded = true;
+            updateDockShape(true);
             searchContainer.setVisibility(View.VISIBLE);
+            searchContainer.setPivotY(48 * getResources().getDisplayMetrics().density);
             searchContainer.setAlpha(0f);
             searchContainer.setScaleX(0.94f);
             searchContainer.setScaleY(0.82f);
@@ -818,6 +856,7 @@ public class MainActivity extends AppCompatActivity {
                         searchContainer.setScaleX(1f);
                         searchContainer.setScaleY(1f);
                         searchContainer.setTranslationY(0f);
+                        updateDockShape(false);
                     })
                     .start();
         }
@@ -841,7 +880,19 @@ public class MainActivity extends AppCompatActivity {
         }
         filterMode = mode;
         updateFilterTabStyle();
+        animateSelection(filterCards[mode.ordinal()]);
         applyFilter();
+    }
+
+    private static void animateSelection(View view) {
+        view.animate().cancel();
+        view.setScaleX(0.94f);
+        view.setScaleY(0.94f);
+        view.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(180L)
+                .start();
     }
 
     private void updateFilterTabStyle() {
@@ -1309,6 +1360,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     notifyStatusChanged(position);
                 }
+                animateSelection(holder.appView);
                 updateStats();
                 showToggleFeedback(appInfo);
             });
@@ -1961,8 +2013,14 @@ public class MainActivity extends AppCompatActivity {
         mainFab.setOnClickListener(v -> {
             if (searchExpanded) {
                 toggleSearch();
+                MAIN_HANDLER.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        showFabMenu();
+                    }
+                }, 160L);
+            } else {
+                showFabMenu();
             }
-            showFabMenu();
         });
         refreshFabStatus();
 
@@ -2041,6 +2099,10 @@ public class MainActivity extends AppCompatActivity {
         healthStatusView = null;
         MAIN_HANDLER.removeCallbacks(applySearch);
         searchContainer.animate().cancel();
+        if (activeToggleSnackbar != null) {
+            activeToggleSnackbar.dismiss();
+            activeToggleSnackbar = null;
+        }
         super.onDestroy();
     }
 
