@@ -1,8 +1,6 @@
 package sumicya.fcmself.xposed;
 
 import android.annotation.SuppressLint;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -15,7 +13,6 @@ import android.os.SystemClock;
 import android.os.UserManager;
 import android.util.Log;
 
-import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 import sumicya.fcmself.core.Contract;
@@ -25,7 +22,6 @@ import sumicya.fcmself.libxposed.XposedHelpers;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,10 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-
-import static android.content.Context.NOTIFICATION_SERVICE;
 
 public abstract class XposedModule {
     private static volatile String selfPackageName = "UNKNOWN";
@@ -49,46 +42,6 @@ public abstract class XposedModule {
     private static final String HEALTH_REQUEST_ACTION = Contract.HEALTH_REQUEST_ACTION;
     private static final String HEALTH_RESPONSE_ACTION = Contract.HEALTH_RESPONSE_ACTION;
     private static final String UPDATE_CONFIG_PERMISSION = Contract.UPDATE_CONFIG_PERMISSION;
-    /** Atomically published so hook threads never observe a mixture of two config versions. */
-    private static volatile ConfigSnapshot configSnapshot = ConfigSnapshot.EMPTY;
-
-    private static final class ConfigSnapshot {
-        static final ConfigSnapshot EMPTY = new ConfigSnapshot(
-                Collections.emptySet(), false, false, false, false);
-
-        final Set<String> allowList;
-        final boolean disableAutoCleanNotification;
-        final boolean includeIceBoxDisableApp;
-        final boolean noResponseNotification;
-        final boolean ready;
-
-        ConfigSnapshot(
-                Set<String> allowList,
-                boolean disableAutoCleanNotification,
-                boolean includeIceBoxDisableApp,
-                boolean noResponseNotification,
-                boolean ready) {
-            this.allowList = allowList;
-            this.disableAutoCleanNotification = disableAutoCleanNotification;
-            this.includeIceBoxDisableApp = includeIceBoxDisableApp;
-            this.noResponseNotification = noResponseNotification;
-            this.ready = ready;
-        }
-
-        boolean getBoolean(String key, boolean defaultValue) {
-            switch (key) {
-                case Contract.KEY_DISABLE_AUTO_CLEAN:
-                    return disableAutoCleanNotification;
-                case Contract.KEY_INCLUDE_ICEBOX:
-                    return includeIceBoxDisableApp;
-                case Contract.KEY_NO_RESPONSE_NOTIFICATION:
-                    return noResponseNotification;
-                default:
-                    return defaultValue;
-            }
-        }
-    }
-
     /** Min interval between diagnostic broadcast logs (ms) — reduces IPC storm */
     private static final long DIAG_LOG_MIN_INTERVAL_MS = 200L;
     private static final AtomicLong lastDiagLogElapsed = new AtomicLong(0);
@@ -99,14 +52,13 @@ public abstract class XposedModule {
     /** True once callAllOnCanReadConfig() has run; dedupes the multiple context paths. */
     private static final AtomicBoolean configInitiated = new AtomicBoolean(false);
 
-    /**
-     * Monotonic notification ID shared by every fix. System.currentTimeMillis() overflows int in
-     * 2038 and two modules notifying in the same millisecond could collide.
-     */
-    private static final AtomicInteger NOTIFY_ID_SEQ = new AtomicInteger();
-
     @SuppressLint("StaticFieldLeak")
     protected static Context context = null;
+
+    /** Returns the captured module context, or null if not yet available. */
+    public static Context getModuleContext() {
+        return context;
+    }
     /** Written while hooks install; read by callAllOnCanReadConfig — both must be synchronized. */
     private static final ArrayList<XposedModule> instances = new ArrayList<>();
     private static volatile boolean isInitReceiver = false;
@@ -375,21 +327,17 @@ public abstract class XposedModule {
         if ("sumicya.fcmself".equals(packageName)) {
             return true;
         }
-        ConfigSnapshot snapshot = configSnapshot;
-        if (!snapshot.ready) {
+        if (!ConfigManager.get().isConfigReady()) {
             this.checkUserDeviceUnlockAndUpdateConfig();
-            snapshot = configSnapshot;
         }
-        return snapshot.ready && snapshot.allowList.contains(packageName);
+        return ConfigManager.get().isAllowed(packageName);
     }
 
     protected boolean getBooleanConfig(String key, boolean defaultValue) {
-        ConfigSnapshot snapshot = configSnapshot;
-        if (!snapshot.ready) {
+        if (!ConfigManager.get().isConfigReady()) {
             this.checkUserDeviceUnlockAndUpdateConfig();
-            snapshot = configSnapshot;
         }
-        return snapshot.ready ? snapshot.getBoolean(key, defaultValue) : defaultValue;
+        return ConfigManager.get().snapshot().getBoolean(key, defaultValue);
     }
 
     protected static void onUpdateConfig() {
@@ -423,43 +371,13 @@ public abstract class XposedModule {
                 throw new IllegalStateException("remotePreferences 不可用");
             }
 
-            Set<String> loaded = remotePreferences.getStringSet(Contract.KEY_ALLOW_LIST, null);
-            boolean initialized = remotePreferences.getBoolean(Contract.KEY_INIT, false);
-            ConfigSnapshot currentSnapshot = configSnapshot;
-            Set<String> currentAllowList = currentSnapshot.ready
-                    ? currentSnapshot.allowList
-                    : allowList;
-            Set<String> newAllowList;
-            if (loaded != null) {
-                newAllowList = Collections.unmodifiableSet(new HashSet<>(loaded));
-            } else if (initialized || currentAllowList == null) {
-                newAllowList = Collections.emptySet();
-            } else {
-                // An uninitialised/transiently unavailable value must not erase a known snapshot.
-                newAllowList = currentAllowList;
-            }
-            boolean disableAutoClean = remotePreferences.getBoolean(
-                    Contract.KEY_DISABLE_AUTO_CLEAN, false);
-            boolean includeIceBox = remotePreferences.getBoolean(
-                    Contract.KEY_INCLUDE_ICEBOX, false);
-            boolean noResponseNotification = remotePreferences.getBoolean(
-                    Contract.KEY_NO_RESPONSE_NOTIFICATION, false);
+            ConfigManager.get().reload(remotePreferences);
+            // Keep the deprecated public compat alias in sync.
+            allowList = ConfigManager.get().snapshot().allowList;
 
-            // Publish one immutable snapshot only after every preference read succeeds. A hook
-            // therefore sees either the complete old config or the complete new config, never a
-            // partially updated allow-list/boolean combination.
-            configSnapshot = new ConfigSnapshot(
-                    newAllowList,
-                    disableAutoClean,
-                    includeIceBox,
-                    noResponseNotification,
-                    true);
-            // Retained as a public compatibility alias; internal readers use configSnapshot.
-            allowList = newAllowList;
-
-            reportHookHealth("Config", "已加载，允许 " + newAllowList.size() + " 个应用");
+            reportHookHealth("Config", "已加载，允许 " + ConfigManager.get().allowListSize() + " 个应用");
             if ("android".equals(getSelfPackageName())) {
-                printLog("[Modern Xposed API]onUpdateConfig allowList size: " + newAllowList.size());
+                printLog("[Modern Xposed API]onUpdateConfig allowList size: " + ConfigManager.get().allowListSize());
             }
             BroadcastFix.onConfigUpdated();
             KeepNotification.onConfigUpdated();
@@ -470,17 +388,8 @@ public abstract class XposedModule {
     }
 
     private static void onUninstallFcmself() {
-        if (context == null) {
-            return;
-        }
-        NotificationManager notificationManager =
-                (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
-        if (notificationManager == null) {
-            return;
-        }
-        NotificationChannel channel = notificationManager.getNotificationChannel("fcmself");
-        if (channel != null) {
-            notificationManager.deleteNotificationChannel(channel.getId());
+        if (context != null) {
+            new NotificationHelper(context).deleteChannel();
         }
     }
 
@@ -499,7 +408,7 @@ public abstract class XposedModule {
         response.putExtra(Contract.EXTRA_NONCE, nonce);
         response.putExtra(Contract.EXTRA_PROCESS, getSelfPackageName());
         response.putExtra(Contract.EXTRA_BOOT_COMPLETE, isBootComplete);
-        response.putExtra(Contract.EXTRA_CONFIG_READY, configSnapshot.ready);
+        response.putExtra(Contract.EXTRA_CONFIG_READY, ConfigManager.get().isConfigReady());
         response.putStringArrayListExtra(Contract.EXTRA_MODULES, modules);
         ArrayList<String> details = new ArrayList<>();
         for (Map.Entry<String, String> entry : HEALTH_DETAILS.entrySet()) {
@@ -585,41 +494,29 @@ public abstract class XposedModule {
     }
 
     protected void sendNotification(String title) {
-        sendNotification(title, null, null);
+        if (context == null) return;
+        new NotificationHelper(context).send(title);
     }
 
     protected void sendNotification(String title, String content) {
-        sendNotification(title, content, null);
+        if (context == null) return;
+        new NotificationHelper(context).send(title, content);
     }
 
     @SuppressLint({"MissingPermission", "NotificationPermission"})
     protected void sendNotification(String title, String content, PendingIntent pendingIntent) {
-        printLog(title, false);
-        title = "[fcmself]" + title;
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-        this.createFcmselfChannel(notificationManager);
-        NotificationCompat.Builder notification = new NotificationCompat.Builder(context, "fcmself")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(title)
-                .setContentText(content)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
-        if (pendingIntent != null) {
-            notification.setContentIntent(pendingIntent).setAutoCancel(true);
-        }
-        notificationManager.notify(nextNotificationId(), notification.build());
+        if (context == null) return;
+        new NotificationHelper(context).send(title, content, pendingIntent);
     }
 
-    /** Process-wide positive notification ID; wraps atomically instead of overflowing negative. */
+    /** Process-wide positive notification ID. */
     protected static int nextNotificationId() {
-        return NOTIFY_ID_SEQ.updateAndGet(
-                current -> current == Integer.MAX_VALUE ? 1 : current + 1);
+        return NotificationHelper.nextId();
     }
 
     protected void createFcmselfChannel(NotificationManagerCompat notificationManager) {
-        if (notificationManager.getNotificationChannel("fcmself") == null) {
-            NotificationChannel channel = new NotificationChannel("fcmself", "fcmself", NotificationManager.IMPORTANCE_HIGH);
-            channel.setDescription("[xposed] fcmself");
-            notificationManager.createNotificationChannel(channel);
+        if (context != null) {
+            new NotificationHelper(context).ensureChannel();
         }
     }
 
