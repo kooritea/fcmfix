@@ -102,6 +102,7 @@ fun AppListScreen(
     var isRefreshing by remember { mutableStateOf(false) }
     var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val gridState = rememberLazyGridState()
@@ -174,7 +175,7 @@ fun AppListScreen(
                                 text = { Text(stringResource(R.string.fcm_diagnostics)) },
                                 onClick = {
                                     showMenu = false
-                                    viewModel.openDiagnostics(LocalContext.current)
+                                    viewModel.openDiagnostics(context)
                                 },
                                 leadingIcon = { Icon(Icons.Filled.Visibility, contentDescription = null) },
                             )
