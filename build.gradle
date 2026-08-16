@@ -1,7 +1,7 @@
 // Top-level build file
 plugins {
     id 'com.android.application' version '9.3.0' apply false
-    id 'org.jetbrains.kotlin.android' version '2.2.20' apply false
+    // AGP 9 has built-in Kotlin support; org.jetbrains.kotlin.android must NOT be applied.
     id 'org.jetbrains.kotlin.plugin.compose' version '2.2.20' apply false
 }
 
