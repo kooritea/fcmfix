@@ -75,83 +75,30 @@
         android:paddingEnd="0dp"
         android:paddingBottom="2dp">
 
+        <TextView
+            android:id="@+id/app_title"
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.03"
+            android:text="@string/app_name"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="?attr/colorOnSurface"
+            android:textStyle="bold" />
+
         <LinearLayout
-            android:layout_width="248dp"
-            android:layout_height="48dp"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/app_title"
-                android:layout_width="88dp"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:letterSpacing="0.03"
-                android:paddingStart="4dp"
-                android:paddingEnd="4dp"
-                android:text="@string/app_name"
-                android:textAppearance="?attr/textAppearanceTitleSmall"
-                android:textColor="?attr/colorOnSurface"
-                android:textStyle="bold" />
-
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/search_container"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:clickable="true"
-                android:focusable="true"
-                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
-                app:cardElevation="0dp"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.Search"
-                app:strokeWidth="0dp">
-
-                <FrameLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/search_input"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:background="@null"
-                        android:gravity="center_vertical"
-                        android:hint="@string/search_hint"
-                        android:imeOptions="actionDone"
-                        android:inputType="text|textNoSuggestions"
-                        android:maxLines="1"
-                        android:paddingStart="12dp"
-                        android:paddingTop="0dp"
-                        android:paddingEnd="48dp"
-                        android:paddingBottom="0dp"
-                        android:singleLine="true"
-                        android:textAppearance="?attr/textAppearanceBodyMedium"
-                        android:visibility="invisible" />
-
-                    <ImageButton
-                        android:id="@+id/search_toggle"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="end|center_vertical"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="@string/search_apps"
-                        android:padding="14dp"
-                        android:src="@drawable/ic_search"
-                        app:tint="?attr/colorOnSurfaceVariant" />
-                </FrameLayout>
-            </com.google.android.material.card.MaterialCardView>
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="248dp"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/filter_all"
-                android:layout_width="0dp"
+                android:layout_width="64dp"
                 android:layout_height="50dp"
-                android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 app:cardBackgroundColor="?attr/colorPrimaryContainer"
@@ -185,9 +132,8 @@
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/filter_fcm"
-                android:layout_width="0dp"
+                android:layout_width="64dp"
                 android:layout_height="50dp"
-                android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
@@ -221,14 +167,13 @@
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/filter_enabled"
-                android:layout_width="0dp"
+                android:layout_width="64dp"
                 android:layout_height="50dp"
-                android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                 app:cardElevation="0dp"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterEnd"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -253,6 +198,52 @@
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/search_container"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                app:cardElevation="0dp"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.Search"
+                app:strokeWidth="0dp">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/search_input"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@null"
+                        android:gravity="center_vertical"
+                        android:hint="@string/search_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="text|textNoSuggestions"
+                        android:maxLines="1"
+                        android:paddingStart="10dp"
+                        android:paddingTop="0dp"
+                        android:paddingEnd="48dp"
+                        android:paddingBottom="0dp"
+                        android:singleLine="true"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:visibility="invisible" />
+
+                    <ImageButton
+                        android:id="@+id/search_toggle"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="end|center_vertical"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/search_apps"
+                        android:padding="14dp"
+                        android:src="@drawable/ic_search"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+                </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
 

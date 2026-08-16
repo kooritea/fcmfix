@@ -769,8 +769,14 @@ public class MainActivity extends AppCompatActivity {
         String displayText = text.length() == 0 ? getString(R.string.search_hint) : text.toString();
         float textWidth = searchInput.getPaint().measureText(displayText);
         int desired = Math.round(textWidth + 60 * density);
-        int minimum = Math.round(104 * density);
-        int maximum = Math.round(160 * density);
+        int minimum = Math.round(96 * density);
+        int maximum = Math.round(136 * density);
+        View parent = (View) searchContainer.getParent();
+        int available = parent.getWidth()
+                - parent.getPaddingStart()
+                - parent.getPaddingEnd()
+                - Math.round(192 * density);
+        maximum = Math.min(maximum, Math.max(minimum, available));
         return Math.max(minimum, Math.min(maximum, desired));
     }
 

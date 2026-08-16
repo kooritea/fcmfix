@@ -18,13 +18,6 @@
         <item name="cornerSize">0dp</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.FilterEnd" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">0dp</item>
-        <item name="cornerSizeTopRight">16dp</item>
-        <item name="cornerSizeBottomRight">16dp</item>
-    </style>
-
     <style name="ShapeAppearance.Fcmself.AppCard" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">0dp</item>
@@ -37,7 +30,9 @@
 
     <style name="ShapeAppearance.Fcmself.Search" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">16dp</item>
+        <item name="cornerSize">0dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomRight">16dp</item>
     </style>
 
     <style name="ShapeAppearance.Fcmself.MenuItem" parent="">
