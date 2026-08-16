@@ -39,7 +39,8 @@ android {
 }
 
 tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
-    options.compilerArgs += ['-Xlint:all', '-Werror']
+    // Android/JUnit annotations are consumed by their runtimes rather than javac processors.
+    options.compilerArgs += ['-Xlint:all,-processing', '-Werror']
 }
 
 dependencies {
