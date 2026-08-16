@@ -1,5 +1,6 @@
 package sumicya.fcmself;
 
+import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -54,7 +55,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.shape.ShapeAppearanceModel;
-import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 
 import io.github.libxposed.service.XposedService;
@@ -151,9 +151,18 @@ public class MainActivity extends AppCompatActivity {
                     });
                 }
             };
+    private static final long FEEDBACK_SHORT_MS = 2_400L;
+    private static final long FEEDBACK_LONG_MS = 4_000L;
+
     private FloatingActionButton mainFab;
-    /** One live feedback surface is updated in place to avoid Snackbar queues and flicker. */
-    private Snackbar activeFeedbackSnackbar;
+    private boolean fabMenuOpen;
+    private MaterialCardView feedbackContainer;
+    private ImageView feedbackIcon;
+    private TextView feedbackText;
+    private TextView feedbackAction;
+    private Runnable feedbackUndo;
+    private int feedbackGeneration;
+    private final Runnable hideFeedbackTask = () -> hideFeedback(false);
     private TextView allStatsView;
     private TextView fcmStatsView;
     private View headerSafe;
@@ -164,8 +173,10 @@ public class MainActivity extends AppCompatActivity {
     private View bottomControls;
     private MaterialCardView bottomDock;
     private MaterialCardView searchContainer;
+    private MaterialCardView searchToggleContainer;
     private TextInputEditText searchInput;
     private ImageButton searchToggle;
+    private ValueAnimator searchWidthAnimator;
     private boolean searchExpanded;
     private TextView emptyHint;
     private boolean lastConfigError = false;
@@ -306,7 +317,7 @@ public class MainActivity extends AppCompatActivity {
     private void requestHookHealth(TextView statusView) {
         registerHealthResponseReceiver();
         healthStatusView = statusView;
-        healthStatusView.setText("正在查询已启用作用域…");
+        healthStatusView.setText(R.string.hook_health_querying);
         healthNonce = UUID.randomUUID().toString();
         healthResponses.clear();
 
@@ -326,16 +337,16 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         StringBuilder status = new StringBuilder();
-        status.append("应用服务：")
+        status.append("框架服务：")
                 .append(xposedService != null ? "已连接" : "未连接")
                 .append('\n')
-                .append("应用配置：")
+                .append("配置：")
                 .append(allowListLoaded && !lastConfigError ? "正常" : "未就绪")
                 .append("\n\n");
-        appendHealthProcess(status, "android", "system_server（核心）");
-        appendHealthProcess(status, "com.miui.powerkeeper", "PowerKeeper（可选）");
-        appendHealthProcess(status, "com.google.android.gms", "GMS 重连（可选）");
-        status.append("\n模块已加载不等同于所有 OEM 私有方法都存在。");
+        appendHealthProcess(status, "android", "system_server");
+        appendHealthProcess(status, "com.miui.powerkeeper", "PowerKeeper");
+        appendHealthProcess(status, "com.google.android.gms", "GMS");
+        status.append("\n已加载不代表所有 OEM Hook 均命中。");
         healthStatusView.setText(status.toString());
     }
 
@@ -485,8 +496,10 @@ public class MainActivity extends AppCompatActivity {
         }
         // Keep the main action visually stable; connection diagnostics are conveyed through the
         // accessible label rather than changing the button palette underneath the user's finger.
-        mainFab.setBackgroundTintList(ColorStateList.valueOf(translucentPrimaryContainer));
-        mainFab.setImageTintList(ColorStateList.valueOf(fabConnectedContent));
+        mainFab.setBackgroundTintList(ColorStateList.valueOf(
+                fabMenuOpen ? translucentPrimaryContainer : Color.TRANSPARENT));
+        mainFab.setImageTintList(ColorStateList.valueOf(
+                fabMenuOpen ? fabConnectedContent : colorOnSurfaceVariant));
         mainFab.setCompatElevation(0f);
         mainFab.setCompatHoveredFocusedTranslationZ(0f);
         mainFab.setCompatPressedTranslationZ(0f);
@@ -569,9 +582,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupGlassSurfaces() {
-        // The dock itself is only a positioning container. Keeping it transparent leaves tonal
-        // color on the selected filter and the action FAB instead of painting a large rectangle.
-        bottomDock.setCardBackgroundColor(Color.TRANSPARENT);
+        // A low-alpha Primary Container ties the controls together without restoring a grey cast.
+        int dockColor = ColorUtils.setAlphaComponent(fabConnectedContainer, 112);
+        bottomDock.setCardBackgroundColor(dockColor);
         bottomDock.setStrokeColor(Color.TRANSPARENT);
         bottomDock.setStrokeWidth(0);
         bottomDock.setShapeAppearanceModel(bottomDock.getShapeAppearanceModel()
@@ -595,6 +608,21 @@ public class MainActivity extends AppCompatActivity {
 
         searchInput.setTextColor(fabConnectedContent);
         searchInput.setHintTextColor(fabConnectedContent);
+        updateSearchToggleStyle(false);
+    }
+
+    private void updateSearchToggleStyle(boolean active) {
+        float radius = 16 * getResources().getDisplayMetrics().density;
+        searchToggleContainer.setShapeAppearanceModel(
+                searchToggleContainer.getShapeAppearanceModel()
+                        .toBuilder()
+                        .setAllCornerSizes(radius)
+                        .build());
+        applyPrimarySurface(searchToggleContainer, active, Color.TRANSPARENT);
+        searchToggle.setImageResource(
+                active ? R.drawable.ic_status_close : R.drawable.ic_search);
+        searchToggle.setImageTintList(ColorStateList.valueOf(
+                active ? fabConnectedContent : colorOnSurfaceVariant));
     }
 
     private void applyHeaderScrim() {
@@ -643,74 +671,63 @@ public class MainActivity extends AppCompatActivity {
         updateFilterTabStyle();
     }
 
-    private Snackbar obtainFeedbackSnackbar(String text, int duration) {
-        if (activeFeedbackSnackbar == null || !activeFeedbackSnackbar.isShownOrQueued()) {
-            activeFeedbackSnackbar = Snackbar.make(recyclerView, text, duration);
-            if (bottomControls != null) {
-                // Anchor to both dock rows. Expanding search then moves the message above it instead
-                // of allowing the message to cover the input surface.
-                activeFeedbackSnackbar.setAnchorView(bottomControls);
-            }
-        }
-        return activeFeedbackSnackbar;
-    }
-
-    private void configureExpressiveSnackbar(
-            Snackbar snackbar,
+    private void showFeedback(
             String text,
             int iconRes,
             int containerColor,
             int contentColor,
-            int duration) {
-        snackbar.setText(text);
-        snackbar.setDuration(duration);
-        View snackbarView = snackbar.getView();
-        int radius = Math.round(22 * getResources().getDisplayMetrics().density);
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(containerColor);
-        background.setCornerRadius(radius);
-        snackbarView.setBackgroundTintList(null);
-        snackbarView.setBackground(background);
-        removeViewShadow(snackbarView);
+            long durationMs,
+            Runnable undoAction) {
+        MAIN_HANDLER.removeCallbacks(hideFeedbackTask);
+        feedbackGeneration++;
+        feedbackUndo = undoAction;
+        feedbackContainer.animate().cancel();
+        feedbackContainer.setCardBackgroundColor(containerColor);
+        feedbackContainer.setStrokeWidth(0);
+        removeViewShadow(feedbackContainer);
+        feedbackIcon.setImageResource(iconRes);
+        feedbackIcon.setImageTintList(ColorStateList.valueOf(contentColor));
+        feedbackText.setText(text);
+        feedbackText.setTextColor(contentColor);
+        feedbackAction.setTextColor(contentColor);
+        feedbackAction.setEnabled(undoAction != null);
+        // Keep an equal-width trailing rail even without Undo, so the message remains truly centred.
+        feedbackAction.setVisibility(undoAction != null ? View.VISIBLE : View.INVISIBLE);
 
-        if (snackbarView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams layoutParams =
-                    (ViewGroup.MarginLayoutParams) snackbarView.getLayoutParams();
-            int sideMargin = Math.round(12 * getResources().getDisplayMetrics().density);
-            int preferredWidth = Math.round(280 * getResources().getDisplayMetrics().density);
-            layoutParams.width = Math.min(
-                    preferredWidth,
-                    getResources().getDisplayMetrics().widthPixels - sideMargin * 2);
-            layoutParams.setMarginStart(sideMargin);
-            layoutParams.setMarginEnd(sideMargin);
-            if (layoutParams
-                    instanceof androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams) {
-                androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams coordinatorParams =
-                        (androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams)
-                                layoutParams;
-                coordinatorParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM;
-            }
-            snackbarView.setLayoutParams(layoutParams);
+        if (feedbackContainer.getVisibility() != View.VISIBLE) {
+            feedbackContainer.setAlpha(0f);
+            feedbackContainer.setVisibility(View.VISIBLE);
+            feedbackContainer.animate().alpha(1f).setDuration(140L).start();
+        } else {
+            feedbackContainer.setAlpha(1f);
         }
+        MAIN_HANDLER.postDelayed(hideFeedbackTask, durationMs);
+    }
 
-        TextView snackbarText = snackbarView
-                .findViewById(com.google.android.material.R.id.snackbar_text);
-        Drawable icon = ContextCompat.getDrawable(this, iconRes);
-        if (snackbarText != null) {
-            snackbarText.setTextColor(contentColor);
-            snackbarText.setGravity(Gravity.CENTER);
-            snackbarText.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-            if (icon != null) {
-                icon = icon.mutate();
-                icon.setTint(contentColor);
-                snackbarText.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                        icon, null, null, null);
-                int iconPadding = Math.round(8 * getResources().getDisplayMetrics().density);
-                snackbarText.setCompoundDrawablePadding(iconPadding);
-            }
+    private void hideFeedback(boolean immediate) {
+        MAIN_HANDLER.removeCallbacks(hideFeedbackTask);
+        feedbackUndo = null;
+        int generation = ++feedbackGeneration;
+        feedbackContainer.animate().cancel();
+        if (feedbackContainer.getVisibility() != View.VISIBLE) {
+            feedbackContainer.setAlpha(1f);
+            return;
         }
-        snackbar.setActionTextColor(contentColor);
-        snackbar.setTextMaxLines(2);
+        if (immediate) {
+            feedbackContainer.setVisibility(View.GONE);
+            feedbackContainer.setAlpha(1f);
+            return;
+        }
+        feedbackContainer.animate()
+                .alpha(0f)
+                .setDuration(120L)
+                .withEndAction(() -> {
+                    if (generation == feedbackGeneration) {
+                        feedbackContainer.setVisibility(View.GONE);
+                        feedbackContainer.setAlpha(1f);
+                    }
+                })
+                .start();
     }
 
     /**
@@ -722,48 +739,41 @@ public class MainActivity extends AppCompatActivity {
         final boolean nowAllow = appInfo.isAllow;
         final String pkg = appInfo.packageName;
         final String name = appInfo.name;
-        String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
+        String text = (nowAllow ? "已启用：" : "已停用：") + name;
 
-        Snackbar snackbar = obtainFeedbackSnackbar(text, 4_000);
-        configureExpressiveSnackbar(
-                snackbar,
+        showFeedback(
                 text,
                 nowAllow ? R.drawable.ic_status_check : R.drawable.ic_status_close,
-                nowAllow ? translucentPrimaryContainer : colorErrorContainer,
+                ColorUtils.setAlphaComponent(
+                        nowAllow ? fabConnectedContainer : colorErrorContainer, 184),
                 nowAllow ? fabConnectedContent : colorOnErrorContainer,
-                4_000);
-        snackbar.setAction(R.string.undo, v -> {
-            boolean reverted = nowAllow
-                    ? deleteAppInAllowList(pkg)
-                    : addAppInAllowList(pkg);
-            if (!reverted) {
-                return;
-            }
-            for (AppInfo info : fullAppList) {
-                if (pkg.equals(info.packageName)) {
-                    info.isAllow = !nowAllow;
-                    break;
-                }
-            }
-            applyFilter();
-            updateStats();
-        });
-        snackbar.show();
+                FEEDBACK_LONG_MS,
+                () -> {
+                    boolean reverted = nowAllow
+                            ? deleteAppInAllowList(pkg)
+                            : addAppInAllowList(pkg);
+                    if (!reverted) {
+                        return;
+                    }
+                    for (AppInfo info : fullAppList) {
+                        if (pkg.equals(info.packageName)) {
+                            info.isAllow = !nowAllow;
+                            break;
+                        }
+                    }
+                    applyFilter();
+                    updateStats();
+                });
     }
 
     private void showUnsupportedAppFeedback(AppInfo appInfo) {
-        String text = getString(R.string.unsupported_app_message, appInfo.name);
-        Snackbar snackbar = obtainFeedbackSnackbar(text, Snackbar.LENGTH_SHORT);
-        // Reusing a previous toggle message must also remove its stale Undo action.
-        snackbar.setAction((CharSequence) null, null);
-        configureExpressiveSnackbar(
-                snackbar,
-                text,
+        showFeedback(
+                getString(R.string.unsupported_app_message, appInfo.name),
                 R.drawable.ic_status_dash,
-                colorSurfaceContainerHigh,
+                ColorUtils.setAlphaComponent(colorSurfaceContainerHigh, 184),
                 colorOnSurface,
-                Snackbar.LENGTH_SHORT);
-        snackbar.show();
+                FEEDBACK_SHORT_MS,
+                null);
     }
 
     private void applyFilter() {
@@ -797,6 +807,39 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void updateSearchWidth(CharSequence query, boolean animate) {
+        float density = getResources().getDisplayMetrics().density;
+        CharSequence measuredText = query.length() == 0
+                ? getString(R.string.search_hint)
+                : query;
+        int desiredWidth = Math.round(searchInput.getPaint().measureText(
+                measuredText.toString())) + Math.round(72 * density);
+        int minimumWidth = Math.round(200 * density);
+        int maximumWidth = Math.round(280 * density);
+        desiredWidth = Math.max(minimumWidth, Math.min(desiredWidth, maximumWidth));
+
+        ViewGroup.LayoutParams params = searchContainer.getLayoutParams();
+        int currentWidth = searchContainer.getWidth() > 0
+                ? searchContainer.getWidth()
+                : params.width;
+        if (searchWidthAnimator != null) {
+            searchWidthAnimator.cancel();
+        }
+        if (!animate || currentWidth <= 0 || currentWidth == desiredWidth) {
+            params.width = desiredWidth;
+            searchContainer.setLayoutParams(params);
+            return;
+        }
+        searchWidthAnimator = ValueAnimator.ofInt(currentWidth, desiredWidth);
+        searchWidthAnimator.setDuration(160L);
+        searchWidthAnimator.addUpdateListener(animation -> {
+            ViewGroup.LayoutParams animatedParams = searchContainer.getLayoutParams();
+            animatedParams.width = (int) animation.getAnimatedValue();
+            searchContainer.setLayoutParams(animatedParams);
+        });
+        searchWidthAnimator.start();
+    }
+
     private void setupSearch() {
         searchToggle.setOnClickListener(v -> toggleSearch());
         searchInput.addTextChangedListener(new TextWatcher() {
@@ -809,6 +852,9 @@ public class MainActivity extends AppCompatActivity {
                 pendingSearchQuery = s.toString().trim().toLowerCase(Locale.ROOT);
                 MAIN_HANDLER.removeCallbacks(applySearch);
                 MAIN_HANDLER.postDelayed(applySearch, 120L);
+                if (searchExpanded) {
+                    updateSearchWidth(s, true);
+                }
             }
 
             @Override
@@ -824,6 +870,8 @@ public class MainActivity extends AppCompatActivity {
         float offset = 12 * getResources().getDisplayMetrics().density;
         if (!searchExpanded) {
             searchExpanded = true;
+            updateSearchWidth(searchInput.getText(), false);
+            updateSearchToggleStyle(true);
             searchContainer.setVisibility(View.VISIBLE);
             searchContainer.setPivotY(48 * getResources().getDisplayMetrics().density);
             searchContainer.setAlpha(0f);
@@ -837,18 +885,15 @@ public class MainActivity extends AppCompatActivity {
                     .translationY(0f)
                     .setDuration(200L)
                     .start();
-            searchToggle.setImageResource(R.drawable.ic_status_close);
-            searchToggle.setImageTintList(ColorStateList.valueOf(fabConnectedContent));
             searchInput.requestFocus();
             if (keyboard != null) {
                 keyboard.showSoftInput(searchInput, 0);
             }
         } else {
             searchExpanded = false;
+            updateSearchToggleStyle(false);
             searchInput.setText("");
             searchInput.clearFocus();
-            searchToggle.setImageResource(R.drawable.ic_search);
-            searchToggle.setImageTintList(ColorStateList.valueOf(colorOnSurfaceVariant));
             if (keyboard != null) {
                 keyboard.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
             }
@@ -933,9 +978,7 @@ public class MainActivity extends AppCompatActivity {
         if (mainFab == null) {
             return;
         }
-        if (activeFeedbackSnackbar != null && activeFeedbackSnackbar.isShownOrQueued()) {
-            activeFeedbackSnackbar.dismiss();
-        }
+        hideFeedback(true);
         LayoutInflater inflater = LayoutInflater.from(this);
         ViewGroup popupParent = (ViewGroup) mainFab.getParent();
         View content = inflater.inflate(R.layout.fab_menu_popup, popupParent, false);
@@ -978,7 +1021,15 @@ public class MainActivity extends AppCompatActivity {
         View healthRow = addActionFabMenuItem(
                 items, R.string.fab_menu_hook_health, R.drawable.ic_health, null);
         View healthPanel = inflater.inflate(R.layout.hook_health_panel, items, false);
+        MaterialCardView healthCard = (MaterialCardView) healthPanel;
         TextView healthStatus = healthPanel.findViewById(R.id.hook_health_status);
+        healthCard.setCardBackgroundColor(ColorUtils.setAlphaComponent(
+                fabConnectedContainer, 184));
+        healthCard.setStrokeWidth(0);
+        healthCard.setCardElevation(0f);
+        healthCard.setMaxCardElevation(0f);
+        removeViewShadow(healthCard);
+        healthStatus.setTextColor(fabConnectedContent);
         items.addView(healthPanel);
         ScrollView menuScroll = content.findViewById(R.id.fab_menu_scroll);
         healthRow.setOnClickListener(v -> {
@@ -999,9 +1050,13 @@ public class MainActivity extends AppCompatActivity {
         popup.setOnDismissListener(() -> {
             healthStatusView = null;
             healthNonce = null;
+            fabMenuOpen = false;
+            refreshFabStatus();
         });
         applyFabMenuEdgeShapes(items);
 
+        fabMenuOpen = true;
+        refreshFabStatus();
         positionFabPopup(popup, content, popupWidth, horizontalMargin);
     }
 
@@ -2000,6 +2055,10 @@ public class MainActivity extends AppCompatActivity {
         mainFab = findViewById(R.id.main_fab);
         bottomControls = findViewById(R.id.bottom_controls);
         bottomDock = findViewById(R.id.bottom_dock);
+        feedbackContainer = findViewById(R.id.feedback_container);
+        feedbackIcon = findViewById(R.id.feedback_icon);
+        feedbackText = findViewById(R.id.feedback_text);
+        feedbackAction = findViewById(R.id.feedback_action);
         filterCards = new MaterialCardView[]{
                 findViewById(R.id.filter_all),
                 findViewById(R.id.filter_fcm)
@@ -2009,6 +2068,7 @@ public class MainActivity extends AppCompatActivity {
                 findViewById(R.id.filter_fcm_label)
         };
         searchContainer = findViewById(R.id.search_container);
+        searchToggleContainer = findViewById(R.id.search_toggle_container);
         searchInput = findViewById(R.id.search_input);
         searchToggle = findViewById(R.id.search_toggle);
         emptyHint = findViewById(R.id.empty_hint);
@@ -2017,6 +2077,13 @@ public class MainActivity extends AppCompatActivity {
         setupSearch();
         setupFilterTabs();
         setupEdgeToEdgeInsets();
+        feedbackAction.setOnClickListener(v -> {
+            Runnable undo = feedbackUndo;
+            hideFeedback(true);
+            if (undo != null) {
+                undo.run();
+            }
+        });
 
         try {
             mainFab.setImageResource(android.R.drawable.ic_menu_manage);
@@ -2110,11 +2177,13 @@ public class MainActivity extends AppCompatActivity {
         healthNonce = null;
         healthStatusView = null;
         MAIN_HANDLER.removeCallbacks(applySearch);
+        MAIN_HANDLER.removeCallbacks(hideFeedbackTask);
         searchContainer.animate().cancel();
-        if (activeFeedbackSnackbar != null) {
-            activeFeedbackSnackbar.dismiss();
-            activeFeedbackSnackbar = null;
+        if (searchWidthAnimator != null) {
+            searchWidthAnimator.cancel();
+            searchWidthAnimator = null;
         }
+        hideFeedback(true);
         super.onDestroy();
     }
 

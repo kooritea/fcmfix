@@ -26,6 +26,11 @@
         <item name="cornerSize">24dp</item>
     </style>
 
+    <style name="ShapeAppearance.Fcmself.Feedback" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">22dp</item>
+    </style>
+
     <style name="ShapeAppearance.Fcmself.BottomDock" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">0dp</item>

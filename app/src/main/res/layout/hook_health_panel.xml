@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:visibility="gone"
-    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+    app:cardBackgroundColor="?attr/colorPrimaryContainer"
     android:elevation="0dp"
     android:stateListAnimator="@null"
     android:translationZ="0dp"
@@ -23,6 +23,6 @@
         android:paddingBottom="12dp"
         android:text="@string/hook_health_querying"
         android:textAppearance="?attr/textAppearanceBodySmall"
-        android:textColor="?attr/colorOnSurface" />
+        android:textColor="?attr/colorOnPrimaryContainer" />
 
 </com.google.android.material.card.MaterialCardView>
