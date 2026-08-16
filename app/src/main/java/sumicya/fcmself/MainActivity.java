@@ -587,11 +587,21 @@ public class MainActivity extends AppCompatActivity {
         bottomDock.setCardBackgroundColor(dockColor);
         bottomDock.setStrokeColor(Color.TRANSPARENT);
         bottomDock.setStrokeWidth(0);
+        float segmentRadius = 16 * getResources().getDisplayMetrics().density;
         bottomDock.setShapeAppearanceModel(bottomDock.getShapeAppearanceModel()
                 .toBuilder()
-                .setAllCornerSizes(0f)
+                .setAllCornerSizes(segmentRadius)
                 .build());
         removeViewShadow(bottomDock);
+
+        // The rail starts at the first filter and ends at the FAB. Adjacent segment corners remain
+        // square; only the two outside edges define the combined outline.
+        mainFab.setShapeAppearanceModel(mainFab.getShapeAppearanceModel()
+                .toBuilder()
+                .setAllCornerSizes(0f)
+                .setTopRightCornerSize(segmentRadius)
+                .setBottomRightCornerSize(segmentRadius)
+                .build());
 
         // Search remains a separate centered M3E surface and uses Primary Container directly, so
         // it retains dynamic color without the grey cast from a neutral Surface Container layer.
@@ -612,11 +622,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateSearchToggleStyle(boolean active) {
-        float radius = 16 * getResources().getDisplayMetrics().density;
         searchToggleContainer.setShapeAppearanceModel(
                 searchToggleContainer.getShapeAppearanceModel()
                         .toBuilder()
-                        .setAllCornerSizes(radius)
+                        .setAllCornerSizes(0f)
                         .build());
         applyPrimarySurface(searchToggleContainer, active, Color.TRANSPARENT);
         searchToggle.setImageResource(
@@ -638,12 +647,15 @@ public class MainActivity extends AppCompatActivity {
 
             int[] colors = new int[]{
                     Color.argb(0xF2, r, g, b),
+                    Color.argb(0xF2, r, g, b),
                     Color.argb(0xE6, r, g, b),
-                    Color.argb(0xB3, r, g, b),
-                    Color.argb(0x59, r, g, b),
+                    Color.argb(0x80, r, g, b),
                     Color.argb(0x00, r, g, b)
             };
-            GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors);
+            float[] offsets = {0f, 0.78f, 0.86f, 0.94f, 1f};
+            GradientDrawable gd = new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM, colors);
+            gd.setColors(colors, offsets);
             gd.setGradientType(GradientDrawable.LINEAR_GRADIENT);
             gd.setShape(GradientDrawable.RECTANGLE);
             headerSafe.setBackground(gd);
@@ -953,17 +965,20 @@ public class MainActivity extends AppCompatActivity {
         }
         TextView[] counts = {allStatsView, fcmStatsView};
         int selectedIndex = filterMode.ordinal();
-        float selectedRadius = 16 * getResources().getDisplayMetrics().density;
+        float segmentRadius = 16 * getResources().getDisplayMetrics().density;
         for (int i = 0; i < filterCards.length; i++) {
             boolean selected = i == selectedIndex;
             int content = selected ? fabConnectedContent : colorOnSurfaceVariant;
             applyPrimarySurface(filterCards[i], selected, Color.TRANSPARENT);
-            // Every hit target shares the pill outline so its press ripple is clipped correctly;
-            // only the selected filter receives a visible tonal background.
-            filterCards[i].setShapeAppearanceModel(filterCards[i].getShapeAppearanceModel()
+            ShapeAppearanceModel.Builder segmentShape = filterCards[i]
+                    .getShapeAppearanceModel()
                     .toBuilder()
-                    .setAllCornerSizes(selectedRadius)
-                    .build());
+                    .setAllCornerSizes(0f);
+            if (i == 0) {
+                segmentShape.setTopLeftCornerSize(segmentRadius)
+                        .setBottomLeftCornerSize(segmentRadius);
+            }
+            filterCards[i].setShapeAppearanceModel(segmentShape.build());
             filterLabels[i].setTextColor(content);
             if (counts[i] != null) {
                 counts[i].setTextColor(content);
@@ -972,6 +987,34 @@ public class MainActivity extends AppCompatActivity {
                                 + (selected ? "，当前筛选" : ""));
             }
         }
+    }
+
+    private int calculateFabMenuWidth(
+            LayoutInflater inflater, LinearLayout items, int horizontalMargin) {
+        View probe = inflater.inflate(R.layout.fab_menu_item, items, false);
+        TextView label = probe.findViewById(R.id.menu_label);
+        int[] labels = {
+                R.string.fab_menu_disable_auto_clean,
+                R.string.fab_menu_include_icebox,
+                R.string.fab_menu_no_response,
+                R.string.fab_menu_select_all_fcm,
+                R.string.fab_menu_diagnostics,
+                R.string.fab_menu_hook_health
+        };
+        float longestText = 0f;
+        for (int labelRes : labels) {
+            longestText = Math.max(
+                    longestText,
+                    label.getPaint().measureText(getString(labelRes)));
+        }
+        float density = getResources().getDisplayMetrics().density;
+        int desired = Math.round(longestText) + Math.round(80 * density);
+        int minimum = Math.round(208 * density);
+        int screenMaximum = getResources().getDisplayMetrics().widthPixels
+                - horizontalMargin * 2;
+        int maximum = Math.min(Math.round(280 * density), screenMaximum);
+        minimum = Math.min(minimum, maximum);
+        return Math.max(minimum, Math.min(desired, maximum));
     }
 
     private void showFabMenu() {
@@ -985,9 +1028,7 @@ public class MainActivity extends AppCompatActivity {
         content.setClipToOutline(true);
         LinearLayout items = content.findViewById(R.id.fab_menu_items);
         int horizontalMargin = Math.round(8 * getResources().getDisplayMetrics().density);
-        int maxWidth = getResources().getDisplayMetrics().widthPixels - horizontalMargin * 2;
-        int popupWidth = Math.min(
-                Math.round(280 * getResources().getDisplayMetrics().density), maxWidth);
+        int popupWidth = calculateFabMenuWidth(inflater, items, horizontalMargin);
         PopupWindow popup = new PopupWindow(
                 content, popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -1068,8 +1109,7 @@ public class MainActivity extends AppCompatActivity {
         int[] location = new int[2];
         mainFab.getLocationInWindow(location);
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        // Center the fixed-width popup with the 280dp control rail. Aligning it to the inset FAB
-        // made the menu protrude to the left by the dock's internal padding.
+        // The content-sized popup remains centred on the connected control rail.
         int x = (screenWidth - popupWidth) / 2;
         int maximumX = screenWidth - popupWidth - horizontalMargin;
         x = Math.max(horizontalMargin, Math.min(x, maximumX));
@@ -1961,8 +2001,8 @@ public class MainActivity extends AppCompatActivity {
 
 
     /**
-     * Header extends into the status-bar region (fills the former empty strip).
-     * Recycler top padding tracks real header height so content is not clipped.
+     * Header extends into the status-bar region. Recycler padding stops below the title while the
+     * gradient tail overlays the first row, keeping fcmself inside the safe zone without a gap.
      */
     private void setupEdgeToEdgeInsets() {
         if (headerSafe == null) {
@@ -1986,11 +2026,14 @@ public class MainActivity extends AppCompatActivity {
             if (h <= 0) {
                 return;
             }
+            // Keep the title inside the opaque safe zone while allowing the 16dp gradient tail to
+            // overlay the first row instead of creating extra blank space below fcmself.
+            int contentTop = Math.max(0, h - basePadBottom);
             int pl = recyclerView.getPaddingLeft();
             int pr = recyclerView.getPaddingRight();
             int pb = recyclerView.getPaddingBottom();
-            if (recyclerView.getPaddingTop() != h) {
-                recyclerView.setPadding(pl, h, pr, pb);
+            if (recyclerView.getPaddingTop() != contentTop) {
+                recyclerView.setPadding(pl, contentTop, pr, pb);
             }
         });
 

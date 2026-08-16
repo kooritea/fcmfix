@@ -68,7 +68,7 @@
         android:elevation="0dp"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingBottom="4dp">
+        android:paddingBottom="16dp">
 
         <TextView
             android:id="@+id/app_title"
@@ -187,8 +187,8 @@
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/bottom_dock"
-            android:layout_width="216dp"
-            android:layout_height="56dp"
+            android:layout_width="208dp"
+            android:layout_height="48dp"
             app:cardBackgroundColor="@android:color/transparent"
             android:elevation="0dp"
             android:stateListAnimator="@null"
@@ -201,8 +201,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:orientation="horizontal"
-                android:padding="4dp">
+                android:orientation="horizontal">
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/filter_all"
