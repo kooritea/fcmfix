@@ -768,9 +768,9 @@ public class MainActivity extends AppCompatActivity {
         float density = getResources().getDisplayMetrics().density;
         String displayText = text.length() == 0 ? getString(R.string.search_hint) : text.toString();
         float textWidth = searchInput.getPaint().measureText(displayText);
-        int desired = Math.round(textWidth + 68 * density);
-        int minimum = Math.round(120 * density);
-        int maximum = Math.round(176 * density);
+        int desired = Math.round(textWidth + 60 * density);
+        int minimum = Math.round(104 * density);
+        int maximum = Math.round(160 * density);
         return Math.max(minimum, Math.min(maximum, desired));
     }
 
@@ -1896,7 +1896,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (mainFab != null) {
             final int fabEnd = (int) (24 * getResources().getDisplayMetrics().density + 0.5f);
-            final int fabBottom = (int) (16 * getResources().getDisplayMetrics().density + 0.5f);
+            final int fabBottom = (int) (24 * getResources().getDisplayMetrics().density + 0.5f);
             ViewCompat.setOnApplyWindowInsetsListener(mainFab, (v, windowInsets) -> {
                 Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
                 ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();

@@ -43,7 +43,7 @@
             android:paddingStart="2dp"
             android:paddingTop="0dp"
             android:paddingEnd="2dp"
-            android:paddingBottom="88dp"
+            android:paddingBottom="96dp"
             android:scrollbars="none"
             android:visibility="gone" />
 
@@ -83,14 +83,13 @@
 
             <TextView
                 android:id="@+id/app_title"
-                android:layout_width="0dp"
+                android:layout_width="88dp"
                 android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:gravity="start|center_vertical"
+                android:gravity="center"
                 android:includeFontPadding="false"
                 android:letterSpacing="0.03"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 android:text="@string/app_name"
                 android:textAppearance="?attr/textAppearanceTitleSmall"
                 android:textColor="?attr/colorOnSurface"
@@ -265,7 +264,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="24dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="24dp"
         android:contentDescription="@string/fab_content_description"
         app:borderWidth="0dp"
         app:elevation="0dp"
