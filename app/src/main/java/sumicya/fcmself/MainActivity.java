@@ -594,13 +594,11 @@ public class MainActivity extends AppCompatActivity {
                 .build());
         removeViewShadow(bottomDock);
 
-        // The rail starts at the first filter and ends at the FAB. Adjacent segment corners remain
-        // square; only the two outside edges define the combined outline.
+        // The two outside controls remain independent rounded components. Only the middle FCM and
+        // search controls merge their touching corners when both are active.
         mainFab.setShapeAppearanceModel(mainFab.getShapeAppearanceModel()
                 .toBuilder()
-                .setAllCornerSizes(0f)
-                .setTopRightCornerSize(segmentRadius)
-                .setBottomRightCornerSize(segmentRadius)
+                .setAllCornerSizes(segmentRadius)
                 .build());
 
         // Search remains a separate centered M3E surface and uses Primary Container directly, so
@@ -993,9 +991,7 @@ public class MainActivity extends AppCompatActivity {
                 filterCards[i].setShapeAppearanceModel(filterCards[i]
                         .getShapeAppearanceModel()
                         .toBuilder()
-                        .setAllCornerSizes(0f)
-                        .setTopLeftCornerSize(segmentRadius)
-                        .setBottomLeftCornerSize(segmentRadius)
+                        .setAllCornerSizes(segmentRadius)
                         .build());
             }
             filterLabels[i].setTextColor(content);
