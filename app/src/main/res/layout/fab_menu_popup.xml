@@ -12,8 +12,6 @@
         android:id="@+id/fab_menu_items"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:divider="@drawable/fab_menu_gap"
-        android:orientation="vertical"
-        android:showDividers="middle" />
+        android:orientation="vertical" />
 
 </com.google.android.material.card.MaterialCardView>

@@ -31,10 +31,7 @@ android {
         checkReleaseBuilds = true
         abortOnError = true
         textReport = true
-        def githubSummary = System.getenv('GITHUB_STEP_SUMMARY')
-        if (githubSummary) {
-            textOutput = file(githubSummary)
-        }
+        warningsAsErrors = true
     }
 }
 
