@@ -16,22 +16,12 @@
         <item name="cornerSize">16dp</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.Popup" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">24dp</item>
-    </style>
-
     <style name="ShapeAppearance.Fcmself.MenuItem" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">0dp</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.MenuStateStart" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">0dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Fcmself.MenuLabelEnd" parent="">
+    <style name="ShapeAppearance.Fcmself.MenuSegment" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">0dp</item>
     </style>

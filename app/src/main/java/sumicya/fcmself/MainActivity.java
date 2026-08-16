@@ -618,7 +618,7 @@ public class MainActivity extends AppCompatActivity {
         int horizontalMargin = Math.round(12 * getResources().getDisplayMetrics().density);
         int maxWidth = getResources().getDisplayMetrics().widthPixels - horizontalMargin * 2;
         int popupWidth = Math.min(
-                Math.round(304 * getResources().getDisplayMetrics().density), maxWidth);
+                Math.round(280 * getResources().getDisplayMetrics().density), maxWidth);
         PopupWindow popup = new PopupWindow(
                 content, popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -1429,11 +1429,9 @@ public class MainActivity extends AppCompatActivity {
         final int basePadStart = headerSafe.getPaddingStart();
         final int basePadEnd = headerSafe.getPaddingEnd();
         final int basePadBottom = headerSafe.getPaddingBottom();
-        final int extraTop = (int) (8 * getResources().getDisplayMetrics().density + 0.5f);
-
         ViewCompat.setOnApplyWindowInsetsListener(headerSafe, (v, windowInsets) -> {
             Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars());
-            v.setPaddingRelative(basePadStart, bars.top + extraTop, basePadEnd, basePadBottom);
+            v.setPaddingRelative(basePadStart, bars.top, basePadEnd, basePadBottom);
             return windowInsets;
         });
         ViewCompat.requestApplyInsets(headerSafe);

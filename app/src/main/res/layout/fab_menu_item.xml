@@ -23,7 +23,7 @@
             android:layout_height="match_parent"
             app:cardBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:cardElevation="0dp"
-            app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuStateStart"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuSegment"
             app:strokeWidth="0dp">
 
             <ImageView
@@ -43,7 +43,7 @@
             android:layout_weight="1"
             app:cardBackgroundColor="?attr/colorSurfaceContainer"
             app:cardElevation="0dp"
-            app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuLabelEnd"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuSegment"
             app:strokeWidth="0dp">
 
             <TextView
