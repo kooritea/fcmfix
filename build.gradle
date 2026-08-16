@@ -20,8 +20,11 @@ if (System.getenv('CI') != null) {
 
     gradle.projectsEvaluated {
         rootProject.allprojects { p ->
-            p.logging.addStandardOutputListener(
-                    sink as org.gradle.api.logging.StandardOutputListener)
+            def listener = sink as org.gradle.api.logging.StandardOutputListener
+            // Kotlin/Javac diagnostics are logged at ERROR level, which the
+            // console renders on the standard-error stream.
+            p.logging.addStandardOutputListener(listener)
+            p.logging.addStandardErrorListener(listener)
         }
     }
 
@@ -61,6 +64,12 @@ if (System.getenv('CI') != null) {
                                 kotlin.group(2), kotlin.group(4).trim())
                         return
                     }
+                    def kotlinRel = line =~ /^e:\s+(.+?\.kt):(\d+):(\d+)\s*(.*)$/
+                    if (kotlinRel.find()) {
+                        emit('Kotlin compile', rel(kotlinRel.group(1)),
+                                kotlinRel.group(2), kotlinRel.group(4).trim())
+                        return
+                    }
                     def javac = line =~ /^(.*?\.java):(\d+):\s+error:\s*(.*)$/
                     if (javac.find()) {
                         emit('Java compile', rel(javac.group(1)),
@@ -80,7 +89,7 @@ if (System.getenv('CI') != null) {
             }
         }
 
-        if (emitted.isEmpty() && result.failure != null) {
+        if (result.failure != null) {
             // Include the nested cause chain so the annotation carries the
             // actual reason, not just the outermost "Build file ..." wrapper.
             def failureLines = []
@@ -95,7 +104,28 @@ if (System.getenv('CI') != null) {
                 walk(t.cause)
             }
             walk(result.failure)
-            emit('Build failure', '', '', failureLines.join(' | '))
+            if (emitted.isEmpty()) {
+                emit('Build failure', '', '', failureLines.join(' | '))
+            }
+            // Dump captured lines that look like diagnostics but did not match
+            // a file pattern (e.g. messages rendered on the error stream), so
+            // no failure ships without a reason.
+            def interesting = []
+            synchronized (captured) {
+                captured.each { raw ->
+                    raw.toString().eachLine { line ->
+                        def lower = line.toLowerCase()
+                        if ((lower.contains('error') || lower.contains('unresolved')
+                                || lower.contains('exception') || line.contains('e: '))
+                                && interesting.size() < 12) {
+                            interesting.add(line.trim())
+                        }
+                    }
+                }
+            }
+            if (!interesting.isEmpty()) {
+                emit('Build diagnostics', '', '', interesting.join(' | '))
+            }
         }
         emitted.each { println(it) }
     }
