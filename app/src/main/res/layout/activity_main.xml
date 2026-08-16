@@ -95,31 +95,28 @@
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_all"
-                style="@style/Widget.Material3.Chip.Filter"
+                style="@style/Widget.Fcmself.FilterChip"
                 android:layout_width="84dp"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:gravity="center"
                 android:text="@string/all_apps_title"
-                app:chipStrokeWidth="0dp" />
+                android:textAlignment="center" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_fcm"
-                style="@style/Widget.Material3.Chip.Filter"
+                style="@style/Widget.Fcmself.FilterChip"
                 android:layout_width="84dp"
                 android:layout_height="wrap_content"
-                android:gravity="center"
                 android:text="@string/fcm_filter_title"
-                app:chipStrokeWidth="0dp" />
+                android:textAlignment="center" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_enabled"
-                style="@style/Widget.Material3.Chip.Filter"
+                style="@style/Widget.Fcmself.FilterChip"
                 android:layout_width="84dp"
                 android:layout_height="wrap_content"
-                android:gravity="center"
                 android:text="@string/enabled_filter_title"
-                app:chipStrokeWidth="0dp" />
+                android:textAlignment="center" />
         </com.google.android.material.chip.ChipGroup>
 
         <LinearLayout
