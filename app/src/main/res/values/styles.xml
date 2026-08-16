@@ -6,9 +6,23 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.FilterTab" parent="">
+    <style name="ShapeAppearance.Fcmself.FilterStart" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">16dp</item>
+        <item name="cornerSize">0dp</item>
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeBottomLeft">16dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Fcmself.FilterMiddle" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">0dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Fcmself.FilterEnd" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">0dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomRight">16dp</item>
     </style>
 
     <style name="ShapeAppearance.Fcmself.AppCard" parent="">

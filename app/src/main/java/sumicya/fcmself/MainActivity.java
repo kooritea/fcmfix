@@ -158,7 +158,6 @@ public class MainActivity extends AppCompatActivity {
     private boolean lastConfigError = false;
     private FilterMode filterMode = FilterMode.ALL;
 
-    private int colorPrimary;
     private int colorError;
     private int colorOnSurface;
     private int colorOnSurfaceVariant;
@@ -170,9 +169,9 @@ public class MainActivity extends AppCompatActivity {
     private int colorErrorContainer;
     private int colorOnErrorContainer;
     /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
-    private ColorStateList tintError;
     private ColorStateList tintDisconnected;
     private ColorStateList tintOnPrimaryContainer;
+    private ColorStateList tintOnErrorContainer;
 
     private Boolean cachedDiagIssue;
     private long diagCacheAtMs;
@@ -566,7 +565,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Snackbar createExpressiveSnackbar(
-            String text, int iconRes, int accent, int duration) {
+            String text, int iconRes, int containerColor, int contentColor, int duration) {
         Snackbar snackbar = Snackbar.make(recyclerView, text, duration);
         if (mainFab != null) {
             // Anchor above the FAB instead of letting CoordinatorLayout translate the FAB while the
@@ -576,15 +575,16 @@ public class MainActivity extends AppCompatActivity {
         View snackbarView = snackbar.getView();
         int radius = Math.round(22 * getResources().getDisplayMetrics().density);
         GradientDrawable background = new GradientDrawable();
-        background.setColor(colorSurfaceContainerHigh);
+        background.setColor(containerColor);
         background.setCornerRadius(radius);
+        snackbarView.setBackgroundTintList(null);
         snackbarView.setBackground(background);
         snackbarView.setElevation(0f);
 
         if (snackbarView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams layoutParams =
                     (ViewGroup.MarginLayoutParams) snackbarView.getLayoutParams();
-            int sideMargin = Math.round(16 * getResources().getDisplayMetrics().density);
+            int sideMargin = Math.round(12 * getResources().getDisplayMetrics().density);
             layoutParams.setMarginStart(Math.max(layoutParams.getMarginStart(), sideMargin));
             layoutParams.setMarginEnd(Math.max(layoutParams.getMarginEnd(), sideMargin));
             snackbarView.setLayoutParams(layoutParams);
@@ -594,17 +594,17 @@ public class MainActivity extends AppCompatActivity {
                 .findViewById(com.google.android.material.R.id.snackbar_text);
         Drawable icon = ContextCompat.getDrawable(this, iconRes);
         if (snackbarText != null) {
-            snackbarText.setTextColor(colorOnSurface);
+            snackbarText.setTextColor(contentColor);
             if (icon != null) {
                 icon = icon.mutate();
-                icon.setTint(accent);
+                icon.setTint(contentColor);
                 snackbarText.setCompoundDrawablesRelativeWithIntrinsicBounds(
                         icon, null, null, null);
                 int iconPadding = Math.round(8 * getResources().getDisplayMetrics().density);
                 snackbarText.setCompoundDrawablePadding(iconPadding);
             }
         }
-        snackbar.setActionTextColor(accent);
+        snackbar.setActionTextColor(contentColor);
         snackbar.setTextMaxLines(2);
         return snackbar;
     }
@@ -618,13 +618,13 @@ public class MainActivity extends AppCompatActivity {
         final boolean nowAllow = appInfo.isAllow;
         final String pkg = appInfo.packageName;
         final String name = appInfo.name;
-        final int accent = nowAllow ? colorPrimary : colorError;
         String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
 
         Snackbar snackbar = createExpressiveSnackbar(
                 text,
                 nowAllow ? R.drawable.ic_status_check : R.drawable.ic_status_close,
-                accent,
+                nowAllow ? translucentPrimaryContainer : colorErrorContainer,
+                nowAllow ? fabConnectedContent : colorOnErrorContainer,
                 4_000);
         snackbar.setAction(R.string.undo, v -> {
             boolean reverted = nowAllow
@@ -649,7 +649,8 @@ public class MainActivity extends AppCompatActivity {
         Snackbar snackbar = createExpressiveSnackbar(
                 getString(R.string.unsupported_app_message, appInfo.name),
                 R.drawable.ic_status_dash,
-                colorOnSurfaceVariant,
+                colorSurfaceContainerHigh,
+                colorOnSurface,
                 Snackbar.LENGTH_SHORT);
         snackbar.show();
     }
@@ -1257,6 +1258,10 @@ public class MainActivity extends AppCompatActivity {
                 applyPrimarySurface(holder.appView, true, colorSurfaceContainerLow);
                 holder.name.setTextColor(fabConnectedContent);
                 holder.appPkg.setTextColor(fabConnectedContent);
+            } else if (appInfo.includeFcm && allowListLoaded) {
+                applyPrimarySurface(holder.appView, false, colorErrorContainer);
+                holder.name.setTextColor(colorOnErrorContainer);
+                holder.appPkg.setTextColor(colorOnErrorContainer);
             } else {
                 applyPrimarySurface(holder.appView, false, colorSurfaceContainerLow);
                 holder.name.setTextColor(colorOnSurface);
@@ -1277,7 +1282,7 @@ public class MainActivity extends AppCompatActivity {
                 description = R.string.app_status_enabled_desc;
             } else if (appInfo.includeFcm && allowListLoaded) {
                 holder.status.setImageResource(R.drawable.ic_status_close);
-                holder.status.setImageTintList(tintError);
+                holder.status.setImageTintList(tintOnErrorContainer);
                 description = R.string.app_status_disabled_desc;
             } else {
                 // Config not read yet (service still binding after a cold start), or no FCM
@@ -1643,7 +1648,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         int fallbackPrimary = ContextCompat.getColor(this, R.color.colorPrimary);
-        colorPrimary = resolveThemeColor(android.R.attr.colorPrimary, fallbackPrimary);
         colorError = resolveThemeColor(
                 android.R.attr.colorError,
                 ContextCompat.getColor(this, R.color.status_error));
@@ -1669,9 +1673,9 @@ public class MainActivity extends AppCompatActivity {
                 com.google.android.material.R.attr.colorErrorContainer, colorError);
         colorOnErrorContainer = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnErrorContainer, Color.WHITE);
-        tintError = ColorStateList.valueOf(colorError);
         tintDisconnected = ColorStateList.valueOf(colorOnSurfaceVariant);
         tintOnPrimaryContainer = ColorStateList.valueOf(fabConnectedContent);
+        tintOnErrorContainer = ColorStateList.valueOf(colorOnErrorContainer);
 
         headerSafe = findViewById(R.id.header_safe);
         allStatsView = findViewById(R.id.all_stats);

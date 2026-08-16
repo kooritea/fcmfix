@@ -97,13 +97,12 @@
                 android:id="@+id/filter_all"
                 android:layout_width="0dp"
                 android:layout_height="50dp"
-                android:layout_marginEnd="1dp"
                 android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 app:cardBackgroundColor="?attr/colorPrimaryContainer"
                 app:cardElevation="0dp"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterTab"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterStart"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -134,14 +133,12 @@
                 android:id="@+id/filter_fcm"
                 android:layout_width="0dp"
                 android:layout_height="50dp"
-                android:layout_marginStart="1dp"
-                android:layout_marginEnd="1dp"
                 android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                 app:cardElevation="0dp"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterTab"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -172,13 +169,12 @@
                 android:id="@+id/filter_enabled"
                 android:layout_width="0dp"
                 android:layout_height="50dp"
-                android:layout_marginStart="1dp"
                 android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                 app:cardElevation="0dp"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterTab"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterEnd"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
