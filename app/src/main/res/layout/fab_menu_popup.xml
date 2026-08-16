@@ -3,8 +3,6 @@
     android:id="@+id/fab_menu_scroll"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:clipChildren="false"
-    android:clipToPadding="false"
     android:fillViewport="true"
     android:overScrollMode="ifContentScrolls"
     android:scrollbars="none">
@@ -13,8 +11,6 @@
         android:id="@+id/fab_menu_items"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:clipChildren="false"
-        android:clipToPadding="false"
         android:orientation="vertical" />
 
 </ScrollView>

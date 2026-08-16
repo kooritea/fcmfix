@@ -23,4 +23,5 @@
     <string name="fab_status_error">功能菜单，检测到配置或 FCM 状态异常</string>
     <string name="fab_status_disconnected">功能菜单，服务尚未连接</string>
     <string name="fab_menu_hook_health">Hook 健康状态</string>
+    <string name="hook_health_querying">正在查询已启用作用域…</string>
 </resources>

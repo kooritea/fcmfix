@@ -216,7 +216,8 @@
         android:layout_marginBottom="16dp"
         android:contentDescription="@string/fab_content_description"
         app:borderWidth="0dp"
-        app:elevation="6dp"
-        app:fabSize="normal" />
+        app:elevation="0dp"
+        app:fabSize="normal"
+        app:pressedTranslationZ="0dp" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

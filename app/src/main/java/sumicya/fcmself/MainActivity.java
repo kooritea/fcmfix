@@ -31,6 +31,7 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -168,7 +169,6 @@ public class MainActivity extends AppCompatActivity {
     private int translucentPrimaryContainer;
     private int colorErrorContainer;
     private int colorOnErrorContainer;
-    private float primaryElevation;
     /** Precomputed once so item rebinds and toggles do not allocate a ColorStateList each time. */
     private ColorStateList tintError;
     private ColorStateList tintDisconnected;
@@ -201,7 +201,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean packageReceiverRegistered;
     private boolean healthReceiverRegistered;
     private String healthNonce;
-    private AlertDialog healthDialog;
+    private TextView healthStatusView;
     private final Map<String, HealthResponse> healthResponses = new HashMap<>();
 
     private static final class HealthResponse {
@@ -231,7 +231,7 @@ public class MainActivity extends AppCompatActivity {
                         intent.getBooleanExtra("bootComplete", false),
                         intent.getBooleanExtra("configReady", false),
                         modules != null ? modules : new ArrayList<>()));
-                updateHealthDialog();
+                updateHealthPanel();
             }
         }
     };
@@ -266,17 +266,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void showHookHealthPanel() {
+    private void requestHookHealth(TextView statusView) {
         registerHealthResponseReceiver();
+        healthStatusView = statusView;
+        healthStatusView.setText("正在查询已启用作用域…");
         healthNonce = UUID.randomUUID().toString();
         healthResponses.clear();
-        healthDialog = new AlertDialog.Builder(this)
-                .setTitle("Hook 健康状态")
-                .setMessage("正在查询已启用作用域…")
-                .setPositiveButton("关闭", null)
-                .create();
-        healthDialog.setOnDismissListener(dialog -> healthDialog = null);
-        healthDialog.show();
 
         Intent request = new Intent(HEALTH_REQUEST_ACTION);
         request.putExtra("nonce", healthNonce);
@@ -284,13 +279,13 @@ public class MainActivity extends AppCompatActivity {
         String expectedNonce = healthNonce;
         MAIN_HANDLER.postDelayed(() -> {
             if (expectedNonce.equals(healthNonce)) {
-                updateHealthDialog();
+                updateHealthPanel();
             }
         }, 700L);
     }
 
-    private void updateHealthDialog() {
-        if (healthDialog == null || !healthDialog.isShowing()) {
+    private void updateHealthPanel() {
+        if (healthStatusView == null) {
             return;
         }
         StringBuilder status = new StringBuilder();
@@ -303,8 +298,8 @@ public class MainActivity extends AppCompatActivity {
         appendHealthProcess(status, "android", "system_server（核心）");
         appendHealthProcess(status, "com.miui.powerkeeper", "PowerKeeper（可选）");
         appendHealthProcess(status, "com.google.android.gms", "GMS 重连（可选）");
-        status.append("\n再次打开菜单中的 Hook 健康状态可重新查询。模块已加载不等同于所有 OEM 私有方法都存在。");
-        healthDialog.setMessage(status.toString());
+        status.append("\n模块已加载不等同于所有 OEM 私有方法都存在。");
+        healthStatusView.setText(status.toString());
     }
 
     private void appendHealthProcess(StringBuilder status, String process, String label) {
@@ -445,7 +440,8 @@ public class MainActivity extends AppCompatActivity {
         // accessible label rather than changing the button palette underneath the user's finger.
         mainFab.setBackgroundTintList(ColorStateList.valueOf(translucentPrimaryContainer));
         mainFab.setImageTintList(ColorStateList.valueOf(fabConnectedContent));
-        applyPrimaryShadow(mainFab, true);
+        mainFab.setCompatElevation(0f);
+        mainFab.setCompatPressedTranslationZ(0f);
         int description;
         if (xposedService == null) {
             description = R.string.fab_status_disconnected;
@@ -512,12 +508,7 @@ public class MainActivity extends AppCompatActivity {
     private void applyPrimarySurface(
             MaterialCardView card, boolean active, int inactiveContainer) {
         card.setCardBackgroundColor(active ? translucentPrimaryContainer : inactiveContainer);
-        // Let the platform render its standard neutral elevation shadow.
-        card.setCardElevation(active ? primaryElevation : 0f);
-    }
-
-    private void applyPrimaryShadow(View view, boolean active) {
-        view.setElevation(active ? primaryElevation : 0f);
+        card.setCardElevation(0f);
     }
 
     private void applyHeaderScrim() {
@@ -588,7 +579,7 @@ public class MainActivity extends AppCompatActivity {
         background.setColor(colorSurfaceContainerHigh);
         background.setCornerRadius(radius);
         snackbarView.setBackground(background);
-        snackbarView.setElevation(6 * getResources().getDisplayMetrics().density);
+        snackbarView.setElevation(0f);
 
         if (snackbarView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams layoutParams =
@@ -777,13 +768,38 @@ public class MainActivity extends AppCompatActivity {
             popup.dismiss();
             openFcmDiagnostics();
         });
-        addActionFabMenuItem(
-                items, R.string.fab_menu_hook_health, R.drawable.ic_health, v -> {
-            popup.dismiss();
-            showHookHealthPanel();
+        View healthRow = addActionFabMenuItem(
+                items, R.string.fab_menu_hook_health, R.drawable.ic_health, null);
+        View healthPanel = inflater.inflate(R.layout.hook_health_panel, items, false);
+        TextView healthStatus = healthPanel.findViewById(R.id.hook_health_status);
+        items.addView(healthPanel);
+        ScrollView menuScroll = content.findViewById(R.id.fab_menu_scroll);
+        healthRow.setOnClickListener(v -> {
+            boolean expand = healthPanel.getVisibility() != View.VISIBLE;
+            healthPanel.setVisibility(expand ? View.VISIBLE : View.GONE);
+            if (expand) {
+                requestHookHealth(healthStatus);
+            } else {
+                healthStatusView = null;
+                healthNonce = null;
+            }
+            applyFabMenuEdgeShapes(items);
+            positionFabPopup(popup, content, popupWidth, horizontalMargin);
+            if (expand) {
+                healthPanel.post(() -> menuScroll.smoothScrollTo(0, healthPanel.getBottom()));
+            }
+        });
+        popup.setOnDismissListener(() -> {
+            healthStatusView = null;
+            healthNonce = null;
         });
         applyFabMenuEdgeShapes(items);
 
+        positionFabPopup(popup, content, popupWidth, horizontalMargin);
+    }
+
+    private void positionFabPopup(
+            PopupWindow popup, View content, int popupWidth, int horizontalMargin) {
         content.measure(
                 View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
@@ -795,29 +811,44 @@ public class MainActivity extends AppCompatActivity {
         } else {
             x = location[0] + mainFab.getWidth() - popupWidth;
         }
-        x = Math.max(horizontalMargin, Math.min(x, maxWidth - popupWidth + horizontalMargin));
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int maximumX = screenWidth - popupWidth - horizontalMargin;
+        x = Math.max(horizontalMargin, Math.min(x, maximumX));
         int verticalGap = Math.round(8 * getResources().getDisplayMetrics().density);
         int availableHeight = Math.max(
                 1, location[1] - verticalGap - horizontalMargin);
         int popupHeight = Math.min(content.getMeasuredHeight(), availableHeight);
-        popup.setHeight(popupHeight);
         int y = Math.max(horizontalMargin, location[1] - popupHeight - verticalGap);
-        popup.showAtLocation(mainFab, Gravity.NO_GRAVITY, x, y);
+        if (popup.isShowing()) {
+            popup.update(x, y, popupWidth, popupHeight);
+        } else {
+            popup.setHeight(popupHeight);
+            popup.showAtLocation(mainFab, Gravity.NO_GRAVITY, x, y);
+        }
     }
 
     private void applyFabMenuEdgeShapes(LinearLayout items) {
-        int last = items.getChildCount() - 1;
+        int firstVisible = -1;
+        int lastVisible = -1;
+        for (int i = 0; i < items.getChildCount(); i++) {
+            if (items.getChildAt(i).getVisibility() == View.VISIBLE) {
+                if (firstVisible < 0) {
+                    firstVisible = i;
+                }
+                lastVisible = i;
+            }
+        }
         float radius = 16 * getResources().getDisplayMetrics().density;
-        for (int i = 0; i <= last; i++) {
+        for (int i = 0; i < items.getChildCount(); i++) {
             MaterialCardView row = (MaterialCardView) items.getChildAt(i);
             ShapeAppearanceModel.Builder shape = row.getShapeAppearanceModel()
                     .toBuilder()
                     .setAllCornerSizes(0f);
-            if (i == 0) {
+            if (i == firstVisible) {
                 shape.setTopLeftCornerSize(radius);
                 shape.setTopRightCornerSize(radius);
             }
-            if (i == last) {
+            if (i == lastVisible) {
                 shape.setBottomLeftCornerSize(radius);
                 shape.setBottomRightCornerSize(radius);
             }
@@ -862,7 +893,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void addActionFabMenuItem(
+    private View addActionFabMenuItem(
             LinearLayout parent, int labelRes, int iconRes, View.OnClickListener listener) {
         View row = inflateFabMenuItem(parent, labelRes);
         MaterialCardView rowCard = (MaterialCardView) row;
@@ -879,7 +910,10 @@ public class MainActivity extends AppCompatActivity {
         symbol.setImageTintList(ColorStateList.valueOf(content));
         label.setTextColor(content);
         row.setContentDescription(label.getText());
-        row.setOnClickListener(listener);
+        if (listener != null) {
+            row.setOnClickListener(listener);
+        }
+        return row;
     }
 
     private boolean updateBooleanConfig(String key, boolean value) {
@@ -1635,7 +1669,6 @@ public class MainActivity extends AppCompatActivity {
                 com.google.android.material.R.attr.colorErrorContainer, colorError);
         colorOnErrorContainer = resolveThemeColor(
                 com.google.android.material.R.attr.colorOnErrorContainer, Color.WHITE);
-        primaryElevation = 2 * getResources().getDisplayMetrics().density;
         tintError = ColorStateList.valueOf(colorError);
         tintDisconnected = ColorStateList.valueOf(colorOnSurfaceVariant);
         tintOnPrimaryContainer = ColorStateList.valueOf(fabConnectedContent);
@@ -1674,7 +1707,6 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new GridLayoutManager(this, spanCount));
         recyclerView.setHasFixedSize(true);
         recyclerView.setItemViewCacheSize(32);
-        recyclerView.setClipChildren(false);
         recyclerView.setClipToPadding(false);
         // Prefetch a row ahead while flinging
         RecyclerView.RecycledViewPool pool = new RecyclerView.RecycledViewPool();
@@ -1740,10 +1772,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         healthNonce = null;
-        if (healthDialog != null) {
-            healthDialog.dismiss();
-            healthDialog = null;
-        }
+        healthStatusView = null;
         super.onDestroy();
     }
 
