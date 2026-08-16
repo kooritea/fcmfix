@@ -736,6 +736,7 @@ public class MainActivity extends AppCompatActivity {
         LayoutInflater inflater = LayoutInflater.from(this);
         ViewGroup popupParent = (ViewGroup) mainFab.getParent();
         View content = inflater.inflate(R.layout.fab_menu_popup, popupParent, false);
+        content.setClipToOutline(true);
         LinearLayout items = content.findViewById(R.id.fab_menu_items);
         int horizontalMargin = Math.round(8 * getResources().getDisplayMetrics().density);
         int maxWidth = getResources().getDisplayMetrics().widthPixels - horizontalMargin * 2;
