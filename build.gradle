@@ -4,3 +4,86 @@ plugins {
     id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
     id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21' apply false
 }
+
+// ── CI compile-error annotations ───────────────────────────────────────────
+// The GitHub App used by this repository has no `workflows` permission, so the
+// workflow file cannot be edited. Compile failures are therefore surfaced as
+// GitHub Actions check-run annotations straight from Gradle: the build console
+// is captured and error lines are re-emitted as ::error workflow commands when
+// the build fails. Outside CI this block does nothing.
+if (System.getenv('CI') != null) {
+    def captured = java.util.Collections.synchronizedList(new ArrayList<String>())
+
+    def sink = { CharSequence output ->
+        captured.add(output.toString())
+    }
+
+    gradle.projectsEvaluated {
+        rootProject.allprojects { p ->
+            p.logging.addStandardOutputListener(
+                    sink as org.gradle.api.logging.StandardOutputListener)
+        }
+    }
+
+    gradle.buildFinished { result ->
+        def emitted = []
+        def seen = new HashSet<String>()
+
+        def workspace = System.getenv('GITHUB_WORKSPACE')
+        def rel = { String path ->
+            if (workspace != null && path.startsWith(workspace)) {
+                return path.substring(workspace.length() + 1)
+            }
+            int idx = path.lastIndexOf('/fcmself/')
+            return idx >= 0 ? path.substring(idx + '/fcmself/'.length()) : path
+        }
+        def esc = { String text ->
+            text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        }
+        def emit = { String title, String file, String line, String msg ->
+            if (emitted.size() >= 50) {
+                return
+            }
+            String key = "${title}|${file}|${line}|${msg}"
+            if (seen.add(key)) {
+                emitted.add(file.isEmpty()
+                        ? "::error title=${title}::${esc(msg)}"
+                        : "::error file=${file},line=${line},title=${title}::${esc(msg)}")
+            }
+        }
+
+        synchronized (captured) {
+            captured.each { raw ->
+                raw.toString().eachLine { line ->
+                    def kotlin = line =~ /^e:\s+file:\/\/(.+?):(\d+):(\d+)\s*(.*)$/
+                    if (kotlin.find()) {
+                        emit('Kotlin compile', rel(kotlin.group(1)),
+                                kotlin.group(2), kotlin.group(4).trim())
+                        return
+                    }
+                    def javac = line =~ /^(.*?\.java):(\d+):\s+error:\s*(.*)$/
+                    if (javac.find()) {
+                        emit('Java compile', rel(javac.group(1)),
+                                javac.group(2), javac.group(3).trim())
+                        return
+                    }
+                    def aapt = line =~ /^(.*?\.xml):(\d+):\d+(?:-\d+)?:\s+AAPT: error:\s*(.*)$/
+                    if (aapt.find()) {
+                        emit('Resource link', rel(aapt.group(1)),
+                                aapt.group(2), aapt.group(3).trim())
+                        return
+                    }
+                    if (line.contains('Execution failed for task')) {
+                        emit('Gradle task', '', '', line.trim())
+                    }
+                }
+            }
+        }
+
+        if (emitted.isEmpty() && result.failure != null) {
+            String message = String.valueOf(result.failure)
+            emit('Build failure', '', '', message.readLines().first())
+        }
+        emitted.each { println(it) }
+    }
+}

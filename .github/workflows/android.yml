@@ -35,12 +35,13 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee gradle-test.log
+        run: ./gradlew testDebugUnitTest --stacktrace
 
-      # 编译错误转成 GitHub 注解：CI 日志无法直接下载时，注解是唯一的失败定位渠道。
-      - name: Annotate compile errors (unit tests)
-        if: always()
-        run: python3 scripts/annotate-gradle-errors.py gradle-test.log
+      - name: Build release
+        run: ./gradlew assembleRelease --stacktrace --warning-mode all
+
+      - name: Run lint
+        run: ./gradlew lint
 
       # 把失败的单元测试变成 GitHub 注解，不用下载日志压缩包就能看到原因。
       - name: Annotate unit test failures
@@ -50,7 +51,7 @@ jobs:
           import glob
           import xml.etree.ElementTree as ET
           def escape(text):
-              return (text or '').replace('%', '%25').replace('\\r', '%0D').replace('\\n', '%0A')
+              return (text or '').replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
           for path in glob.glob('app/build/test-results/**/*.xml', recursive=True):
               try:
                   root = ET.parse(path).getroot()
@@ -63,20 +64,6 @@ jobs:
                       print(f"::error title=Unit test {title}::{message}")
           PY
 
-      - name: Build release
-        run: ./gradlew assembleRelease --stacktrace --warning-mode all 2>&1 | tee gradle-release.log
-
-      - name: Annotate compile errors (release)
-        if: always()
-        run: python3 scripts/annotate-gradle-errors.py gradle-release.log
-
-      - name: Run lint
-        run: ./gradlew lint 2>&1 | tee gradle-lint.log
-
-      - name: Annotate compile errors (lint)
-        if: always()
-        run: python3 scripts/annotate-gradle-errors.py gradle-lint.log
-
       # 测试与 lint 的 HTML/XML 报告，失败时排查用。
       - name: Upload reports
         if: failure()
@@ -86,7 +73,6 @@ jobs:
           path: |
             app/build/reports/**
             app/build/test-results/**
-            gradle-*.log
           if-no-files-found: ignore
 
       - name: Upload APK
