@@ -215,3 +215,4 @@ public final class AppCatalog {
     static AppInfo loadSingleApp(PackageManager pm, String packageName, Set<String> allowList) {
         return AppScanner.scanOne(pm, packageName, allowList);
     }
+}
