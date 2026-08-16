@@ -4,10 +4,8 @@ import java.util.Locale;
 
 /**
  * FCM/GCM component-name checks used by the app browser; kept Android-free so it can be unit
- * tested. Matching is deliberately a superset of the canonical class names because apps rename the
- * manifest receiver/service (e.g. {@code .MyFirebaseMessagingService}) while keeping a name that
- * still reveals its purpose. False positives are harmless here: the flag only controls which apps
- * are offered in the "FCM" filter, never the module's runtime behaviour.
+ * tested. Matching covers canonical names and explicit Firebase/GCM renames while deliberately
+ * rejecting generic push-service names that cannot prove FCM usage by themselves.
  */
 public final class FcmReceiverDetector {
     private static final String FIREBASE_IID_RECEIVER =
@@ -18,11 +16,6 @@ public final class FcmReceiverDetector {
             "com.google.android.gms.measurement.AppMeasurementReceiver";
 
     private FcmReceiverDetector() {
-    }
-
-    /** @deprecated retained for backward compatibility; use {@link #isFcmComponent(String)}. */
-    public static boolean isFcmReceiver(String className) {
-        return isFcmComponent(className);
     }
 
     /**
@@ -47,10 +40,13 @@ public final class FcmReceiverDetector {
             return true;
         }
         // Legacy GCM receiver/service renames.
-        if (lower.endsWith("gcmreceiver") || lower.endsWith("gcmlistener")) {
+        if (lower.endsWith("gcmreceiver")
+                || lower.endsWith("gcmlistener")
+                || lower.endsWith("gcmlistenerservice")) {
             return true;
         }
         // Generic "fcm..." receiver/service names used by many apps.
         return lower.endsWith("fcmreceiver") || lower.endsWith("fcmpushreceiver");
     }
+
 }

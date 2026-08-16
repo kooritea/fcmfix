@@ -3,53 +3,64 @@ package sumicya.fcmself.xposed;
 import android.content.pm.PackageManager;
 import android.os.WorkSource;
 
+import java.lang.reflect.Constructor;
+
 import sumicya.fcmself.util.XposedUtils;
 
 import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XC_MethodReplacement;
+import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
 
 public class OplusProxyFix extends XposedModule {
 
-    private static Object s_oplusProxyWakeLock = null;
+    private static volatile Object s_oplusProxyWakeLock = null;
     private static volatile boolean s_useFourParams = false;
     private static volatile boolean s_signatureDetected = false;
 
     public OplusProxyFix(ClassLoader classLoader) {
         super(classLoader);
+        int installed = 0;
         // ColorOS internals vary by release. Install every independent hook even if an unrelated
         // class is missing; in particular, absence of the wake-lock proxy must not disable the
         // broadcast bypass.
         try {
             this.startHookOplusProxyWakeLock();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error OplusProxyWakeLock:" + e.getMessage());
         }
         try {
             this.startHookOplusProxyBroadcast();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error OplusProxyBroadcast:" + e.getMessage());
         }
         try {
             this.startHookRegisterGmsRestrictObserver();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error registerGmsRestrictObserver:" + e.getMessage());
         }
         try {
             this.startHookUpdateGmsRestrict();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error updateGmsRestrict:" + e.getMessage());
         }
         try {
             this.startHookIsGoogleRestricInfoOn();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error isGoogleRestricInfoOn:" + e.getMessage());
         }
         try {
             this.startHookIsGmsApp();
+            installed++;
         } catch (Throwable e) {
             printLog("hook error isGmsApp:" + e.getMessage());
         }
+        reportHookHealth("OplusProxyFix", "ColorOS Hook 已安装 " + installed + "/6");
     }
 
     private void startHookOplusProxyBroadcast() throws Exception {
@@ -82,16 +93,27 @@ public class OplusProxyFix extends XposedModule {
     private void startHookOplusProxyWakeLock() throws Exception {
         Class<?> oplusWakelockClass = XposedHelpers.findClass("com.android.server.power.OplusProxyWakeLock", classLoader);
 
-        XposedUtils.findAndHookConstructorAnyParam(oplusWakelockClass, new XC_MethodHook() {
+        XC_MethodHook captureInstance = new XC_MethodHook() {
             @Override
-            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+            protected void afterHookedMethod(MethodHookParam param) {
                 if (s_oplusProxyWakeLock != null) {
-                    printLog("warn: OplusProxyWakeLock constructed multiple times!");
+                    if (s_oplusProxyWakeLock != param.thisObject) {
+                        printLog("warn: OplusProxyWakeLock constructed multiple times!");
+                    }
                     return;
                 }
                 s_oplusProxyWakeLock = param.thisObject;
             }
-        });
+        };
+        Constructor<?>[] constructors = oplusWakelockClass.getDeclaredConstructors();
+        if (constructors.length == 0) {
+            throw new NoSuchMethodException(oplusWakelockClass.getName() + " has no constructor");
+        }
+        // OEM builds often expose several overloads and may instantiate a shorter one. Hooking
+        // only the longest constructor can miss the singleton entirely.
+        for (Constructor<?> constructor : constructors) {
+            XposedBridge.hookMethod(constructor, captureInstance);
+        }
     }
 
     private static int getTargetUidFromPackageName(String packageName) {
@@ -125,25 +147,38 @@ public class OplusProxyFix extends XposedModule {
         final String tag = "FCMXX";
 
         if (!s_signatureDetected) {
-            try {
-                XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
-                s_useFourParams = true;
-            } catch (Throwable e) {
-                XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
-                s_useFourParams = false;
-            }
-            s_signatureDetected = true;
-            printLog("unfreeze signature detected, fourParams=" + s_useFourParams, true);
-        } else {
-            try {
-                if (s_useFourParams) {
-                    XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
-                } else {
-                    XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
+            synchronized (OplusProxyFix.class) {
+                if (!s_signatureDetected) {
+                    try {
+                        XposedHelpers.callMethod(
+                                s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
+                        s_useFourParams = true;
+                    } catch (Throwable fourParamError) {
+                        try {
+                            XposedHelpers.callMethod(
+                                    s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
+                            s_useFourParams = false;
+                        } catch (Throwable threeParamError) {
+                            printLog("unfreezeIfNeed signature unavailable", true);
+                            return;
+                        }
+                    }
+                    s_signatureDetected = true;
+                    printLog("unfreeze signature detected, fourParams=" + s_useFourParams, true);
+                    return;
                 }
-                // No per-call log — runs on every allowed FCM on ColorOS
-            } catch (Throwable ignored) {
             }
+        }
+
+        try {
+            if (s_useFourParams) {
+                XposedHelpers.callMethod(
+                        s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag, "FCMFix");
+            } else {
+                XposedHelpers.callMethod(s_oplusProxyWakeLock, "unfreezeIfNeed", uid, ws, tag);
+            }
+            // No per-call log — runs on every allowed FCM on ColorOS
+        } catch (Throwable ignored) {
         }
     }
 

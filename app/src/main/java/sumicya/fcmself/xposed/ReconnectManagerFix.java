@@ -50,11 +50,83 @@ public class ReconnectManagerFix extends XposedModule {
     private volatile Field cachedMaxLongField;
 
     private static final Handler RECONNECT_HANDLER = new Handler(Looper.getMainLooper());
+    private final Object reconnectCheckLock = new Object();
+    private ReconnectCheck pendingHeartbeatCheck;
+    private ReconnectCheck pendingConnectionCheck;
+
+    private final class ReconnectCheck implements Runnable {
+        private final boolean heartbeat;
+        private final Object timerObject;
+        private final Field nextTimeField;
+
+        ReconnectCheck(boolean heartbeat, Object timerObject, Field nextTimeField) {
+            this.heartbeat = heartbeat;
+            this.timerObject = timerObject;
+            this.nextTimeField = nextTimeField;
+        }
+
+        @Override
+        public void run() {
+            synchronized (reconnectCheckLock) {
+                ReconnectCheck current = heartbeat
+                        ? pendingHeartbeatCheck
+                        : pendingConnectionCheck;
+                if (current != this) {
+                    return;
+                }
+                if (heartbeat) {
+                    pendingHeartbeatCheck = null;
+                } else {
+                    pendingConnectionCheck = null;
+                }
+            }
+            try {
+                long nextConnectionTime = XposedHelpers.getLongField(
+                        timerObject, nextTimeField.getName());
+                if (nextConnectionTime != 0
+                        && nextConnectionTime - SystemClock.elapsedRealtime() < -60_000L) {
+                    context.sendBroadcast(new Intent(
+                            "com.google.android.intent.action.GCM_RECONNECT"));
+                    printLog("Send broadcast GCM_RECONNECT", true);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+    }
 
     public ReconnectManagerFix(ClassLoader classLoader) {
         super(classLoader);
         this.addButton();
         this.startHookGcmServiceStart();
+        reportHookHealth("ReconnectManagerFix", "等待 GMS 计时器配置");
+    }
+
+    private void scheduleReconnectCheck(
+            String alarmType, Object timerObject, Field nextTimeField, long delayMs) {
+        boolean heartbeat = "GCM_HB_ALARM".equals(alarmType);
+        ReconnectCheck next = new ReconnectCheck(heartbeat, timerObject, nextTimeField);
+        synchronized (reconnectCheckLock) {
+            ReconnectCheck previous = heartbeat
+                    ? pendingHeartbeatCheck
+                    : pendingConnectionCheck;
+            if (previous != null) {
+                RECONNECT_HANDLER.removeCallbacks(previous);
+            }
+            if (heartbeat) {
+                pendingHeartbeatCheck = next;
+            } else {
+                pendingConnectionCheck = next;
+            }
+        }
+        if (!RECONNECT_HANDLER.postDelayed(next, Math.max(0L, delayMs))) {
+            synchronized (reconnectCheckLock) {
+                if (heartbeat && pendingHeartbeatCheck == next) {
+                    pendingHeartbeatCheck = null;
+                } else if (!heartbeat && pendingConnectionCheck == next) {
+                    pendingConnectionCheck = null;
+                }
+            }
+        }
     }
 
     @Override
@@ -124,7 +196,7 @@ public class ReconnectManagerFix extends XposedModule {
     private void checkVersion() throws Throwable {
         final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         PackageInfo pi = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
-        String versionName = pi.versionName;
+        String versionName = pi.versionName != null ? pi.versionName : "";
         long versionCode = pi.getLongVersionCode();
         if (versionCode < 213916046) {
             printLog("当前为旧版GMS，请使用0.4.1版本FCMFIX，禁用重连修复功能");
@@ -148,9 +220,11 @@ public class ReconnectManagerFix extends XposedModule {
             findAndUpdateHookTarget(sharedPreferences);
             return;
         }
-        if (!versionName.equals(sharedPreferences.getString("gms_version", ""))) {
-            printLog("gms已更新: " + sharedPreferences.getString("gms_version", "") + "("
-                    + sharedPreferences.getLong("gms_version_code", 0) + ")" + "->" + versionName + "(" + versionCode + ")", true);
+        String configuredVersionName = sharedPreferences.getString("gms_version", "");
+        long configuredVersionCode = sharedPreferences.getLong("gms_version_code", 0);
+        if (!versionName.equals(configuredVersionName) || versionCode != configuredVersionCode) {
+            printLog("gms已更新: " + configuredVersionName + "(" + configuredVersionCode + ")"
+                    + "->" + versionName + "(" + versionCode + ")", true);
             sharedPreferences.edit()
                     .putString("gms_version", versionName)
                     .putLong("gms_version_code", versionCode)
@@ -265,23 +339,14 @@ public class ReconnectManagerFix extends XposedModule {
                 if (maxField == null) {
                     return;
                 }
-                final Field finalMaxField = maxField;
-                final Object timerObj = param.thisObject;
-                long delay = (long) param.args[0] + 5000;
-                RECONNECT_HANDLER.postDelayed(() -> {
-                    try {
-                        long nextConnectionTime = XposedHelpers.getLongField(timerObj, finalMaxField.getName());
-                        if (nextConnectionTime != 0 && nextConnectionTime - SystemClock.elapsedRealtime() < -60000) {
-                            context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
-                            printLog("Send broadcast GCM_RECONNECT", true);
-                        }
-                    } catch (Throwable ignored) {
-                    }
-                }, delay);
+                long delay = (long) param.args[0] + 5_000L;
+                scheduleReconnectCheck(
+                        alarmType, param.thisObject, maxField, delay);
             }
         });
 
         hooksInstalled = true;
+        reportHookHealth("ReconnectManagerFix", "GMS 心跳/重连 Hook 已安装，检查已去重");
     }
 
     private void updateCachedAlarmTypePath(String path) {

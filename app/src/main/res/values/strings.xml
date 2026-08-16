@@ -1,6 +1,28 @@
 <resources>
-    <string name="app_name">fcmself</string>
-    <string name="status_mark_desc">FCM 状态</string>
+    <string name="app_name">Fcmself</string>
+    <string name="all_apps_title">全部</string>
+    <string name="fcm_filter_title">FCM</string>
+    <string name="compact_count">%1$d</string>
+    <string name="initial_count">0</string>
+    <string name="scanning_apps">正在扫描应用…</string>
+    <string name="app_status_enabled_desc">%1$s，已允许唤醒，点按以停用</string>
+    <string name="app_status_disabled_desc">%1$s，检测到 FCM，点按以启用唤醒</string>
+    <string name="app_status_pending_desc">%1$s，检测到 FCM，配置尚未就绪</string>
+    <string name="app_status_unsupported_desc">%1$s，未检测到 FCM，不可启用</string>
+    <string name="unsupported_app_message">未检测到 FCM：%1$s</string>
     <string name="empty_hint">没有匹配的应用</string>
-    <string name="xposed_description">Allow FCM/GCM to wake stopped apps; includes FcmFuck FOREGROUND flag + PowerExemptionManager</string>
+    <string name="undo">撤销</string>
+    <string name="fab_menu_disable_auto_clean">停止应用时保留通知</string>
+    <string name="fab_menu_include_icebox">唤醒冰箱冻结应用</string>
+    <string name="fab_menu_no_response">无响应时提示</string>
+    <string name="fab_menu_select_all_fcm">启用全部 FCM</string>
+    <string name="fab_menu_diagnostics">FCM Diagnostics</string>
+    <string name="fab_content_description">功能与状态</string>
+    <string name="fab_status_connected">功能菜单，服务已连接</string>
+    <string name="fab_status_error">功能菜单，检测到配置或 FCM 状态异常</string>
+    <string name="fab_status_disconnected">功能菜单，服务尚未连接</string>
+    <string name="fab_menu_hook_health">Hook 状态</string>
+    <string name="hook_health_querying">正在检查…</string>
+    <string name="search_apps">搜索应用</string>
+    <string name="search_hint">名称或包名</string>
 </resources>

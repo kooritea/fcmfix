@@ -31,11 +31,38 @@ android {
         checkReleaseBuilds = true
         abortOnError = true
         textReport = true
-        def githubSummary = System.getenv('GITHUB_STEP_SUMMARY')
-        if (githubSummary) {
-            textOutput = file(githubSummary)
+        xmlReport = true
+        warningsAsErrors = true
+    }
+}
+
+tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+    // Android/JUnit annotations are runtime-consumed; AGP also owns compiler paths/options.
+    // Keep all actionable source diagnostics visible while excluding toolchain-only notices.
+    options.compilerArgs += ['-Xlint:all,-processing,-options,-path']
+}
+
+// Surface lint findings as GitHub annotations even when warningsAsErrors fails the lint task.
+def lintBuildPath = layout.buildDirectory.get().asFile.absolutePath
+tasks.register('annotateLintReports') {
+    doLast {
+        new File(lintBuildPath).eachFileRecurse { report ->
+            if (!report.name.startsWith('lint-results') || !report.name.endsWith('.xml')) {
+                return
+            }
+            new groovy.xml.XmlSlurper(false, false).parse(report).issue.each { issue ->
+                def location = issue.location[0]
+                def message = String.valueOf(issue.@message)
+                        .replace('%', '%25')
+                        .replace('\r', '%0D')
+                        .replace('\n', '%0A')
+                println "::error file=${location.@file},line=${location.@line},col=${location.@column},title=Android Lint ${issue.@id}::${message}"
+            }
         }
     }
+}
+tasks.matching { it.name == 'lint' || it.name == 'lintDebug' || it.name == 'lintRelease' }.configureEach {
+    finalizedBy('annotateLintReports')
 }
 
 dependencies {

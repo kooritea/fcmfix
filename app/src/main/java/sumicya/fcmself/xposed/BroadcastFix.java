@@ -10,6 +10,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Process;
+import android.os.SystemClock;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -18,10 +19,12 @@ import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XposedBridge;
@@ -37,15 +40,47 @@ public class BroadcastFix extends XposedModule {
     private static volatile Method sPemAddMethod;
     private static volatile Object sPemService;
     private static volatile boolean sPemResolved;
+    private static final long TEMP_ALLOWLIST_DURATION_MS = 5_000L;
+    private static final long TEMP_ALLOWLIST_REAPPLY_MS = 2_500L;
+    /** Suppress redundant reflection/binder work during a same-package FCM burst. */
+    private static final ConcurrentHashMap<String, Long> LAST_TEMP_ALLOWLIST =
+            new ConcurrentHashMap<>();
 
-    /** Single-thread executor for IceBox activation — avoids unbounded threads under FCM storms. */
-    private static final ExecutorService ICEBOX_EXEC = Executors.newSingleThreadExecutor(r -> {
+    /** Two bounded workers prevent one 30s IceBox timeout from blocking every other package. */
+    private static final ExecutorService ICEBOX_EXEC = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "fcmself-icebox");
         t.setDaemon(true);
         return t;
     });
-    /** Packages currently being activated; prevents duplicate concurrent activations. */
-    private static final Set<String> iceboxInFlight = ConcurrentHashMap.newKeySet();
+    /** Bound retained hook arguments if a frozen app receives a burst before IceBox enables it. */
+    private static final int MAX_DEFERRED_BROADCASTS_PER_PACKAGE = 64;
+    private static final ConcurrentHashMap<String, DeferredBroadcastQueue> DEFERRED_BROADCASTS =
+            new ConcurrentHashMap<>();
+
+    private static final class DeferredBroadcast {
+        final Member method;
+        final Object receiver;
+        final Object[] args;
+
+        DeferredBroadcast(Member method, Object receiver, Object[] args) {
+            this.method = method;
+            this.receiver = receiver;
+            // Hook args are mutable. Keep a private snapshot until the asynchronous replay, and
+            // copy Intent values so a caller reusing its instance cannot change the queued message.
+            this.args = args.clone();
+            for (int i = 0; i < this.args.length; i++) {
+                if (this.args[i] instanceof Intent) {
+                    this.args[i] = new Intent((Intent) this.args[i]);
+                }
+            }
+        }
+    }
+
+    private static final class DeferredBroadcastQueue {
+        final ConcurrentLinkedQueue<DeferredBroadcast> broadcasts = new ConcurrentLinkedQueue<>();
+        final AtomicInteger size = new AtomicInteger();
+        final AtomicBoolean workerRunning = new AtomicBoolean();
+    }
 
     // Cached boolean config keys read once into volatiles for the absolute hottest path
     private static volatile boolean sIncludeIceBox = false;
@@ -68,26 +103,39 @@ public class BroadcastFix extends XposedModule {
         // so on devices where it installed successfully the high-level broadcastIntent hook would
         // only double-intercept each broadcast (an extra allocation + callback per send). Install it
         // only as a fallback for OEM/older builds that lack the locked hook.
+        int fallbackHookCount = 0;
         if (!lockedInstalled) {
             try {
-                this.startHookBroadcastIntentHighLevel();
+                fallbackHookCount = this.startHookBroadcastIntentHighLevel();
             } catch (Throwable e) {
                 printLog("hook error high-level broadcastIntent:" + e.getMessage());
             }
         }
         // TODO(experimental): 目前策略是「锁定钩子为主，高层钩子仅在锁定钩子装不上时兜底」。
-        //   若想保留双保险（两者都装，以韧性优先于省一次拦截开销），可改为无条件都装并观察。 
+        //   若想保留双保险（两者都装，以韧性优先于省一次拦截开销），可改为无条件都装并观察。
+        boolean resultHookInstalled = false;
         try {
             this.startHookScheduleResultTo();
+            resultHookInstalled = true;
         } catch (Throwable e) {
             // Only modern broadcast queues expose this hook point. Keep the core FCM fix active
             // when an OEM or older Android release does not provide it.
             printLog("hook error scheduleResultTo:" + e.getMessage());
         }
+        String core = lockedInstalled
+                ? "核心 locked Hook"
+                : fallbackHookCount > 0
+                ? "高层 fallback ×" + fallbackHookCount
+                : "核心 Hook 未命中";
+        reportHookHealth(
+                "BroadcastFix",
+                core
+                        + (resultHookInstalled ? "；结果回调已安装" : "；结果回调不适用")
+                        + "；临时豁免 5 秒");
     }
 
     /** @return true when a usable broadcastIntentLocked hook was installed. */
-    protected boolean startHookBroadcastIntentLocked() {
+    private boolean startHookBroadcastIntentLocked() {
         Method targetMethod = null;
         int intent_args_index = 0;
         int appOp_args_index = 0;
@@ -118,7 +166,8 @@ public class BroadcastFix extends XposedModule {
                 } else if (Build.VERSION.SDK_INT == 33) {
                     intent_args_index = 3;
                     appOp_args_index = 12;
-                } else if (Build.VERSION.SDK_INT >= 34) {
+                } else {
+                    // All remaining supported releases are Android 14+ (minSdk is Android 10).
                     intent_args_index = 3;
                     if (parameters.length > 13 && parameters[13].getType() == int.class) {
                         appOp_args_index = 13;
@@ -150,7 +199,7 @@ public class BroadcastFix extends XposedModule {
         return false;
     }
 
-    protected void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method) {
+    private void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method) {
         printLog("Android API: " + Build.VERSION.SDK_INT);
         printLog("appOp_args_index: " + appOp_args_index);
         printLog("intent_args_index: " + intent_args_index);
@@ -201,40 +250,15 @@ public class BroadcastFix extends XposedModule {
                 }
                 if (sIncludeIceBox && !IceboxUtils.isAppEnabled(context, target)) {
                     printLog("Waiting for IceBox to activate the app: " + target, true);
-                    methodHookParam.setResult(false);
-                    if (iceboxInFlight.add(target)) {
-                        final Object thisObject = methodHookParam.thisObject;
-                        final Object[] args = methodHookParam.args;
-                        final Member originalMethod = methodHookParam.method;
-                        final String pkg = target;
-                        ICEBOX_EXEC.execute(() -> {
-                            try {
-                                IceboxUtils.activeApp(context, pkg);
-                                for (int i1 = 0; i1 < 300; i1++) {
-                                    if (IceboxUtils.isAppEnabled(context, pkg)) {
-                                        break;
-                                    }
-                                    try {
-                                        Thread.sleep(100);
-                                    } catch (Throwable e) {
-                                        printLog("Send Forced Start Broadcast Error: " + pkg + " " + e.getMessage(), true);
-                                        break;
-                                    }
-                                }
-                                try {
-                                    if (IceboxUtils.isAppEnabled(context, pkg)) {
-                                        printLog("Send Forced Start Broadcast: " + pkg, true);
-                                    } else {
-                                        printLog("Waiting for IceBox to activate the app timed out: " + pkg, true);
-                                    }
-                                    XposedBridge.invokeOriginalMethod(originalMethod, thisObject, args);
-                                } catch (Throwable e) {
-                                    printLog("Send Forced Start Broadcast Error: " + pkg + " " + e.getMessage(), true);
-                                }
-                            } finally {
-                                iceboxInFlight.remove(pkg);
-                            }
-                        });
+                    // Every intercepted delivery must be replayed. The old in-flight Set retained
+                    // only the first broadcast and silently dropped later messages for the same
+                    // package while IceBox was still enabling it.
+                    if (deferUntilIceBoxEnabled(
+                            target,
+                            methodHookParam.method,
+                            methodHookParam.thisObject,
+                            methodHookParam.args)) {
+                        methodHookParam.setResult(defaultReturnValue(methodHookParam.method));
                     }
                 } else {
                     printLog("Send Forced Start Broadcast: " + target, true);
@@ -244,7 +268,100 @@ public class BroadcastFix extends XposedModule {
         });
     }
 
-    protected void startHookBroadcastIntentHighLevel() {
+    private static boolean deferUntilIceBoxEnabled(
+            String packageName, Member method, Object receiver, Object[] args) {
+        DeferredBroadcastQueue state = DEFERRED_BROADCASTS.computeIfAbsent(
+                packageName, ignored -> new DeferredBroadcastQueue());
+        int queued = state.size.incrementAndGet();
+        if (queued > MAX_DEFERRED_BROADCASTS_PER_PACKAGE) {
+            state.size.decrementAndGet();
+            // Do not cancel this delivery when the queue is full. Let the original framework path
+            // run synchronously rather than trading bounded memory for a guaranteed message loss.
+            printLog("IceBox deferred queue full, sending directly: " + packageName, true);
+            return false;
+        }
+        state.broadcasts.offer(new DeferredBroadcast(method, receiver, args));
+        startIceBoxWorker(packageName, state);
+        return true;
+    }
+
+    private static void startIceBoxWorker(String packageName, DeferredBroadcastQueue state) {
+        if (!state.workerRunning.compareAndSet(false, true)) {
+            return;
+        }
+        ICEBOX_EXEC.execute(() -> {
+            try {
+                if (!IceboxUtils.isAppEnabled(context, packageName)) {
+                    IceboxUtils.activeApp(context, packageName);
+                    long startedAt = SystemClock.elapsedRealtime();
+                    long deadline = startedAt + 30_000L;
+                    while (!IceboxUtils.isAppEnabled(context, packageName)) {
+                        long now = SystemClock.elapsedRealtime();
+                        if (now >= deadline) {
+                            break;
+                        }
+                        long elapsed = now - startedAt;
+                        long pollInterval = elapsed < 2_000L
+                                ? 100L
+                                : elapsed < 10_000L ? 250L : 500L;
+                        try {
+                            Thread.sleep(Math.min(pollInterval, deadline - now));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+
+                if (IceboxUtils.isAppEnabled(context, packageName)) {
+                    printLog("Send deferred forced-start broadcasts: " + packageName, true);
+                } else {
+                    printLog("Waiting for IceBox to activate the app timed out: "
+                            + packageName, true);
+                }
+
+                DeferredBroadcast deferred;
+                while ((deferred = state.broadcasts.poll()) != null) {
+                    state.size.decrementAndGet();
+                    try {
+                        XposedBridge.invokeOriginalMethod(
+                                deferred.method, deferred.receiver, deferred.args);
+                    } catch (Throwable e) {
+                        printLog("Send Forced Start Broadcast Error: " + packageName + " "
+                                + e.getMessage(), true);
+                    }
+                }
+            } finally {
+                state.workerRunning.set(false);
+                // Close the enqueue-vs-drain race: a delivery may arrive after poll() returned null
+                // but before workerRunning was cleared.
+                if (!state.broadcasts.isEmpty()) {
+                    startIceBoxWorker(packageName, state);
+                }
+            }
+        });
+    }
+
+    /** Return a type-correct placeholder while an intercepted method is replayed asynchronously. */
+    private static Object defaultReturnValue(Member member) {
+        if (!(member instanceof Method)) {
+            return null;
+        }
+        Class<?> type = ((Method) member).getReturnType();
+        if (!type.isPrimitive() || type == void.class) return null;
+        if (type == boolean.class) return false;
+        if (type == char.class) return '\0';
+        if (type == byte.class) return (byte) 0;
+        if (type == short.class) return (short) 0;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == float.class) return 0F;
+        if (type == double.class) return 0D;
+        return null;
+    }
+
+    private int startHookBroadcastIntentHighLevel() {
+        int hookCount = 0;
         String[] classNames = {
                 "com.android.server.am.ActivityManagerService",
                 "com.android.server.am.BroadcastController"
@@ -304,15 +421,24 @@ public class BroadcastFix extends XposedModule {
                         applyTemporaryAllowList(target);
                     }
                 });
+                hookCount++;
                 printLog("hooked high-level: " + className + "#" + name);
             }
         }
+        return hookCount;
     }
 
+    @SuppressLint("PrivateApi")
     private static void applyTemporaryAllowList(String packageName) {
         if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
             return;
         }
+        long now = SystemClock.elapsedRealtime();
+        Long previous = LAST_TEMP_ALLOWLIST.get(packageName);
+        if (previous != null && now - previous < TEMP_ALLOWLIST_REAPPLY_MS) {
+            return;
+        }
+        boolean marked = false;
         try {
             if (!sPemResolved) {
                 synchronized (BroadcastFix.class) {
@@ -322,32 +448,50 @@ public class BroadcastFix extends XposedModule {
                             sPemAddMethod = sPemClass.getMethod(
                                     "addToTemporaryAllowList",
                                     String.class, int.class, String.class, long.class);
-                            sPemService = context.getSystemService(sPemClass);
                         } catch (Throwable ignored) {
                             sPemClass = null;
                             sPemAddMethod = null;
-                            sPemService = null;
                         }
                         sPemResolved = true;
                     }
                 }
             }
-            if (sPemAddMethod == null || sPemService == null) {
+            if (sPemAddMethod == null || sPemClass == null) {
+                return;
+            }
+            // Service publication can lag class resolution during boot. Retry only this cheap
+            // lookup when it was temporarily null instead of permanently disabling exemptions.
+            Object service = sPemService;
+            if (service == null) {
+                synchronized (BroadcastFix.class) {
+                    service = sPemService;
+                    if (service == null) {
+                        service = context.getSystemService(sPemClass);
+                        sPemService = service;
+                    }
+                }
+            }
+            if (service == null) {
                 return;
             }
             // User id of the system process (USER_SYSTEM = 0). A hardcoded 102 names a user that
             // does not exist on single-user devices, silently making the temporary allow list a
             // no-op. Process.myUserHandle().hashCode() is the public-API equivalent of the hidden
             // Context.getUserId() on recent SDKs (the latter fails to compile on compileSdk 37).
-            sPemAddMethod.invoke(sPemService, packageName, Process.myUserHandle().hashCode(),
-                    "GOOGLE_C2DM", 2000L);
+            LAST_TEMP_ALLOWLIST.put(packageName, now);
+            marked = true;
+            sPemAddMethod.invoke(service, packageName, Process.myUserHandle().hashCode(),
+                    "GOOGLE_C2DM", TEMP_ALLOWLIST_DURATION_MS);
         } catch (Throwable t) {
+            if (marked) {
+                LAST_TEMP_ALLOWLIST.remove(packageName, now);
+            }
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
         }
     }
 
     @SuppressLint({"MissingPermission", "NotificationPermission"})
-    protected void startHookScheduleResultTo() {
+    private void startHookScheduleResultTo() {
         // This code is injected into system_server, so notification permission is determined by
         // that host process rather than this module APK. Keep the runtime SecurityException guard
         // below for OEM implementations that apply additional notification restrictions.

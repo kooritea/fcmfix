@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/hook_health_panel"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:visibility="gone"
+    app:cardBackgroundColor="?attr/colorPrimaryContainer"
+    android:elevation="0dp"
+    android:stateListAnimator="@null"
+    android:translationZ="0dp"
+    app:cardElevation="0dp"
+    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuSegment"
+    app:strokeWidth="0dp">
+
+    <TextView
+        android:id="@+id/hook_health_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="12dp"
+        android:text="@string/hook_health_querying"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?attr/colorOnPrimaryContainer" />
+
+</com.google.android.material.card.MaterialCardView>

@@ -11,11 +11,16 @@ public final class XposedHelpers {
     /** Class identity is part of the key; OEM/Dynamite class loaders may reuse class names. */
     private static final ConcurrentHashMap<Class<?>, ConcurrentHashMap<String, Field>> FIELD_CACHE =
             new ConcurrentHashMap<>();
+    /** Runtime-signature cache for callMethod/callStaticMethod hot paths. */
+    private static final ConcurrentHashMap<Class<?>, ConcurrentHashMap<MethodCacheKey, Method>>
+            METHOD_CACHE = new ConcurrentHashMap<>();
 
     private XposedHelpers() {
     }
 
     public static class ClassNotFoundError extends Error {
+        private static final long serialVersionUID = 1L;
+
         public ClassNotFoundError(String className, Throwable cause) {
             super(className, cause);
         }
@@ -189,8 +194,16 @@ public final class XposedHelpers {
     }
 
     private static Method findBestMethod(Class<?> clazz, String methodName, Object[] args) {
+        ConcurrentHashMap<MethodCacheKey, Method> classCache = METHOD_CACHE.computeIfAbsent(
+                clazz, ignored -> new ConcurrentHashMap<>());
+        MethodCacheKey cacheKey = new MethodCacheKey(methodName, args);
+        Method cached = classCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
         Method best = null;
-        int bestScore = -1;
+        int bestScore = Integer.MIN_VALUE;
         Class<?> current = clazz;
         while (current != null) {
             for (Method method : current.getDeclaredMethods()) {
@@ -206,17 +219,27 @@ public final class XposedHelpers {
                 for (int i = 0; i < parameterTypes.length; i++) {
                     Object arg = args[i];
                     if (arg == null) {
+                        // Reflection cannot pass null to a primitive. Reject it here instead of
+                        // selecting an arbitrary overload that will fail during invoke().
+                        if (parameterTypes[i].isPrimitive()) {
+                            compatible = false;
+                            break;
+                        }
                         continue;
                     }
                     Class<?> boxed = boxPrimitive(parameterTypes[i]);
-                    if (!boxed.isAssignableFrom(arg.getClass())) {
+                    Class<?> actual = arg.getClass();
+                    if (!boxed.isAssignableFrom(actual)) {
                         compatible = false;
                         break;
                     }
-                    score += boxed == arg.getClass() ? 2 : 1;
+                    // Prefer exact matches, then the nearest assignable superclass/interface.
+                    score += 1_000 - typeDistance(actual, boxed);
                 }
-                // Walk from the concrete class upward and preserve the subclass on equal scores.
-                if (compatible && score > bestScore) {
+                // Walk from the concrete class upward and preserve its method on a true tie. Within
+                // one class, resolve null/equal-distance ties toward the narrower parameter types.
+                if (compatible && (score > bestScore
+                        || (score == bestScore && isMoreSpecific(method, best)))) {
                     best = method;
                     bestScore = score;
                 }
@@ -227,7 +250,49 @@ public final class XposedHelpers {
             throw new NoSuchMethodError(clazz.getName() + "#" + methodName);
         }
         best.setAccessible(true);
-        return best;
+        Method existing = classCache.putIfAbsent(cacheKey, best);
+        return existing != null ? existing : best;
+    }
+
+    private static int typeDistance(Class<?> actual, Class<?> target) {
+        if (actual == target) {
+            return 0;
+        }
+        if (target.isInterface()) {
+            // Interface graphs are generally shallow; specificity ties are resolved below.
+            return 1;
+        }
+        int distance = 0;
+        Class<?> current = actual;
+        while (current != null && current != target) {
+            current = current.getSuperclass();
+            distance++;
+        }
+        return current == target ? distance : 100;
+    }
+
+    private static boolean isMoreSpecific(Method candidate, Method currentBest) {
+        if (currentBest == null) {
+            return false;
+        }
+        Class<?>[] candidateTypes = candidate.getParameterTypes();
+        Class<?>[] bestTypes = currentBest.getParameterTypes();
+        boolean narrower = false;
+        for (int i = 0; i < candidateTypes.length; i++) {
+            Class<?> candidateType = boxPrimitive(candidateTypes[i]);
+            Class<?> bestType = boxPrimitive(bestTypes[i]);
+            if (candidateType == bestType) {
+                continue;
+            }
+            if (bestType.isAssignableFrom(candidateType)) {
+                narrower = true;
+            } else if (!candidateType.isAssignableFrom(bestType)) {
+                return false;
+            } else {
+                return false;
+            }
+        }
+        return narrower;
     }
 
     private static Class<?> boxPrimitive(Class<?> cls) {
@@ -243,6 +308,34 @@ public final class XposedHelpers {
         if (cls == short.class) return Short.class;
         if (cls == char.class) return Character.class;
         return cls;
+    }
+
+    private static final class MethodCacheKey {
+        final String name;
+        final Class<?>[] argumentTypes;
+        final int hashCode;
+
+        MethodCacheKey(String name, Object[] args) {
+            this.name = name;
+            this.argumentTypes = new Class<?>[args.length];
+            for (int i = 0; i < args.length; i++) {
+                argumentTypes[i] = args[i] == null ? null : args[i].getClass();
+            }
+            this.hashCode = 31 * name.hashCode() + Arrays.hashCode(argumentTypes);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof MethodCacheKey)) return false;
+            MethodCacheKey that = (MethodCacheKey) other;
+            return name.equals(that.name) && Arrays.equals(argumentTypes, that.argumentTypes);
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode;
+        }
     }
 
     private static final class ParsedHookArgs {
