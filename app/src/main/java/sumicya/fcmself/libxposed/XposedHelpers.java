@@ -19,6 +19,8 @@ public final class XposedHelpers {
     }
 
     public static class ClassNotFoundError extends Error {
+        private static final long serialVersionUID = 1L;
+
         public ClassNotFoundError(String className, Throwable cause) {
             super(className, cause);
         }

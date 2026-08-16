@@ -659,7 +659,7 @@ public class MainActivity extends AppCompatActivity {
         int[] location = new int[2];
         mainFab.getLocationInWindow(location);
         int x;
-        if (ViewCompat.getLayoutDirection(mainFab) == ViewCompat.LAYOUT_DIRECTION_RTL) {
+        if (mainFab.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL) {
             x = location[0];
         } else {
             x = location[0] + mainFab.getWidth() - popupWidth;
