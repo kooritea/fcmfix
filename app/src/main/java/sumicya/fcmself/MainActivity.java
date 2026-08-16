@@ -71,7 +71,6 @@ import org.json.JSONObject;
 import java.lang.ref.WeakReference;
 import java.text.Collator;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -268,13 +267,24 @@ public class MainActivity extends AppCompatActivity {
     private final BroadcastReceiver packageChangeReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getData() != null) {
-                APP_ICON_CACHE.remove(intent.getData().getSchemeSpecificPart());
-            } else {
+            String packageName = intent.getData() != null
+                    ? intent.getData().getSchemeSpecificPart()
+                    : null;
+            if (packageName == null) {
                 APP_ICON_CACHE.evictAll();
+                invalidateAppListCache();
+                loadAppListAsync();
+                return;
             }
-            invalidateAppListCache();
-            loadAppListAsync();
+            APP_ICON_CACHE.remove(packageName);
+            boolean replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false);
+            if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction()) && replacing) {
+                // PACKAGE_ADDED/REPLACED will provide the new metadata moments later.
+                return;
+            }
+            updatePackageAsync(
+                    packageName,
+                    Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction()));
         }
     };
 
@@ -1527,11 +1537,15 @@ public class MainActivity extends AppCompatActivity {
      * simply "PushService". Querying manifest intent filters catches those obfuscated/custom names
      * without opening every APK individually.
      */
-    private static Set<String> queryFcmIntentPackages(PackageManager pm) {
+    private static Set<String> queryFcmIntentPackages(
+            PackageManager pm, String packageName) {
         Set<String> packages = new HashSet<>();
         int flags = PackageManager.MATCH_DISABLED_COMPONENTS;
         for (String action : FCM_INTENT_ACTIONS) {
             Intent intent = new Intent(action);
+            if (packageName != null) {
+                intent.setPackage(packageName);
+            }
             try {
                 collectResolvedPackages(packages, pm.queryBroadcastReceivers(intent, flags));
             } catch (Throwable t) {
@@ -1570,13 +1584,46 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    private static AppInfo createAppInfo(
+            PackageManager pm,
+            PackageInfo packageInfo,
+            Set<String> allowListSet,
+            Set<String> packagesResolvedForFcm) {
+        if (packageInfo.applicationInfo == null) {
+            return null;
+        }
+        // Accept only strong evidence: a matching manifest action or an explicit
+        // Firebase/GCM component name. Generic push names and permission-only hints are ignored.
+        boolean hasFcm = packagesResolvedForFcm.contains(packageInfo.packageName)
+                || hasFcmComponent(packageInfo.receivers)
+                || hasFcmComponent(packageInfo.services);
+        String label;
+        try {
+            label = packageInfo.applicationInfo.loadLabel(pm).toString();
+        } catch (Throwable t) {
+            label = packageInfo.packageName;
+        }
+        boolean isAllow = allowListSet.contains(packageInfo.packageName);
+        return new AppInfo(label, packageInfo.packageName, hasFcm, isAllow);
+    }
+
+    private static void sortAppList(List<AppInfo> list, Set<String> allowListSet) {
+        final Collator collator = Collator.getInstance(Locale.getDefault());
+        list.sort((left, right) -> {
+            int leftGroup = allowListSet.contains(left.packageName) ? 0 : left.includeFcm ? 1 : 2;
+            int rightGroup = allowListSet.contains(right.packageName) ? 0 : right.includeFcm ? 1 : 2;
+            if (leftGroup != rightGroup) {
+                return Integer.compare(leftGroup, rightGroup);
+            }
+            return collator.compare(left.name, right.name);
+        });
+    }
+
     private static List<AppInfo> buildAppList(
             PackageManager pm, Set<String> allowListSet) {
-        List<AppInfo> allow = new ArrayList<>();
-        List<AppInfo> notAllow = new ArrayList<>();
-        List<AppInfo> noFcm = new ArrayList<>();
+        List<AppInfo> result = new ArrayList<>();
 
-        Set<String> packagesResolvedForFcm = queryFcmIntentPackages(pm);
+        Set<String> packagesResolvedForFcm = queryFcmIntentPackages(pm, null);
         List<PackageInfo> packages;
         try {
             packages = pm.getInstalledPackages(
@@ -1589,41 +1636,78 @@ public class MainActivity extends AppCompatActivity {
         }
 
         for (PackageInfo packageInfo : packages) {
-            if (packageInfo.applicationInfo == null) {
-                continue;
-            }
-            // Accept only strong evidence: a matching manifest action or an explicit
-            // Firebase/GCM component name. Generic push names and permission-only hints are ignored.
-            boolean hasFcm = packagesResolvedForFcm.contains(packageInfo.packageName)
-                    || hasFcmComponent(packageInfo.receivers)
-                    || hasFcmComponent(packageInfo.services);
-
-            String label;
-            try {
-                label = packageInfo.applicationInfo.loadLabel(pm).toString();
-            } catch (Throwable t) {
-                label = packageInfo.packageName;
-            }
-            // Icon loaded lazily on bind — scanning hundreds of packages stays fast
-            boolean isAllow = allowListSet.contains(packageInfo.packageName);
-            AppInfo info = new AppInfo(label, packageInfo.packageName, hasFcm, isAllow);
-            if (isAllow) {
-                allow.add(info);
-            } else if (hasFcm) {
-                notAllow.add(info);
-            } else {
-                noFcm.add(info);
+            AppInfo info = createAppInfo(
+                    pm, packageInfo, allowListSet, packagesResolvedForFcm);
+            if (info != null) {
+                result.add(info);
             }
         }
+        sortAppList(result, allowListSet);
+        return result;
+    }
 
-        final Collator collator = Collator.getInstance(Locale.getDefault());
-        Comparator<AppInfo> byName = (a, b) -> collator.compare(a.name, b.name);
-        allow.sort(byName);
-        notAllow.sort(byName);
-        noFcm.sort(byName);
-        allow.addAll(notAllow);
-        allow.addAll(noFcm);
-        return allow;
+    private static AppInfo loadSingleApp(
+            PackageManager pm, String packageName, Set<String> allowListSet) {
+        try {
+            int flags = PackageManager.GET_RECEIVERS
+                    | PackageManager.GET_SERVICES
+                    | PackageManager.MATCH_DISABLED_COMPONENTS;
+            PackageInfo packageInfo = pm.getPackageInfo(packageName, flags);
+            Set<String> resolvedForFcm = queryFcmIntentPackages(pm, packageName);
+            return createAppInfo(pm, packageInfo, allowListSet, resolvedForFcm);
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
+        } catch (Throwable t) {
+            Log.w(TAG, "loadSingleApp " + packageName + ": " + t);
+            return null;
+        }
+    }
+
+    private void updatePackageAsync(String packageName, boolean removed) {
+        final boolean requireFullScan;
+        synchronized (APPS_CACHE_LOCK) {
+            requireFullScan = sCachedAppList == null || sAppListLoadInProgress;
+            sAppListGeneration++;
+            if (requireFullScan) {
+                sCachedAppList = null;
+            }
+        }
+        if (requireFullScan) {
+            loadAppListAsync();
+            return;
+        }
+
+        final PackageManager pm = getApplicationContext().getPackageManager();
+        final Set<String> allowSnapshot = new HashSet<>(allowList);
+        BG.execute(() -> {
+            AppInfo refreshed = removed ? null : loadSingleApp(pm, packageName, allowSnapshot);
+            final List<AppInfo> result;
+            synchronized (APPS_CACHE_LOCK) {
+                if (sCachedAppList == null) {
+                    result = null;
+                } else {
+                    List<AppInfo> updated = structuralCopy(sCachedAppList);
+                    updated.removeIf(item -> packageName.equals(item.packageName));
+                    if (refreshed != null) {
+                        updated.add(refreshed);
+                    }
+                    sortAppList(updated, allowSnapshot);
+                    sCachedAppList = structuralCopy(updated);
+                    result = sCachedAppList;
+                }
+            }
+            MAIN_HANDLER.post(() -> {
+                MainActivity activity = activeInstance.get();
+                if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+                    return;
+                }
+                if (result == null) {
+                    activity.loadAppListAsync();
+                } else {
+                    activity.applyAppList(structuralCopy(result), false);
+                }
+            });
+        });
     }
 
     private static void invalidateAppListCache() {
