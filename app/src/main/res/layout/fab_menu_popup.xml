@@ -1,16 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/fab_menu_scroll"
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:fillViewport="true"
-    android:overScrollMode="ifContentScrolls"
-    android:scrollbars="none">
+    android:clipToOutline="true"
+    app:cardBackgroundColor="@android:color/transparent"
+    app:cardElevation="0dp"
+    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.PopupClip"
+    app:strokeWidth="0dp">
 
-    <LinearLayout
-        android:id="@+id/fab_menu_items"
+    <ScrollView
+        android:id="@+id/fab_menu_scroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical" />
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls"
+        android:scrollbars="none">
 
-</ScrollView>
+        <LinearLayout
+            android:id="@+id/fab_menu_items"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+    </ScrollView>
+
+</com.google.android.material.card.MaterialCardView>

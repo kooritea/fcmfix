@@ -98,6 +98,7 @@ public class MainActivity extends AppCompatActivity {
             });
     private static final Object PAYLOAD_STATUS = new Object();
     private static final Object PAYLOAD_ICON = new Object();
+    private static final Object PAYLOAD_SHAPE = new Object();
     /** Bounded process cache: scrolling through hundreds of apps must not retain every icon. */
     private static final LruCache<String, Drawable> APP_ICON_CACHE = new LruCache<>(96);
 
@@ -152,6 +153,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView statsView;
     private View headerSafe;
     private RecyclerView recyclerView;
+    private int gridSpanCount = 3;
     private MaterialCardView[] filterCards;
     private TextView[] filterLabels;
     private TextView emptyHint;
@@ -1091,6 +1093,9 @@ public class MainActivity extends AppCompatActivity {
             mAppList.addAll(list);
             rebuildSubmittedState();
             result.dispatchUpdatesTo(this);
+            if (!mAppList.isEmpty()) {
+                notifyItemRangeChanged(0, mAppList.size(), PAYLOAD_SHAPE);
+            }
         }
 
         private boolean hasSameItemOrder(List<AppInfo> list) {
@@ -1175,6 +1180,7 @@ public class MainActivity extends AppCompatActivity {
             AppInfo appInfo = mAppList.get(position);
             holder.name.setText(appInfo.name);
             holder.appPkg.setText(appInfo.packageName);
+            bindCardShape(holder, position);
             bindStatus(holder, appInfo);
             bindIcon(holder, appInfo);
         }
@@ -1195,6 +1201,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                 } else if (payload == PAYLOAD_STATUS) {
                     bindStatus(holder, appInfo);
+                } else if (payload == PAYLOAD_SHAPE) {
+                    bindCardShape(holder, position);
                 }
             }
         }
@@ -1251,6 +1259,33 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
             });
+        }
+
+        private void bindCardShape(ViewHolder holder, int position) {
+            int itemCount = mAppList.size();
+            if (itemCount == 0 || position < 0 || position >= itemCount) {
+                return;
+            }
+            int last = itemCount - 1;
+            int topRight = Math.min(gridSpanCount - 1, last);
+            int bottomLeft = last - (last % gridSpanCount);
+            float radius = 16 * getResources().getDisplayMetrics().density;
+            ShapeAppearanceModel.Builder shape = holder.appView.getShapeAppearanceModel()
+                    .toBuilder()
+                    .setAllCornerSizes(0f);
+            if (position == 0) {
+                shape.setTopLeftCornerSize(radius);
+            }
+            if (position == topRight) {
+                shape.setTopRightCornerSize(radius);
+            }
+            if (position == bottomLeft) {
+                shape.setBottomLeftCornerSize(radius);
+            }
+            if (position == last) {
+                shape.setBottomRightCornerSize(radius);
+            }
+            holder.appView.setShapeAppearanceModel(shape.build());
         }
 
         private void bindCardAppearance(ViewHolder holder, AppInfo appInfo) {
@@ -1707,8 +1742,8 @@ public class MainActivity extends AppCompatActivity {
         recyclerView = findViewById(R.id.recycler_view);
         defaultAppIcon = getPackageManager().getDefaultActivityIcon();
         int screenWidthDp = getResources().getConfiguration().screenWidthDp;
-        int spanCount = Math.max(2, Math.min(8, screenWidthDp / 112));
-        recyclerView.setLayoutManager(new GridLayoutManager(this, spanCount));
+        gridSpanCount = Math.max(2, Math.min(8, screenWidthDp / 112));
+        recyclerView.setLayoutManager(new GridLayoutManager(this, gridSpanCount));
         recyclerView.setHasFixedSize(true);
         recyclerView.setItemViewCacheSize(32);
         recyclerView.setClipToPadding(false);
@@ -1718,7 +1753,7 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setRecycledViewPool(pool);
         GridLayoutManager glm = (GridLayoutManager) recyclerView.getLayoutManager();
         if (glm != null) {
-            glm.setInitialPrefetchItemCount(spanCount * 2);
+            glm.setInitialPrefetchItemCount(gridSpanCount * 2);
         }
         registerPackageChangeReceiver();
 
