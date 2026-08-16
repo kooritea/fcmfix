@@ -15,11 +15,3 @@ System Server 和其他已启用作用域。灰色状态表示服务或配置尚
 
 模块作用域含 `system_server`（无法干净地软重载），因此 `module.prop` 关闭了自动热重载
 （`autoHotReload=false`）：应用内改配置会通过配置广播即时生效，只有升级 APK 后才需要重启。
-
-## 检查
-
-需要 JDK 21 和 Android SDK 37：
-
-```bash
-./gradlew testDebugUnitTest lint assembleRelease
-```
