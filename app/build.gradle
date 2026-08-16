@@ -31,6 +31,7 @@ android {
         checkReleaseBuilds = true
         abortOnError = true
         textReport = true
+        xmlReport = true
         warningsAsErrors = true
     }
 }
@@ -60,7 +61,7 @@ tasks.register('annotateLintReports') {
         }
     }
 }
-tasks.matching { it.name == 'lint' }.configureEach {
+tasks.matching { it.name == 'lint' || it.name == 'lintDebug' || it.name == 'lintRelease' }.configureEach {
     finalizedBy('annotateLintReports')
 }
 
