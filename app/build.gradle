@@ -39,8 +39,9 @@ android {
 }
 
 tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
-    // Android/JUnit annotations are consumed by their runtimes rather than javac processors.
-    options.compilerArgs += ['-Xlint:all,-processing', '-Werror']
+    // Android/JUnit annotations are runtime-consumed; AGP also owns compiler paths/options.
+    // Keep every source-level diagnostic strict without turning toolchain setup notices into errors.
+    options.compilerArgs += ['-Xlint:all,-processing,-options,-path', '-Werror']
 }
 
 dependencies {
