@@ -2,7 +2,6 @@
     <string name="app_name">fcmself</string>
     <string name="all_apps_title">全部</string>
     <string name="fcm_filter_title">FCM</string>
-    <string name="enabled_filter_title">已启用</string>
     <string name="compact_count">%1$d</string>
     <string name="initial_count">0</string>
     <string name="scanning_apps">正在扫描应用…</string>

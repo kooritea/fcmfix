@@ -108,7 +108,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Drawable defaultAppIcon;
 
-    private enum FilterMode { ALL, FCM_ONLY, ENABLED }
+    private enum FilterMode { ALL, FCM_ONLY }
 
     private AppListAdapter appListAdapter;
     private static volatile XposedService xposedService;
@@ -152,10 +152,10 @@ public class MainActivity extends AppCompatActivity {
                 }
             };
     private FloatingActionButton mainFab;
-    private Snackbar activeToggleSnackbar;
+    /** One live feedback surface is updated in place to avoid Snackbar queues and flicker. */
+    private Snackbar activeFeedbackSnackbar;
     private TextView allStatsView;
     private TextView fcmStatsView;
-    private TextView statsView;
     private View headerSafe;
     private RecyclerView recyclerView;
     private int gridSpanCount = 3;
@@ -569,10 +569,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupGlassSurfaces() {
-        // Apply transparency directly to the M3E dynamic Primary Container. Surface Container High
-        // is intentionally not used here because its neutral layer gives the dock a grey cast.
-        int glassColor = ColorUtils.setAlphaComponent(fabConnectedContainer, 152);
-        bottomDock.setCardBackgroundColor(glassColor);
+        // The dock itself is only a positioning container. Keeping it transparent leaves tonal
+        // color on the selected filter and the action FAB instead of painting a large rectangle.
+        bottomDock.setCardBackgroundColor(Color.TRANSPARENT);
         bottomDock.setStrokeColor(Color.TRANSPARENT);
         bottomDock.setStrokeWidth(0);
         bottomDock.setShapeAppearanceModel(bottomDock.getShapeAppearanceModel()
@@ -581,20 +580,21 @@ public class MainActivity extends AppCompatActivity {
                 .build());
         removeViewShadow(bottomDock);
 
+        // Search remains a separate centered M3E surface and uses Primary Container directly, so
+        // it retains dynamic color without the grey cast from a neutral Surface Container layer.
+        int glassColor = ColorUtils.setAlphaComponent(fabConnectedContainer, 184);
         searchContainer.setCardBackgroundColor(glassColor);
         searchContainer.setStrokeColor(Color.TRANSPARENT);
         searchContainer.setStrokeWidth(0);
-        float searchRadius = 20 * getResources().getDisplayMetrics().density;
+        float searchRadius = 24 * getResources().getDisplayMetrics().density;
         searchContainer.setShapeAppearanceModel(searchContainer.getShapeAppearanceModel()
                 .toBuilder()
-                .setAllCornerSizes(0f)
-                .setTopLeftCornerSize(searchRadius)
-                .setTopRightCornerSize(searchRadius)
+                .setAllCornerSizes(searchRadius)
                 .build());
         removeViewShadow(searchContainer);
 
-        searchInput.setTextColor(colorOnSurface);
-        searchInput.setHintTextColor(colorOnSurfaceVariant);
+        searchInput.setTextColor(fabConnectedContent);
+        searchInput.setHintTextColor(fabConnectedContent);
     }
 
     private void applyHeaderScrim() {
@@ -628,17 +628,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateStats() {
-        if (statsView == null) {
-            return;
-        }
-        int enabled = 0;
         int totalFcm = 0;
         for (AppInfo info : fullAppList) {
             if (info.includeFcm) {
                 totalFcm++;
-                if (info.isAllow) {
-                    enabled++;
-                }
             }
         }
         if (allStatsView != null) {
@@ -647,16 +640,19 @@ public class MainActivity extends AppCompatActivity {
         if (fcmStatsView != null) {
             fcmStatsView.setText(getString(R.string.compact_count, totalFcm));
         }
-        statsView.setText(getString(R.string.compact_count, enabled));
         updateFilterTabStyle();
     }
 
-    private Snackbar createExpressiveSnackbar(
-            String text, int iconRes, int containerColor, int contentColor, int duration) {
-        Snackbar snackbar = Snackbar.make(recyclerView, text, duration);
-        configureExpressiveSnackbar(
-                snackbar, text, iconRes, containerColor, contentColor, duration);
-        return snackbar;
+    private Snackbar obtainFeedbackSnackbar(String text, int duration) {
+        if (activeFeedbackSnackbar == null || !activeFeedbackSnackbar.isShownOrQueued()) {
+            activeFeedbackSnackbar = Snackbar.make(recyclerView, text, duration);
+            if (bottomControls != null) {
+                // Anchor to both dock rows. Expanding search then moves the message above it instead
+                // of allowing the message to cover the input surface.
+                activeFeedbackSnackbar.setAnchorView(bottomControls);
+            }
+        }
+        return activeFeedbackSnackbar;
     }
 
     private void configureExpressiveSnackbar(
@@ -668,11 +664,6 @@ public class MainActivity extends AppCompatActivity {
             int duration) {
         snackbar.setText(text);
         snackbar.setDuration(duration);
-        if (mainFab != null) {
-            // Anchor above the FAB instead of letting CoordinatorLayout translate the FAB while the
-            // Snackbar animates. This removes the two animations fighting over the same space.
-            snackbar.setAnchorView(mainFab);
-        }
         View snackbarView = snackbar.getView();
         int radius = Math.round(22 * getResources().getDisplayMetrics().density);
         GradientDrawable background = new GradientDrawable();
@@ -733,10 +724,7 @@ public class MainActivity extends AppCompatActivity {
         final String name = appInfo.name;
         String text = (nowAllow ? "已启用 FCM 唤醒：" : "已停用 FCM 唤醒：") + name;
 
-        if (activeToggleSnackbar == null || !activeToggleSnackbar.isShownOrQueued()) {
-            activeToggleSnackbar = Snackbar.make(recyclerView, text, 4_000);
-        }
-        Snackbar snackbar = activeToggleSnackbar;
+        Snackbar snackbar = obtainFeedbackSnackbar(text, 4_000);
         configureExpressiveSnackbar(
                 snackbar,
                 text,
@@ -764,8 +752,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showUnsupportedAppFeedback(AppInfo appInfo) {
-        Snackbar snackbar = createExpressiveSnackbar(
-                getString(R.string.unsupported_app_message, appInfo.name),
+        String text = getString(R.string.unsupported_app_message, appInfo.name);
+        Snackbar snackbar = obtainFeedbackSnackbar(text, Snackbar.LENGTH_SHORT);
+        // Reusing a previous toggle message must also remove its stale Undo action.
+        snackbar.setAction((CharSequence) null, null);
+        configureExpressiveSnackbar(
+                snackbar,
+                text,
                 R.drawable.ic_status_dash,
                 colorSurfaceContainerHigh,
                 colorOnSurface,
@@ -787,11 +780,6 @@ public class MainActivity extends AppCompatActivity {
             switch (filterMode) {
                 case FCM_ONLY:
                     if (info.includeFcm) {
-                        filtered.add(info);
-                    }
-                    break;
-                case ENABLED:
-                    if (info.includeFcm && info.isAllow) {
                         filtered.add(info);
                     }
                     break;
@@ -918,17 +906,18 @@ public class MainActivity extends AppCompatActivity {
         if (filterCards == null || filterLabels == null) {
             return;
         }
-        TextView[] counts = {allStatsView, fcmStatsView, statsView};
+        TextView[] counts = {allStatsView, fcmStatsView};
         int selectedIndex = filterMode.ordinal();
         float selectedRadius = 16 * getResources().getDisplayMetrics().density;
         for (int i = 0; i < filterCards.length; i++) {
             boolean selected = i == selectedIndex;
             int content = selected ? fabConnectedContent : colorOnSurfaceVariant;
             applyPrimarySurface(filterCards[i], selected, Color.TRANSPARENT);
-            // The active label is one complete tonal pill regardless of its segment position.
+            // Every hit target shares the pill outline so its press ripple is clipped correctly;
+            // only the selected filter receives a visible tonal background.
             filterCards[i].setShapeAppearanceModel(filterCards[i].getShapeAppearanceModel()
                     .toBuilder()
-                    .setAllCornerSizes(selected ? selectedRadius : 0f)
+                    .setAllCornerSizes(selectedRadius)
                     .build());
             filterLabels[i].setTextColor(content);
             if (counts[i] != null) {
@@ -943,6 +932,9 @@ public class MainActivity extends AppCompatActivity {
     private void showFabMenu() {
         if (mainFab == null) {
             return;
+        }
+        if (activeFeedbackSnackbar != null && activeFeedbackSnackbar.isShownOrQueued()) {
+            activeFeedbackSnackbar.dismiss();
         }
         LayoutInflater inflater = LayoutInflater.from(this);
         ViewGroup popupParent = (ViewGroup) mainFab.getParent();
@@ -1020,13 +1012,10 @@ public class MainActivity extends AppCompatActivity {
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         int[] location = new int[2];
         mainFab.getLocationInWindow(location);
-        int x;
-        if (mainFab.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL) {
-            x = location[0];
-        } else {
-            x = location[0] + mainFab.getWidth() - popupWidth;
-        }
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        // Center the fixed-width popup with the 280dp control rail. Aligning it to the inset FAB
+        // made the menu protrude to the left by the dock's internal padding.
+        int x = (screenWidth - popupWidth) / 2;
         int maximumX = screenWidth - popupWidth - horizontalMargin;
         x = Math.max(horizontalMargin, Math.min(x, maximumX));
         int verticalGap = Math.round(8 * getResources().getDisplayMetrics().density);
@@ -1380,12 +1369,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 appInfo.isAllow = !appInfo.isAllow;
-                if (filterMode == FilterMode.ENABLED && !appInfo.isAllow) {
-                    applyFilter();
-                } else {
-                    notifyStatusChanged(position);
-                }
-                animateSelection(holder.appView);
+                notifyStatusChanged(position);
                 updateStats();
                 showToggleFeedback(appInfo);
             });
@@ -1395,6 +1379,10 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             AppInfo appInfo = mAppList.get(position);
+            // RecyclerView holders must never inherit an interrupted press-scale animation.
+            holder.appView.animate().cancel();
+            holder.appView.setScaleX(1f);
+            holder.appView.setScaleY(1f);
             holder.name.setText(appInfo.name);
             holder.appPkg.setText(appInfo.packageName);
             bindCardShape(holder, position);
@@ -1551,6 +1539,9 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onViewRecycled(@NonNull ViewHolder holder) {
             super.onViewRecycled(holder);
+            holder.appView.animate().cancel();
+            holder.appView.setScaleX(1f);
+            holder.appView.setScaleY(1f);
             holder.icon.setTag(null);
             holder.icon.setImageDrawable(defaultAppIcon);
         }
@@ -2006,19 +1997,16 @@ public class MainActivity extends AppCompatActivity {
         headerSafe = findViewById(R.id.header_safe);
         allStatsView = findViewById(R.id.all_stats);
         fcmStatsView = findViewById(R.id.fcm_stats);
-        statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
         bottomControls = findViewById(R.id.bottom_controls);
         bottomDock = findViewById(R.id.bottom_dock);
         filterCards = new MaterialCardView[]{
                 findViewById(R.id.filter_all),
-                findViewById(R.id.filter_fcm),
-                findViewById(R.id.filter_enabled)
+                findViewById(R.id.filter_fcm)
         };
         filterLabels = new TextView[]{
                 findViewById(R.id.filter_all_label),
-                findViewById(R.id.filter_fcm_label),
-                findViewById(R.id.filter_enabled_label)
+                findViewById(R.id.filter_fcm_label)
         };
         searchContainer = findViewById(R.id.search_container);
         searchInput = findViewById(R.id.search_input);
@@ -2123,9 +2111,9 @@ public class MainActivity extends AppCompatActivity {
         healthStatusView = null;
         MAIN_HANDLER.removeCallbacks(applySearch);
         searchContainer.animate().cancel();
-        if (activeToggleSnackbar != null) {
-            activeToggleSnackbar.dismiss();
-            activeToggleSnackbar = null;
+        if (activeFeedbackSnackbar != null) {
+            activeFeedbackSnackbar.dismiss();
+            activeFeedbackSnackbar = null;
         }
         super.onDestroy();
     }

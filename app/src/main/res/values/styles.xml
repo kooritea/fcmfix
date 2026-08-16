@@ -23,9 +23,7 @@
 
     <style name="ShapeAppearance.Fcmself.Search" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">0dp</item>
-        <item name="cornerSizeTopLeft">20dp</item>
-        <item name="cornerSizeTopRight">20dp</item>
+        <item name="cornerSize">24dp</item>
     </style>
 
     <style name="ShapeAppearance.Fcmself.BottomDock" parent="">

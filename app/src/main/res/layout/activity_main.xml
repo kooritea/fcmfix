@@ -85,7 +85,7 @@
 
     <LinearLayout
         android:id="@+id/bottom_controls"
-        android:layout_width="wrap_content"
+        android:layout_width="280dp"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="24dp"
@@ -94,11 +94,12 @@
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/search_container"
-            android:layout_width="232dp"
+            android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_gravity="end"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="8dp"
             android:visibility="gone"
-            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+            app:cardBackgroundColor="?attr/colorPrimaryContainer"
             android:elevation="0dp"
             android:stateListAnimator="@null"
             android:translationZ="0dp"
@@ -111,7 +112,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="@null"
-                android:gravity="center_vertical"
+                android:gravity="center"
                 android:hint="@string/search_hint"
                 android:imeOptions="actionDone"
                 android:inputType="text|textNoSuggestions"
@@ -121,14 +122,15 @@
                 android:paddingEnd="14dp"
                 android:paddingBottom="0dp"
                 android:singleLine="true"
+                android:textAlignment="center"
                 android:textAppearance="?attr/textAppearanceBodyMedium" />
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/bottom_dock"
-            android:layout_width="280dp"
+            android:layout_width="216dp"
             android:layout_height="56dp"
-            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+            app:cardBackgroundColor="@android:color/transparent"
             android:elevation="0dp"
             android:stateListAnimator="@null"
             android:translationZ="0dp"
@@ -211,44 +213,6 @@
 
                         <TextView
                             android:id="@+id/fcm_stats"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/initial_count"
-                            android:textAppearance="?attr/textAppearanceBodySmall"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/filter_enabled"
-                    android:layout_width="56dp"
-                    android:layout_height="48dp"
-                    android:clickable="true"
-                    android:focusable="true"
-                    app:cardBackgroundColor="@android:color/transparent"
-                    android:elevation="0dp"
-                    android:stateListAnimator="@null"
-                    android:translationZ="0dp"
-                    app:cardElevation="0dp"
-                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
-                    app:strokeWidth="0dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/filter_enabled_label"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/enabled_filter_title"
-                            android:textAppearance="?attr/textAppearanceLabelMedium"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
-
-                        <TextView
-                            android:id="@+id/stats"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/initial_count"
