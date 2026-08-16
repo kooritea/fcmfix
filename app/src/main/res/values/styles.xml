@@ -1,18 +1,13 @@
 <resources>
     <!--
-        Legacy AppCompat theme; Compose takes over the visual layer but this
-        is still required by the Activity base class and for edge-to-edge setup.
+        Window theme only; the visual layer is fully Compose (FcmselfTheme).
+        The Material3 Expressive theme keeps edge-to-edge window styling and
+        system-bar appearance in sync with the Compose content.
     -->
     <style name="AppTheme" parent="Theme.Material3Expressive.DynamicColors.DayNight">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-    </style>
-
-    <!-- Shape styles (kept for compatibility, no longer used by Compose UI) -->
-    <style name="ShapeAppearance.Fcmself.Control" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">16dp</item>
     </style>
 </resources>

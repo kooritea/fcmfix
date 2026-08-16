@@ -1,5 +1,6 @@
 package sumicya.fcmself.ui.navigation
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -35,6 +37,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import sumicya.fcmself.R
 import sumicya.fcmself.ui.screens.AppListScreen
 import sumicya.fcmself.ui.screens.DashboardScreen
 import sumicya.fcmself.ui.screens.FcmLogScreen
@@ -45,27 +48,27 @@ import sumicya.fcmself.ui.viewmodel.AppViewModel
  */
 sealed class Screen(
     val route: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
 ) {
     data object AppList : Screen(
         route = "app_list",
-        label = "应用",
+        labelRes = R.string.nav_apps,
         selectedIcon = Icons.Filled.Apps,
         unselectedIcon = Icons.Outlined.Apps,
     )
 
     data object Dashboard : Screen(
         route = "dashboard",
-        label = "概览",
+        labelRes = R.string.nav_dashboard,
         selectedIcon = Icons.Filled.Dashboard,
         unselectedIcon = Icons.Outlined.Dashboard,
     )
 
     data object FcmLog : Screen(
         route = "fcm_log",
-        label = "日志",
+        labelRes = R.string.nav_fcm_log,
         selectedIcon = Icons.Filled.ListAlt,
         unselectedIcon = Icons.Outlined.ListAlt,
     )
@@ -91,6 +94,7 @@ fun FcmselfNavHost() {
     // Live FCM event count for badge
     val logCount by viewModel.fcmLog.collectAsState()
     val unreadCount = logCount.size
+    val overflowLabel = stringResource(R.string.badge_overflow)
 
     Scaffold(
         bottomBar = {
@@ -108,6 +112,7 @@ fun FcmselfNavHost() {
                             it.route == screen.route
                         } == true
                         val showBadge = screen is Screen.FcmLog && unreadCount > 0
+                        val label = stringResource(screen.labelRes)
                         NavigationBarItem(
                             icon = {
                                 BadgedBox(
@@ -118,7 +123,11 @@ fun FcmselfNavHost() {
                                                 contentColor = MaterialTheme.colorScheme.onError,
                                             ) {
                                                 Text(
-                                                    text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                                    text = if (unreadCount > 99) {
+                                                        overflowLabel
+                                                    } else {
+                                                        unreadCount.toString()
+                                                    },
                                                     style = MaterialTheme.typography.labelSmall,
                                                     modifier = Modifier.padding(horizontal = 2.dp),
                                                 )
@@ -127,12 +136,16 @@ fun FcmselfNavHost() {
                                     },
                                 ) {
                                     Icon(
-                                        imageVector = if (selected) screen.selectedIcon else screen.unselectedIcon,
-                                        contentDescription = screen.label,
+                                        imageVector = if (selected) {
+                                            screen.selectedIcon
+                                        } else {
+                                            screen.unselectedIcon
+                                        },
+                                        contentDescription = label,
                                     )
                                 }
                             },
-                            label = { Text(screen.label) },
+                            label = { Text(label) },
                             selected = selected,
                             onClick = {
                                 navController.navigate(screen.route) {

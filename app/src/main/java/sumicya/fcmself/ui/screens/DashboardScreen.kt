@@ -30,31 +30,36 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import sumicya.fcmself.R
 import sumicya.fcmself.core.Contract
 import sumicya.fcmself.ui.viewmodel.AppViewModel
 
 /**
- * Dashboard screen — shows an overview of the module's status at a glance.
- *
- * New feature: a central place to see service status, config health, app stats,
- * and toggle the main boolean switches without the old FAB popup.
+ * Dashboard screen — shows an overview of the module's status at a glance:
+ * service status, config health, app stats, the main boolean switches and the
+ * live hook health report.
  */
 @Composable
 fun DashboardScreen(
     viewModel: AppViewModel,
 ) {
     val apps by viewModel.apps.collectAsState()
+    val switches by viewModel.switches.collectAsState()
     val serviceConnected by viewModel.serviceConnected.collectAsState()
     val configReady by viewModel.configReady.collectAsState()
     val configError by viewModel.configError.collectAsState()
@@ -65,13 +70,23 @@ fun DashboardScreen(
     val fcmApps = apps.count { it.includeFcm }
     val disallowedFcm = apps.count { it.includeFcm && !it.isAllow }
 
+    // Run the nonce-tagged health query whenever the dashboard is (re)opened.
+    LaunchedEffect(Unit) {
+        viewModel.requestHealthCheck()
+    }
+
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeTopAppBar(
-                title = { Text("概览", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = stringResource(R.string.nav_dashboard),
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.largeTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -90,28 +105,49 @@ fun DashboardScreen(
             // ── Service status card ────────────────────────────────────
             item {
                 StatCard(
-                    title = "服务状态",
+                    title = stringResource(R.string.service_status),
                     icon = Icons.Filled.CheckCircle,
-                    iconTint = if (serviceConnected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.error,
+                    iconTint = if (serviceConnected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
                 ) {
                     Text(
-                        if (serviceConnected) "Xposed 服务已连接" else "Xposed 服务未连接",
+                        text = stringResource(
+                            if (serviceConnected) {
+                                R.string.service_connected
+                            } else {
+                                R.string.service_disconnected
+                            },
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (serviceConnected) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.error,
+                        color = if (serviceConnected) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
                     )
                     if (serviceConnected) {
                         Text(
-                            if (configReady) "配置已就绪" else "配置尚未加载",
+                            text = stringResource(
+                                if (configReady) {
+                                    R.string.config_ready
+                                } else {
+                                    R.string.config_not_ready
+                                },
+                            ),
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (configReady) MaterialTheme.colorScheme.onSurfaceVariant
-                            else MaterialTheme.colorScheme.error,
+                            color = if (configReady) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
                         )
                     }
                     if (configError) {
                         Text(
-                            "配置错误",
+                            text = stringResource(R.string.config_error),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -122,37 +158,49 @@ fun DashboardScreen(
             // ── App statistics card ────────────────────────────────────
             item {
                 StatCard(
-                    title = "应用统计",
+                    title = stringResource(R.string.app_stats),
                     icon = Icons.Filled.Apps,
                     iconTint = MaterialTheme.colorScheme.primary,
                 ) {
-                    StatRow("已安装的应用", totalApps.toString())
-                    StatRow("支持 FCM 的应用", fcmApps.toString())
-                    StatRow("已允许唤醒", allowedApps.toString())
-                    StatRow("待允许 (FCM)", disallowedFcm.toString())
+                    StatRow(stringResource(R.string.installed_apps), totalApps.toString())
+                    StatRow(stringResource(R.string.fcm_apps), fcmApps.toString())
+                    StatRow(stringResource(R.string.allowed_apps), allowedApps.toString())
+                    StatRow(stringResource(R.string.pending_fcm_apps), disallowedFcm.toString())
                 }
             }
 
             // ── FCM status ─────────────────────────────────────────────
             item {
                 StatCard(
-                    title = "FCM 状态",
+                    title = stringResource(R.string.fcm_status),
                     icon = Icons.Filled.Cloud,
                     iconTint = MaterialTheme.colorScheme.primary,
                 ) {
                     Text(
-                        if (fcmApps > 0) "扫描到 $fcmApps 个 FCM 应用"
-                        else "未扫描到 FCM 应用",
+                        text = if (fcmApps > 0) {
+                            pluralStringResource(R.plurals.fcm_scanned_count, fcmApps, fcmApps)
+                        } else {
+                            stringResource(R.string.fcm_none_scanned)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        "已允许 $allowedApps / $fcmApps 个 FCM 应用",
+                        text = pluralStringResource(
+                            R.plurals.fcm_allowed_ratio,
+                            allowedApps,
+                            allowedApps,
+                            fcmApps,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (disallowedFcm > 0) {
                         Text(
-                            "$disallowedFcm 个 FCM 应用待允许",
+                            text = pluralStringResource(
+                                R.plurals.fcm_pending_hint,
+                                disallowedFcm,
+                                disallowedFcm,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -163,30 +211,30 @@ fun DashboardScreen(
             // ── Feature toggles ────────────────────────────────────────
             item {
                 StatCard(
-                    title = "功能开关",
+                    title = stringResource(R.string.feature_toggles),
                     icon = Icons.Filled.Settings,
                     iconTint = MaterialTheme.colorScheme.primary,
                 ) {
                     ToggleRow(
-                        label = "停止应用时保留通知",
-                        description = "防止系统在应用停止时清除通知",
-                        checked = viewModel.isSwitchEnabled(Contract.KEY_DISABLE_AUTO_CLEAN),
+                        label = stringResource(R.string.toggle_disable_auto_clean),
+                        description = stringResource(R.string.toggle_disable_auto_clean_desc),
+                        checked = switches[Contract.KEY_DISABLE_AUTO_CLEAN] ?: false,
                         onCheckedChange = {
                             viewModel.setSwitchEnabled(Contract.KEY_DISABLE_AUTO_CLEAN, it)
                         },
                     )
                     ToggleRow(
-                        label = "唤醒冰箱冻结应用",
-                        description = "允许唤醒被 Icebox 冻结的应用",
-                        checked = viewModel.isSwitchEnabled(Contract.KEY_INCLUDE_ICEBOX),
+                        label = stringResource(R.string.toggle_include_icebox),
+                        description = stringResource(R.string.toggle_include_icebox_desc),
+                        checked = switches[Contract.KEY_INCLUDE_ICEBOX] ?: false,
                         onCheckedChange = {
                             viewModel.setSwitchEnabled(Contract.KEY_INCLUDE_ICEBOX, it)
                         },
                     )
                     ToggleRow(
-                        label = "无响应时提示",
-                        description = "FCM 无响应时发送通知提示",
-                        checked = viewModel.isSwitchEnabled(Contract.KEY_NO_RESPONSE_NOTIFICATION),
+                        label = stringResource(R.string.toggle_no_response),
+                        description = stringResource(R.string.toggle_no_response_desc),
+                        checked = switches[Contract.KEY_NO_RESPONSE_NOTIFICATION] ?: false,
                         onCheckedChange = {
                             viewModel.setSwitchEnabled(Contract.KEY_NO_RESPONSE_NOTIFICATION, it)
                         },
@@ -197,12 +245,19 @@ fun DashboardScreen(
             // ── Health status ──────────────────────────────────────────
             item {
                 StatCard(
-                    title = "Hook 状态",
+                    title = stringResource(R.string.hook_status),
                     icon = Icons.Filled.Favorite,
                     iconTint = MaterialTheme.colorScheme.primary,
+                    action = {
+                        TextButton(onClick = { viewModel.requestHealthCheck() }) {
+                            Text(stringResource(R.string.hook_status_recheck))
+                        }
+                    },
                 ) {
                     Text(
-                        healthStatus.ifEmpty { "尚未检查" },
+                        text = healthStatus.ifEmpty {
+                            stringResource(R.string.hook_status_unknown)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -219,7 +274,8 @@ fun DashboardScreen(
 private fun StatCard(
     title: String,
     icon: ImageVector,
-    iconTint: androidx.compose.ui.graphics.Color,
+    iconTint: Color,
+    action: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Card(
@@ -248,6 +304,8 @@ private fun StatCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
+                Spacer(Modifier.weight(1f))
+                action?.invoke()
             }
             Spacer(Modifier.height(12.dp))
             content()

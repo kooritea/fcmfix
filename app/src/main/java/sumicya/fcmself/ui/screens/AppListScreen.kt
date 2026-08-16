@@ -67,15 +67,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import sumicya.fcmself.R
 import sumicya.fcmself.data.AppCatalog
 import sumicya.fcmself.data.IconLoader
 import sumicya.fcmself.model.AppInfo
@@ -107,12 +107,13 @@ fun AppListScreen(
     val gridState = rememberLazyGridState()
 
     // App detail bottom sheet
-    if (selectedApp != null) {
+    val detailApp = selectedApp
+    if (detailApp != null) {
         AppDetailSheet(
-            appInfo = selectedApp!!,
+            appInfo = detailApp,
             onDismiss = { selectedApp = null },
             onToggle = {
-                viewModel.toggleApp(selectedApp!!)
+                viewModel.toggleApp(detailApp)
                 selectedApp = null
             },
         )
@@ -124,16 +125,19 @@ fun AppListScreen(
             LargeTopAppBar(
                 title = {
                     Column {
-                        Text("Fcmself", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            fontWeight = FontWeight.Bold,
+                        )
                         if (!serviceConnected) {
                             Text(
-                                "服务未连接",
+                                text = stringResource(R.string.service_not_connected),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
                         } else if (!configReady) {
                             Text(
-                                "配置加载中…",
+                                text = stringResource(R.string.config_loading),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -142,18 +146,24 @@ fun AppListScreen(
                 },
                 actions = {
                     IconButton(onClick = { showSearch = !showSearch }) {
-                        Icon(Icons.Filled.Search, contentDescription = "搜索")
+                        Icon(
+                            Icons.Filled.Search,
+                            contentDescription = stringResource(R.string.search),
+                        )
                     }
                     Box {
                         IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
+                            Icon(
+                                Icons.Outlined.MoreVert,
+                                contentDescription = stringResource(R.string.more_actions),
+                            )
                         }
                         DropdownMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text("启用全部 FCM") },
+                                text = { Text(stringResource(R.string.enable_all_fcm)) },
                                 onClick = {
                                     showMenu = false
                                     viewModel.enableAllFcm()
@@ -161,7 +171,7 @@ fun AppListScreen(
                                 leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
                             )
                             DropdownMenuItem(
-                                text = { Text("FCM Diagnostics") },
+                                text = { Text(stringResource(R.string.fcm_diagnostics)) },
                                 onClick = {
                                     showMenu = false
                                     viewModel.openDiagnostics(LocalContext.current)
@@ -169,7 +179,7 @@ fun AppListScreen(
                                 leadingIcon = { Icon(Icons.Filled.Visibility, contentDescription = null) },
                             )
                             DropdownMenuItem(
-                                text = { Text("刷新应用列表") },
+                                text = { Text(stringResource(R.string.refresh_app_list)) },
                                 onClick = {
                                     showMenu = false
                                     AppCatalog.invalidate()
@@ -217,13 +227,16 @@ fun AppListScreen(
                             value = searchQuery,
                             onValueChange = { viewModel.setSearchQuery(it) },
                             modifier = Modifier.weight(1f),
-                            placeholder = { Text("搜索应用…") },
+                            placeholder = { Text(stringResource(R.string.search_hint)) },
                             singleLine = true,
                             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                             trailingIcon = {
                                 if (searchQuery.isNotEmpty()) {
                                     IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                        Icon(Icons.Filled.Close, contentDescription = "清除")
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = stringResource(R.string.clear_search),
+                                        )
                                     }
                                 }
                             },
@@ -240,83 +253,75 @@ fun AppListScreen(
                     FilterChip(
                         selected = filterMode == FilterMode.ALL,
                         onClick = { viewModel.setFilterMode(FilterMode.ALL) },
-                        label = { Text("全部") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
+                        label = { Text(stringResource(R.string.filter_all)) },
+                        colors = filterChipColors(),
                     )
                     FilterChip(
                         selected = filterMode == FilterMode.FCM_ONLY,
                         onClick = { viewModel.setFilterMode(FilterMode.FCM_ONLY) },
-                        label = { Text("FCM") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
+                        label = { Text(stringResource(R.string.filter_fcm)) },
+                        colors = filterChipColors(),
                     )
                     FilterChip(
                         selected = filterMode == FilterMode.ALLOWED,
                         onClick = { viewModel.setFilterMode(FilterMode.ALLOWED) },
-                        label = { Text("已开") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
+                        label = { Text(stringResource(R.string.filter_allowed)) },
+                        colors = filterChipColors(),
                     )
                     FilterChip(
                         selected = filterMode == FilterMode.DISALLOWED,
                         onClick = { viewModel.setFilterMode(FilterMode.DISALLOWED) },
-                        label = { Text("已关") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
+                        label = { Text(stringResource(R.string.filter_disallowed)) },
+                        colors = filterChipColors(),
                     )
                 }
 
                 // ── App grid ───────────────────────────────────────────
-                if (isLoading && filteredApps.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "正在扫描应用…",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else if (filteredApps.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "没有匹配的应用",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 100.dp),
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                        state = gridState,
-                    ) {
-                        items(
-                            items = filteredApps,
-                            key = { it.packageName },
-                        ) { appInfo ->
-                            AppGridItem(
-                                appInfo = appInfo,
-                                configReady = configReady,
-                                onClick = { viewModel.toggleApp(appInfo) },
-                                onLongClick = { selectedApp = appInfo },
+                when {
+                    isLoading && filteredApps.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.scanning_apps),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+                    filteredApps.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.empty_hint),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    else -> {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 100.dp),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                            state = gridState,
+                        ) {
+                            items(
+                                items = filteredApps,
+                                key = { it.packageName },
+                            ) { appInfo ->
+                                AppGridItem(
+                                    appInfo = appInfo,
+                                    configReady = configReady,
+                                    onClick = { viewModel.toggleApp(appInfo) },
+                                    onLongClick = { selectedApp = appInfo },
+                                )
+                            }
                         }
                     }
                 }
@@ -324,6 +329,12 @@ fun AppListScreen(
         }
     }
 }
+
+@Composable
+private fun filterChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+)
 
 // ── App Grid Item ───────────────────────────────────────────────────────────
 
@@ -387,13 +398,11 @@ private fun AppGridItem(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            val statusIcon = when {
-                isActive -> Icons.Filled.Check
-                else -> Icons.Filled.Close
-            }
             Icon(
-                imageVector = statusIcon,
-                contentDescription = if (isActive) "已允许" else "已禁止/不支持",
+                imageVector = if (isActive) Icons.Filled.Check else Icons.Filled.Close,
+                contentDescription = stringResource(
+                    if (isActive) R.string.status_allowed_desc else R.string.status_disallowed_desc,
+                ),
                 modifier = Modifier
                     .padding(top = 2.dp)
                     .size(16.dp),
@@ -412,7 +421,6 @@ private fun AppDetailSheet(
     onToggle: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
-    val context = LocalContext.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -450,22 +458,35 @@ private fun AppDetailSheet(
             HorizontalDivider()
             Spacer(Modifier.height(12.dp))
 
-            DetailRow("包名", appInfo.packageName)
-            DetailRow("支持 FCM", if (appInfo.includeFcm) "是" else "否")
-            DetailRow("当前状态", if (appInfo.isAllow) "已允许唤醒" else "已禁止唤醒")
+            DetailRow(
+                stringResource(R.string.detail_package),
+                appInfo.packageName,
+            )
+            DetailRow(
+                stringResource(R.string.detail_fcm_support),
+                stringResource(if (appInfo.includeFcm) R.string.yes else R.string.no),
+            )
+            DetailRow(
+                stringResource(R.string.detail_status),
+                stringResource(
+                    if (appInfo.isAllow) R.string.allowed_wakeup else R.string.disallowed_wakeup,
+                ),
+            )
 
             Spacer(Modifier.height(20.dp))
 
             // Toggle button
+            val disallow = appInfo.isAllow
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggle),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (appInfo.isAllow)
+                    containerColor = if (disallow) {
                         MaterialTheme.colorScheme.errorContainer
-                    else
-                        MaterialTheme.colorScheme.primaryContainer,
+                    } else {
+                        MaterialTheme.colorScheme.primaryContainer
+                    },
                 ),
                 shape = RoundedCornerShape(16.dp),
             ) {
@@ -477,22 +498,26 @@ private fun AppDetailSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        imageVector = if (appInfo.isAllow) Icons.Filled.Close else Icons.Filled.Check,
+                        imageVector = if (disallow) Icons.Filled.Close else Icons.Filled.Check,
                         contentDescription = null,
-                        tint = if (appInfo.isAllow)
+                        tint = if (disallow) {
                             MaterialTheme.colorScheme.onErrorContainer
-                        else
-                            MaterialTheme.colorScheme.onPrimaryContainer,
+                        } else {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        },
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (appInfo.isAllow) "禁止唤醒" else "允许唤醒",
+                        text = stringResource(
+                            if (disallow) R.string.disallow_wakeup else R.string.allow_wakeup,
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (appInfo.isAllow)
+                        color = if (disallow) {
                             MaterialTheme.colorScheme.onErrorContainer
-                        else
-                            MaterialTheme.colorScheme.onPrimaryContainer,
+                        } else {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        },
                     )
                 }
             }
@@ -530,29 +555,29 @@ private fun AppIconView(
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
+    val packageName = appInfo.packageName
     val defaultIcon = remember { packageManager.defaultActivityIcon }
 
     AndroidView(
         factory = { ctx ->
             ImageView(ctx).apply {
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setImageDrawable(defaultIcon)
-                IconLoader.load(
-                    packageManager,
-                    appInfo,
-                    defaultIcon,
-                ) { /* icon cached */ }
+                setImageDrawable(IconLoader.cached(packageName) ?: defaultIcon)
+                // Async decode: the callback fires on the main thread once the
+                // icon is in the cache, so the ImageView can pick it up directly.
+                IconLoader.load(packageManager, appInfo, defaultIcon) {
+                    val cached = IconLoader.cached(packageName)
+                    setImageDrawable(cached ?: defaultIcon)
+                }
             }
         },
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)),
         update = { imageView ->
-            val cached = IconLoader.cached(appInfo.packageName)
+            val cached = IconLoader.cached(packageName)
             if (cached != null) {
                 imageView.setImageDrawable(cached)
-            } else {
-                imageView.setImageDrawable(defaultIcon)
             }
         },
     )

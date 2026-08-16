@@ -67,6 +67,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application),
     private val _configErrorMessage = MutableStateFlow<String?>(null)
     val configErrorMessage: StateFlow<String?> = _configErrorMessage.asStateFlow()
 
+    // ── Boolean switches (reactively mirrored for the dashboard toggles) ────
+
+    private val _switches = MutableStateFlow<Map<String, Boolean>>(
+        Contract.BOOLEAN_KEYS.associateWith { false },
+    )
+    val switches: StateFlow<Map<String, Boolean>> = _switches.asStateFlow()
+
     // ── FCM event log state ─────────────────────────────────────────────────
 
     data class FcmLogEntry(
@@ -182,6 +189,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application),
         _configReady.value = configStore.isAllowListLoaded() && !configStore.hasError()
         _configError.value = configStore.hasError()
         _configErrorMessage.value = configStore.lastErrorMessage()
+        refreshSwitchStates()
         syncAllowState()
         logEvent("system", "Xposed 服务已连接")
     }
@@ -288,6 +296,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application),
     fun setSwitchEnabled(key: String, value: Boolean): Boolean {
         val result = configStore.setBoolean(key, value)
         if (result) {
+            refreshSwitchStates()
             logEvent("system", "设置 ${key} = $value")
         }
         return result
@@ -323,6 +332,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application),
             info.isAllow = configStore.isAllowed(info.packageName)
         }
         applyFilter()
+    }
+
+    private fun refreshSwitchStates() {
+        _switches.value = Contract.BOOLEAN_KEYS.associateWith { configStore.getBoolean(it) }
     }
 
     private fun applyFilter() {

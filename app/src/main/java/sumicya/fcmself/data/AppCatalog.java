@@ -16,9 +16,6 @@ import java.util.concurrent.Executors;
 import sumicya.fcmself.model.AppCatalogOrder;
 import sumicya.fcmself.model.AppInfo;
 
-import sumicya.fcmself.model.AppCatalogOrder;
-import sumicya.fcmself.model.AppInfo;
-
 /**
  * Process-wide, self-invalidating snapshot of the installed applications.
  *

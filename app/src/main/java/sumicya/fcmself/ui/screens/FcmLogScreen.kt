@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,26 +34,28 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import sumicya.fcmself.R
 import sumicya.fcmself.ui.viewmodel.AppViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
  * FCM Event Log — a real-time log viewer for FCM-related events.
  *
  * This screen shows a chronological list of FCM events captured by the module:
  * app wake-ups, configuration changes, service connection events, etc.
- * It's a new feature that gives users insight into what the module is doing.
+ * Newest entries are prepended by the ViewModel.
  */
 @Composable
 fun FcmLogScreen(
@@ -60,19 +63,23 @@ fun FcmLogScreen(
 ) {
     val logEntries by viewModel.fcmLog.collectAsState()
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeTopAppBar(
-                title = { Text("FCM 日志", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = stringResource(R.string.fcm_log_title),
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
                 actions = {
                     IconButton(onClick = { viewModel.clearLog() }) {
                         Icon(
                             Icons.Filled.DeleteSweep,
-                            contentDescription = "清除日志",
+                            contentDescription = stringResource(R.string.clear_log),
                         )
                     }
                 },
@@ -101,12 +108,12 @@ fun FcmLogScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "暂无 FCM 事件日志",
+                        text = stringResource(R.string.fcm_log_empty),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        "当 FCM 相关事件发生时将显示在此处",
+                        text = stringResource(R.string.fcm_log_empty_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
@@ -139,18 +146,20 @@ fun FcmLogScreen(
 private fun LogEntryCard(
     entry: AppViewModel.FcmLogEntry,
 ) {
-    val dateFormat = androidx.compose.runtime.remember {
-        SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
+    val timeFormat = remember {
+        DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
+            .withZone(ZoneId.systemDefault())
     }
     val isSystem = entry.packageName == "system"
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSystem)
+            containerColor = if (isSystem) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            else
-                MaterialTheme.colorScheme.surfaceContainerLow,
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
         ),
         shape = RoundedCornerShape(14.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -168,8 +177,11 @@ private fun LogEntryCard(
                 modifier = Modifier
                     .padding(top = 4.dp)
                     .size(8.dp),
-                tint = if (isSystem) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.tertiary,
+                tint = if (isSystem) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.tertiary
+                },
             )
 
             Spacer(Modifier.width(10.dp))
@@ -182,7 +194,7 @@ private fun LogEntryCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = dateFormat.format(Date(entry.timestamp)),
+                        text = timeFormat.format(Instant.ofEpochMilli(entry.timestamp)),
                         style = MaterialTheme.typography.labelSmall,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -191,8 +203,11 @@ private fun LogEntryCard(
                         text = entry.packageName,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
-                        color = if (isSystem) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.tertiary,
+                        color = if (isSystem) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.tertiary
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -222,4 +237,3 @@ private fun LogEntryCard(
         }
     }
 }
-
