@@ -38,6 +38,10 @@ android {
     }
 }
 
+tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+    options.compilerArgs += ['-Xlint:all', '-Werror']
+}
+
 dependencies {
     compileOnly 'io.github.libxposed:api:102.0.0'
     implementation 'io.github.libxposed:interface:102.0.0'

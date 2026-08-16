@@ -19,8 +19,8 @@
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/menu_state_container"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="48dp"
+            android:layout_height="match_parent"
             app:cardBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:cardElevation="0dp"
             app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.MenuStateStart"
@@ -39,7 +39,7 @@
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/menu_label_container"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="match_parent"
             android:layout_weight="1"
             app:cardBackgroundColor="?attr/colorSurfaceContainer"
             app:cardElevation="0dp"

@@ -8,23 +8,23 @@ import org.junit.Test;
 public class FcmReceiverDetectorTest {
     @Test
     public void detectsStandardFirebaseReceiver() {
-        assertTrue(FcmReceiverDetector.isFcmReceiver(
+        assertTrue(FcmReceiverDetector.isFcmComponent(
                 "com.google.firebase.iid.FirebaseInstanceIdReceiver"));
     }
 
     @Test
     public void detectsAppSpecificFirebaseReceivers() {
-        assertTrue(FcmReceiverDetector.isFcmReceiver(
+        assertTrue(FcmReceiverDetector.isFcmComponent(
                 "example.push.FirebaseInstanceIdReceiver"));
-        assertTrue(FcmReceiverDetector.isFcmReceiver(
+        assertTrue(FcmReceiverDetector.isFcmComponent(
                 "example.push.CustomFirebaseMessagingReceiver"));
     }
 
     @Test
     public void detectsLegacyGcmReceivers() {
-        assertTrue(FcmReceiverDetector.isFcmReceiver(
+        assertTrue(FcmReceiverDetector.isFcmComponent(
                 "com.google.android.gms.gcm.GcmReceiver"));
-        assertTrue(FcmReceiverDetector.isFcmReceiver(
+        assertTrue(FcmReceiverDetector.isFcmComponent(
                 "example.push.GcmReceiver"));
     }
 
@@ -50,13 +50,13 @@ public class FcmReceiverDetectorTest {
 
     @Test
     public void doesNotTreatFirebaseAnalyticsAsMessaging() {
-        assertFalse(FcmReceiverDetector.isFcmReceiver(
+        assertFalse(FcmReceiverDetector.isFcmComponent(
                 "com.google.android.gms.measurement.AppMeasurementReceiver"));
     }
 
     @Test
     public void handlesMissingAndUnrelatedNames() {
-        assertFalse(FcmReceiverDetector.isFcmReceiver(null));
-        assertFalse(FcmReceiverDetector.isFcmReceiver("example.push.BootReceiver"));
+        assertFalse(FcmReceiverDetector.isFcmComponent(null));
+        assertFalse(FcmReceiverDetector.isFcmComponent("example.push.BootReceiver"));
     }
 }

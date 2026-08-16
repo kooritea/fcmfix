@@ -20,12 +20,6 @@ public final class FcmReceiverDetector {
     private FcmReceiverDetector() {
     }
 
-    /** @deprecated retained for backward compatibility; use {@link #isFcmComponent(String)}. */
-    @Deprecated
-    public static boolean isFcmReceiver(String className) {
-        return isFcmComponent(className);
-    }
-
     /**
      * True when a manifest receiver or service class name indicates FCM/GCM push wiring.
      */

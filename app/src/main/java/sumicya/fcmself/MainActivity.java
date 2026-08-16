@@ -47,6 +47,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.snackbar.Snackbar;
 
 import io.github.libxposed.service.XposedService;
@@ -650,6 +651,7 @@ public class MainActivity extends AppCompatActivity {
             popup.dismiss();
             openFcmDiagnostics();
         });
+        applyFabMenuEdgeShapes(items);
 
         content.measure(
                 View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
@@ -668,6 +670,32 @@ public class MainActivity extends AppCompatActivity {
                 horizontalMargin,
                 location[1] - content.getMeasuredHeight() - verticalGap);
         popup.showAtLocation(mainFab, Gravity.NO_GRAVITY, x, y);
+    }
+
+    private void applyFabMenuEdgeShapes(LinearLayout items) {
+        int last = items.getChildCount() - 1;
+        float radius = 16 * getResources().getDisplayMetrics().density;
+        for (int i = 0; i <= last; i++) {
+            View row = items.getChildAt(i);
+            MaterialCardView state = row.findViewById(R.id.menu_state_container);
+            MaterialCardView label = row.findViewById(R.id.menu_label_container);
+            ShapeAppearanceModel.Builder stateShape = state.getShapeAppearanceModel()
+                    .toBuilder()
+                    .setAllCornerSizes(0f);
+            ShapeAppearanceModel.Builder labelShape = label.getShapeAppearanceModel()
+                    .toBuilder()
+                    .setAllCornerSizes(0f);
+            if (i == 0) {
+                stateShape.setTopLeftCornerSize(radius);
+                labelShape.setTopRightCornerSize(radius);
+            }
+            if (i == last) {
+                stateShape.setBottomLeftCornerSize(radius);
+                labelShape.setBottomRightCornerSize(radius);
+            }
+            state.setShapeAppearanceModel(stateShape.build());
+            label.setShapeAppearanceModel(labelShape.build());
+        }
     }
 
     private View inflateFabMenuItem(LinearLayout parent, int labelRes) {
@@ -1503,7 +1531,6 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new GridLayoutManager(this, spanCount));
         recyclerView.setHasFixedSize(true);
         recyclerView.setItemViewCacheSize(32);
-        recyclerView.setDrawingCacheEnabled(false);
         recyclerView.setClipToPadding(false);
         // Prefetch a row ahead while flinging
         RecyclerView.RecycledViewPool pool = new RecyclerView.RecycledViewPool();
