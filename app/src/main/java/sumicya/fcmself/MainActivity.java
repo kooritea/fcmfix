@@ -1,8 +1,5 @@
 package sumicya.fcmself;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -33,7 +30,6 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
-import android.view.animation.PathInterpolator;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -164,10 +160,11 @@ public class MainActivity extends AppCompatActivity {
     private int gridSpanCount = 3;
     private MaterialCardView[] filterCards;
     private TextView[] filterLabels;
+    private View bottomControls;
+    private MaterialCardView bottomDock;
     private MaterialCardView searchContainer;
     private TextInputEditText searchInput;
     private ImageButton searchToggle;
-    private ValueAnimator searchWidthAnimator;
     private boolean searchExpanded;
     private TextView emptyHint;
     private boolean lastConfigError = false;
@@ -560,6 +557,20 @@ public class MainActivity extends AppCompatActivity {
         card.setCardElevation(0f);
     }
 
+    private void setupGlassSurfaces() {
+        int glassColor = ColorUtils.setAlphaComponent(colorSurfaceContainerHigh, 220);
+        int edgeColor = ColorUtils.setAlphaComponent(colorOnSurfaceVariant, 56);
+        int strokeWidth = Math.max(1, Math.round(getResources().getDisplayMetrics().density));
+        bottomDock.setCardBackgroundColor(glassColor);
+        bottomDock.setStrokeColor(edgeColor);
+        bottomDock.setStrokeWidth(strokeWidth);
+        searchContainer.setCardBackgroundColor(glassColor);
+        searchContainer.setStrokeColor(edgeColor);
+        searchContainer.setStrokeWidth(strokeWidth);
+        searchInput.setTextColor(colorOnSurface);
+        searchInput.setHintTextColor(colorOnSurfaceVariant);
+    }
+
     private void applyHeaderScrim() {
         if (headerSafe == null) {
             return;
@@ -753,9 +764,6 @@ public class MainActivity extends AppCompatActivity {
                 pendingSearchQuery = s.toString().trim().toLowerCase(Locale.ROOT);
                 MAIN_HANDLER.removeCallbacks(applySearch);
                 MAIN_HANDLER.postDelayed(applySearch, 120L);
-                if (searchExpanded) {
-                    animateSearchWidth(desiredSearchWidth(s), null);
-                }
             }
 
             @Override
@@ -764,73 +772,27 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private int desiredSearchWidth(CharSequence text) {
-        float density = getResources().getDisplayMetrics().density;
-        String displayText = text.length() == 0 ? getString(R.string.search_hint) : text.toString();
-        float textWidth = searchInput.getPaint().measureText(displayText);
-        int desired = Math.round(textWidth + 60 * density);
-        int minimum = Math.round(96 * density);
-        int maximum = Math.round(136 * density);
-        View parent = (View) searchContainer.getParent();
-        int available = parent.getWidth()
-                - parent.getPaddingStart()
-                - parent.getPaddingEnd()
-                - Math.round(192 * density);
-        maximum = Math.min(maximum, Math.max(minimum, available));
-        return Math.max(minimum, Math.min(maximum, desired));
-    }
-
-    private void animateSearchWidth(int targetWidth, Runnable onEnd) {
-        if (searchWidthAnimator != null) {
-            searchWidthAnimator.cancel();
-        }
-        int startWidth = searchContainer.getLayoutParams().width;
-        if (startWidth == targetWidth) {
-            if (onEnd != null) {
-                onEnd.run();
-            }
-            return;
-        }
-        searchWidthAnimator = ValueAnimator.ofInt(startWidth, targetWidth);
-        searchWidthAnimator.setDuration(200L);
-        searchWidthAnimator.setInterpolator(new PathInterpolator(0.2f, 0f, 0f, 1f));
-        searchWidthAnimator.addUpdateListener(animation -> {
-            ViewGroup.LayoutParams params = searchContainer.getLayoutParams();
-            params.width = (Integer) animation.getAnimatedValue();
-            searchContainer.setLayoutParams(params);
-        });
-        if (onEnd != null) {
-            searchWidthAnimator.addListener(new AnimatorListenerAdapter() {
-                private boolean cancelled;
-
-                @Override
-                public void onAnimationCancel(Animator animation) {
-                    cancelled = true;
-                }
-
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    if (!cancelled) {
-                        onEnd.run();
-                    }
-                }
-            });
-        }
-        searchWidthAnimator.start();
-    }
-
     private void toggleSearch() {
         InputMethodManager keyboard =
                 (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        searchContainer.animate().cancel();
+        float offset = 12 * getResources().getDisplayMetrics().density;
         if (!searchExpanded) {
             searchExpanded = true;
-            searchContainer.setCardBackgroundColor(translucentPrimaryContainer);
-            searchInput.setTextColor(fabConnectedContent);
-            searchInput.setHintTextColor(fabConnectedContent);
-            searchInput.setVisibility(View.VISIBLE);
+            searchContainer.setVisibility(View.VISIBLE);
+            searchContainer.setAlpha(0f);
+            searchContainer.setScaleX(0.94f);
+            searchContainer.setScaleY(0.82f);
+            searchContainer.setTranslationY(offset);
+            searchContainer.animate()
+                    .alpha(1f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .translationY(0f)
+                    .setDuration(200L)
+                    .start();
             searchToggle.setImageResource(R.drawable.ic_status_close);
             searchToggle.setImageTintList(ColorStateList.valueOf(fabConnectedContent));
-            animateSearchWidth(desiredSearchWidth(searchInput.getText()), null);
             searchInput.requestFocus();
             if (keyboard != null) {
                 keyboard.showSoftInput(searchInput, 0);
@@ -839,16 +801,25 @@ public class MainActivity extends AppCompatActivity {
             searchExpanded = false;
             searchInput.setText("");
             searchInput.clearFocus();
-            searchContainer.setCardBackgroundColor(colorSurfaceContainerHigh);
-            searchInput.setTextColor(colorOnSurface);
-            searchInput.setHintTextColor(colorOnSurfaceVariant);
             searchToggle.setImageResource(R.drawable.ic_search);
             searchToggle.setImageTintList(ColorStateList.valueOf(colorOnSurfaceVariant));
             if (keyboard != null) {
                 keyboard.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
             }
-            int collapsedWidth = Math.round(48 * getResources().getDisplayMetrics().density);
-            animateSearchWidth(collapsedWidth, () -> searchInput.setVisibility(View.INVISIBLE));
+            searchContainer.animate()
+                    .alpha(0f)
+                    .scaleX(0.94f)
+                    .scaleY(0.82f)
+                    .translationY(offset)
+                    .setDuration(160L)
+                    .withEndAction(() -> {
+                        searchContainer.setVisibility(View.GONE);
+                        searchContainer.setAlpha(1f);
+                        searchContainer.setScaleX(1f);
+                        searchContainer.setScaleY(1f);
+                        searchContainer.setTranslationY(0f);
+                    })
+                    .start();
         }
     }
 
@@ -882,7 +853,7 @@ public class MainActivity extends AppCompatActivity {
         for (int i = 0; i < filterCards.length; i++) {
             boolean selected = i == selectedIndex;
             int content = selected ? fabConnectedContent : colorOnSurfaceVariant;
-            applyPrimarySurface(filterCards[i], selected, colorSurfaceContainerHigh);
+            applyPrimarySurface(filterCards[i], selected, Color.TRANSPARENT);
             filterLabels[i].setTextColor(content);
             if (counts[i] != null) {
                 counts[i].setTextColor(content);
@@ -1900,18 +1871,19 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        if (mainFab != null) {
-            final int fabEnd = (int) (24 * getResources().getDisplayMetrics().density + 0.5f);
-            final int fabBottom = (int) (24 * getResources().getDisplayMetrics().density + 0.5f);
-            ViewCompat.setOnApplyWindowInsetsListener(mainFab, (v, windowInsets) -> {
+        if (bottomControls != null) {
+            ViewGroup.MarginLayoutParams initial =
+                    (ViewGroup.MarginLayoutParams) bottomControls.getLayoutParams();
+            final int baseBottomMargin = initial.bottomMargin;
+            ViewCompat.setOnApplyWindowInsetsListener(bottomControls, (v, windowInsets) -> {
                 Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
-                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
-                lp.rightMargin = fabEnd + bars.right;
-                lp.bottomMargin = fabBottom + bars.bottom;
+                ViewGroup.MarginLayoutParams lp =
+                        (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+                lp.bottomMargin = baseBottomMargin + bars.bottom;
                 v.setLayoutParams(lp);
                 return windowInsets;
             });
-            ViewCompat.requestApplyInsets(mainFab);
+            ViewCompat.requestApplyInsets(bottomControls);
         }
     }
 
@@ -1960,6 +1932,8 @@ public class MainActivity extends AppCompatActivity {
         fcmStatsView = findViewById(R.id.fcm_stats);
         statsView = findViewById(R.id.stats);
         mainFab = findViewById(R.id.main_fab);
+        bottomControls = findViewById(R.id.bottom_controls);
+        bottomDock = findViewById(R.id.bottom_dock);
         filterCards = new MaterialCardView[]{
                 findViewById(R.id.filter_all),
                 findViewById(R.id.filter_fcm),
@@ -1975,6 +1949,7 @@ public class MainActivity extends AppCompatActivity {
         searchToggle = findViewById(R.id.search_toggle);
         emptyHint = findViewById(R.id.empty_hint);
         applyHeaderScrim();
+        setupGlassSurfaces();
         setupSearch();
         setupFilterTabs();
         setupEdgeToEdgeInsets();
@@ -1983,7 +1958,12 @@ public class MainActivity extends AppCompatActivity {
             mainFab.setImageResource(android.R.drawable.ic_menu_manage);
         } catch (Throwable ignored) {
         }
-        mainFab.setOnClickListener(v -> showFabMenu());
+        mainFab.setOnClickListener(v -> {
+            if (searchExpanded) {
+                toggleSearch();
+            }
+            showFabMenu();
+        });
         refreshFabStatus();
 
         recyclerView = findViewById(R.id.recycler_view);
@@ -2060,10 +2040,7 @@ public class MainActivity extends AppCompatActivity {
         healthNonce = null;
         healthStatusView = null;
         MAIN_HANDLER.removeCallbacks(applySearch);
-        if (searchWidthAnimator != null) {
-            searchWidthAnimator.cancel();
-            searchWidthAnimator = null;
-        }
+        searchContainer.animate().cancel();
         super.onDestroy();
     }
 
