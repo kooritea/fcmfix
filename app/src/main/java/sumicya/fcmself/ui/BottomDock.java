@@ -214,11 +214,9 @@ public final class BottomDock {
     }
 
     private void wireFab() {
-        try {
-            fab.setImageResource(android.R.drawable.ic_menu_manage);
-        } catch (Throwable ignored) {
-            // Platform drawable missing on exotic ROMs; the FAB keeps its layout icon.
-        }
+        // 统一为本应用的线性描边风格（与 ic_search / ic_status_* 同为 2.2-2.6 白描边 + 代码 tint），
+        // 取代平台自带的 android.R.drawable.ic_menu_manage（扳手位图风格、颜色与 dock 不搭）。
+        fab.setImageResource(R.drawable.ic_fab_tune);
         fab.setOnClickListener(v -> {
             if (searchExpanded) {
                 toggleSearch();

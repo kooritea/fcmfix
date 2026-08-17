@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Unified tune/sliders icon: same 2.2-2.4 stroke, round caps as ic_search/ic_health,
+         tinted from code via setImageTintList so it matches the dock’s neutral/primary palette. -->
+    <!-- top slider -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M4,7 L20,7"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9,7 m-2,0 a2,2 0,1 0 4,0 a2,2 0,1 0 -4,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.2" />
+    <!-- middle slider -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M4,12 L20,12"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15,12 m-2,0 a2,2 0,1 0 4,0 a2,2 0,1 0 -4,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.2" />
+    <!-- bottom slider -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M4,17 L20,17"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10,17 m-2,0 a2,2 0,1 0 4,0 a2,2 0,1 0 -4,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.2" />
+</vector>
