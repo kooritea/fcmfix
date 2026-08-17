@@ -12,12 +12,21 @@ android {
         targetSdk = 37
         versionCode = 55
         versionName = "1.0.0-fcmself"
+        // Only keep translations we actually ship; appcompat/material pull many languages.
+        // AGP 9 prefers androidResources.localeFilters but resConfigs still works and is clearer
+        // for Groovy. Keep en + zh variants to cover the app and its dependencies.
+        resConfigs "en", "zh", "zh-rCN"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled = true
             shrinkResources = true
+            // Re-compress PNGs after shrinking; marginal but free for release.
+            crunchPngs = true
             proguardFiles(getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro')
         }
     }
@@ -33,6 +42,20 @@ android {
         textReport = true
         xmlReport = true
         warningsAsErrors = true
+    }
+
+    packaging {
+        resources {
+            excludes += [
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/*.kotlin_module",
+                "kotlin/**"
+            ]
+        }
     }
 }
 
@@ -70,7 +93,6 @@ dependencies {
     implementation 'io.github.libxposed:interface:102.0.0'
     implementation 'io.github.libxposed:service:102.0.0'
 
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
     implementation 'com.google.android.material:material:1.14.0'

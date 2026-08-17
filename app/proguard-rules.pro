@@ -1,34 +1,39 @@
-# Add project specific ProGuard rules here.
-# R8 configuration for release builds.
+# R8 / minify configuration for the View-based 15 baseline.
+# Keep apk small without breaking Xposed discovery or Material theming.
 
 # libxposed modern API (API 102+)
 -dontwarn io.github.libxposed.**
 -adaptresourcefilecontents META-INF/xposed/java_init.list
 
-# Preserve Xposed module entry classes.
-# Keep constructors required by the framework while allowing optimization.
+# Keep the Xposed entry point; the framework instantiates it via no-arg constructor.
 -keep,allowoptimization public class * extends io.github.libxposed.api.XposedModule {
     public <init>();
 }
+-keep class sumicya.fcmself.XposedMain { *; }
+# Manifest components are kept via manifest merging; only keep the two we actually declare.
+-keep class sumicya.fcmself.MainActivity { *; }
+-keep class sumicya.fcmself.BootCompletedReceiver { *; }
 
 # Preserve annotations used by framework discovery.
 -keepattributes RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations,AnnotationDefault
 
-# Preserve generic signatures and inner class metadata.
--keepattributes Signature,InnerClasses,EnclosingMethod
+# Keep enum values used by reflection (used by FilterMode etc).
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
 
 # Keep native methods if used by hooks.
 -keepclasseswithmembernames,includedescriptorclasses class * {
     native <methods>;
 }
 
-# Keep Android components referenced by Manifest.
--keep class * extends android.app.Activity { *; }
--keep class * extends android.content.BroadcastReceiver { *; }
--keep class * extends android.app.Service { *; }
-
-# Keep enum values used by reflection.
--keepclassmembers enum * {
-    public static **[] values();
-    public static ** valueOf(java.lang.String);
+# Strip verbose logging in release (app process); system_server hook logs via
+# XposedBridge.log are kept so diagnostics remain on device.
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
 }
+
+# Allow R8 to fully optimize; keep Kotlin metadata only if present.
+-dontwarn kotlin.**

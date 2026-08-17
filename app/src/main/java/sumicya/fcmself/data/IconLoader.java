@@ -20,11 +20,13 @@ import sumicya.fcmself.model.AppInfo;
  */
 public final class IconLoader {
 
-    private static final int CACHE_ENTRIES = 96;
+    // 64 is enough for two screens of icons; 96 held every icon and grew with the grid.
+    private static final int CACHE_ENTRIES = 64;
     private static final LruCache<String, Drawable> CACHE = new LruCache<>(CACHE_ENTRIES);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    // Two loaders saturate PackageManager without creating a thread per core on 8-core devices.
     private static final ExecutorService ICON_EXEC = Executors.newFixedThreadPool(
-            Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors())),
+            2,
             r -> {
                 Thread thread = new Thread(r, "fcmself-icon");
                 thread.setPriority(Thread.NORM_PRIORITY - 1);
