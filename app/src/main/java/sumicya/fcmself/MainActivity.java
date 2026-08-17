@@ -79,6 +79,8 @@ public class MainActivity extends AppCompatActivity implements
     private boolean fabMenuOpen;
     private Boolean cachedDiagnosticsIssue;
     private long diagnosticsCheckedAtMs;
+    private View loadingContainer;
+    private boolean hasReceivedFirstList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,6 +98,7 @@ public class MainActivity extends AppCompatActivity implements
         View header = findViewById(R.id.header_safe);
         recyclerView = findViewById(R.id.recycler_view);
         emptyHint = findViewById(R.id.empty_hint);
+        loadingContainer = findViewById(R.id.loading_container);
         WindowChrome.applyHeaderScrim(header, AppTheme.resolveColor(
                 this, com.google.android.material.R.attr.colorSurface, Color.WHITE));
         WindowChrome.applyInsets(header, recyclerView, findViewById(R.id.bottom_controls));
@@ -183,16 +186,19 @@ public class MainActivity extends AppCompatActivity implements
 
     @Override
     public void onAppListReady(List<AppInfo> list, boolean initialLoad) {
+        hasReceivedFirstList = true;
         apps = list;
         // The scan snapshotted the allow list on a background thread; the service may have
         // connected in the meantime. Re-apply the authoritative list so entries never render as a
         // cross just because the scan won the race.
         syncAllowState();
-        View loading = findViewById(R.id.loading_container);
-        if (loading != null) {
-            loading.setVisibility(View.GONE);
+        if (loadingContainer != null) {
+            loadingContainer.setVisibility(View.GONE);
         } else {
-            findViewById(R.id.progress_bar).setVisibility(View.GONE);
+            View fallback = findViewById(R.id.progress_bar);
+            if (fallback != null) {
+                fallback.setVisibility(View.GONE);
+            }
         }
         refreshFabStatus();
 
@@ -407,6 +413,15 @@ public class MainActivity extends AppCompatActivity implements
 
     private void applyFilter() {
         if (adapter == null) {
+            return;
+        }
+        // 未完成首次扫描前不展示空态，避免“没有匹配的应用”闪现
+        if (!hasReceivedFirstList) {
+            emptyHint.setVisibility(View.GONE);
+            recyclerView.setVisibility(View.GONE);
+            if (loadingContainer != null) {
+                loadingContainer.setVisibility(View.VISIBLE);
+            }
             return;
         }
         List<AppInfo> filtered = AppFilter.apply(apps, dock.filterMode(), searchQuery);
