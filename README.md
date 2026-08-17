@@ -10,25 +10,37 @@ Package: `sumicya.fcmself`
 - 必选：`system`
 - 小米设备可选：`com.miui.powerkeeper`
 
-应用界面用于维护允许唤醒的包名列表；配置通过 libxposed Remote Preferences 同步到
-System Server 和其他已启用作用域。灰色状态表示服务或配置尚未就绪，并不代表应用已被禁用。
-
 模块作用域含 `system_server`（无法干净地软重载），因此 `module.prop` 关闭了自动热重载
 （`autoHotReload=false`）：应用内改配置会通过配置广播即时生效，只有升级 APK 后才需要重启。
+
+## 界面
+
+应用完全基于 Jetpack Compose + Material 3（Dynamic Color、深色模式），底部三页签：
+
+| 页签 | 内容 |
+| --- | --- |
+| 应用 | 应用网格 + 搜索 + 四种筛选（全部 / FCM / 已开 / 已关）+ 下拉刷新 + 长按详情 |
+| 概览 | 服务状态、应用统计、功能开关、Hook 健康报告（进入页签自动发起 nonce 问答） |
+| 日志 | 实时 FCM 事件日志：`system_server` 里的 BroadcastFix 每处理一次 FCM 广播，就通过跨进程广播回传事件，应用进程动态注册接收器实时渲染 |
+
+灰色状态表示服务或配置尚未就绪，并不代表应用已被禁用。
 
 ## 代码结构
 
 界面进程与被 Hook 的进程共用一份「协议」常量，其余代码按职责分层，`MainActivity` 只负责
-把这些组件接起来：
+把 Compose 主题和导航接起来：
 
 | 包 | 职责 | 依赖框架 |
 | --- | --- | --- |
-| `core` | `Contract`：跨进程广播 Action、权限、远程配置键、健康检查 extra | 无 |
-| `model` | `AppInfo`、`FilterMode`、`AppFilter`（搜索/筛选）、`AppCatalogOrder`（分组排序） | 无 |
-| `data` | `AppCatalog`（应用扫描与进程级缓存）、`IconLoader`（有界图标缓存）、`ConfigStore`（允许列表与开关，写穿远程配置）、`XposedServiceBridge`（框架服务绑定）、`PackageChangeWatcher` | Android |
+| `core` | `Contract`：跨进程广播 Action、权限、远程配置键、FCM 日志与健康检查 extra | 无 |
+| `model` | `AppInfo`、`FilterMode`（ALL / FCM_ONLY / ALLOWED / DISALLOWED）、`AppFilter`（搜索/筛选）、`AppCatalogOrder`（分组排序） | 无 |
+| `data` | `AppCatalog`（进程级缓存 + 投递 + 生命周期）、`AppScanner`（纯扫描，无状态）、`IconLoader`（有界图标缓存）、`ConfigStore`（允许列表与开关，写穿远程配置 + `Snapshot` 原子读）、`XposedServiceBridge`（框架服务绑定）、`PackageChangeWatcher` | Android |
 | `health` | `HookHealthReport`（纯文本渲染）、`HookHealthMonitor`（nonce 广播问答） | 部分 |
-| `ui` | `AppTheme`（M3E 取色）、`AppListAdapter`、`BottomDock`（筛选段 + 搜索 + FAB）、`FabMenuController`、`FeedbackBar`、`WindowChrome` | Android |
-| `xposed` | 各 Hook 实现，运行在 `system_server` 等被注入进程中 | Xposed |
+| `ui/navigation` | 三个页签的 `Screen` 定义与底部导航（日志页签带事件计数角标） | Compose |
+| `ui/screens` | `AppListScreen`（网格 + 筛选 + 搜索 + 详情）、`DashboardScreen`（状态/统计/开关/健康）、`FcmLogScreen`（实时日志） | Compose |
+| `ui/theme` | `FcmselfTheme`（M3 Dynamic Color + 深色回退配色） | Compose |
+| `ui/viewmodel` | `AppViewModel`：用 StateFlow 桥接旧 Java 回调层（AppCatalog / XposedServiceBridge / PackageChangeWatcher / HookHealthMonitor），并接收 FCM 事件广播 | Android + Compose 生态 |
+| `xposed` | 各 Hook 实现（运行在 `system_server` 等被注入进程）+ `ConfigManager`（线程安全配置快照）、`NotificationHelper`、`IceBoxDeliveryQueue`（冰箱延迟投递队列） | Xposed |
 
 `core`、`model` 与 `HookHealthReport` 不引用任何 Android 类，因此排序、筛选、状态标记和
 健康面板文案都由 JVM 单元测试覆盖（`./gradlew testDebugUnitTest`）。
