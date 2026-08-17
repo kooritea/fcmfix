@@ -44,6 +44,11 @@ android {
         warningsAsErrors = true
     }
 
+    androidResources {
+        // AGP 8+ 严格模式：与 shrinkResources 配合，剔除 material/appcompat 带入的无用替代资源
+        enableOptimizedResourceShrinking = true
+    }
+
     packaging {
         resources {
             excludes += [
