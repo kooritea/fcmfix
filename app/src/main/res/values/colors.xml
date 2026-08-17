@@ -1,0 +1,5 @@
+<resources>
+    <color name="colorPrimary">#6750A4</color>
+    <color name="status_error">#F9A825</color>
+    <color name="status_disconnected">#757575</color>
+</resources>

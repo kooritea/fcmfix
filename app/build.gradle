@@ -1,8 +1,5 @@
 plugins {
     id 'com.android.application'
-    // Kotlin compilation is built into AGP 9; the Compose compiler Gradle
-    // plugin is still required and its version matches AGP's embedded KGP.
-    id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 android {
@@ -13,18 +10,23 @@ android {
         applicationId = "sumicya.fcmself"
         minSdk = 29
         targetSdk = 37
-        versionCode = 56
-        versionName = "1.1.0-fcmself"
-    }
-
-    buildFeatures {
-        compose = true
+        versionCode = 55
+        versionName = "1.0.0-fcmself"
+        // Only keep translations we actually ship; appcompat/material pull many languages.
+        // AGP 9 prefers androidResources.localeFilters but resConfigs still works and is clearer
+        // for Groovy. Keep en + zh variants to cover the app and its dependencies.
+        resConfigs "en", "zh", "zh-rCN"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled = true
             shrinkResources = true
+            // Re-compress PNGs after shrinking; marginal but free for release.
+            crunchPngs = true
             proguardFiles(getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro')
         }
     }
@@ -34,12 +36,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
-        }
-    }
-
     lint {
         checkReleaseBuilds = true
         abortOnError = true
@@ -47,12 +43,29 @@ android {
         xmlReport = true
         warningsAsErrors = true
     }
+
+    packaging {
+        resources {
+            excludes += [
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/*.kotlin_module",
+                "kotlin/**"
+            ]
+        }
+    }
 }
 
 tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+    // Android/JUnit annotations are runtime-consumed; AGP also owns compiler paths/options.
+    // Keep all actionable source diagnostics visible while excluding toolchain-only notices.
     options.compilerArgs += ['-Xlint:all,-processing,-options,-path']
 }
 
+// Surface lint findings as GitHub annotations even when warningsAsErrors fails the lint task.
 def lintBuildPath = layout.buildDirectory.get().asFile.absolutePath
 tasks.register('annotateLintReports') {
     doLast {
@@ -80,27 +93,9 @@ dependencies {
     implementation 'io.github.libxposed:interface:102.0.0'
     implementation 'io.github.libxposed:service:102.0.0'
 
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
     implementation 'com.google.android.material:material:1.14.0'
-
-    // Jetpack Compose BOM
-    implementation platform('androidx.compose:compose-bom:2024.12.01')
-    implementation 'androidx.compose.ui:ui'
-    implementation 'androidx.compose.ui:ui-graphics'
-    implementation 'androidx.compose.ui:ui-tooling-preview'
-    implementation 'androidx.compose.material3:material3'
-    implementation 'androidx.compose.material:material-icons-extended'
-    implementation 'androidx.compose.foundation:foundation'
-    implementation 'androidx.compose.runtime:runtime'
-    implementation 'androidx.activity:activity-compose:1.9.3'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
-    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
-    implementation 'androidx.navigation:navigation-compose:2.8.5'
-    implementation 'androidx.core:core-ktx:1.15.0'
-
-    debugImplementation 'androidx.compose.ui:ui-tooling'
 
     testImplementation 'junit:junit:4.13.2'
     testRuntimeOnly 'io.github.libxposed:api:102.0.0'

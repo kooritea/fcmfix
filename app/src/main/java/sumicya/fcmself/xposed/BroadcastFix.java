@@ -20,12 +20,16 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
 
-import sumicya.fcmself.core.Contract;
 import sumicya.fcmself.util.IceboxUtils;
 import sumicya.fcmself.util.XposedUtils;
 
@@ -42,7 +46,42 @@ public class BroadcastFix extends XposedModule {
     private static final ConcurrentHashMap<String, Long> LAST_TEMP_ALLOWLIST =
             new ConcurrentHashMap<>();
 
-    // IceBox delivery queue managed by IceBoxDeliveryQueue.
+    /** Two bounded workers prevent one 30s IceBox timeout from blocking every other package. */
+    private static final ExecutorService ICEBOX_EXEC = Executors.newFixedThreadPool(2, r -> {
+        Thread t = new Thread(r, "fcmself-icebox");
+        t.setDaemon(true);
+        return t;
+    });
+    /** Bound retained hook arguments if a frozen app receives a burst before IceBox enables it. */
+    private static final int MAX_DEFERRED_BROADCASTS_PER_PACKAGE = 64;
+    private static final ConcurrentHashMap<String, DeferredBroadcastQueue> DEFERRED_BROADCASTS =
+            new ConcurrentHashMap<>();
+
+    private static final class DeferredBroadcast {
+        final Member method;
+        final Object receiver;
+        final Object[] args;
+
+        DeferredBroadcast(Member method, Object receiver, Object[] args) {
+            this.method = method;
+            this.receiver = receiver;
+            // Hook args are mutable. Keep a private snapshot until the asynchronous replay, and
+            // copy Intent values so a caller reusing its instance cannot change the queued message.
+            this.args = args.clone();
+            for (int i = 0; i < this.args.length; i++) {
+                if (this.args[i] instanceof Intent) {
+                    this.args[i] = new Intent((Intent) this.args[i]);
+                }
+            }
+        }
+    }
+
+    private static final class DeferredBroadcastQueue {
+        final ConcurrentLinkedQueue<DeferredBroadcast> broadcasts = new ConcurrentLinkedQueue<>();
+        final AtomicInteger size = new AtomicInteger();
+        final AtomicBoolean workerRunning = new AtomicBoolean();
+    }
+
     // Cached boolean config keys read once into volatiles for the absolute hottest path
     private static volatile boolean sIncludeIceBox = false;
     private static volatile boolean sIceBoxConfigCached = false;
@@ -211,7 +250,10 @@ public class BroadcastFix extends XposedModule {
                 }
                 if (sIncludeIceBox && !IceboxUtils.isAppEnabled(context, target)) {
                     printLog("Waiting for IceBox to activate the app: " + target, true);
-                    if (IceBoxDeliveryQueue.deferOrDeliver(
+                    // Every intercepted delivery must be replayed. The old in-flight Set retained
+                    // only the first broadcast and silently dropped later messages for the same
+                    // package while IceBox was still enabling it.
+                    if (deferUntilIceBoxEnabled(
                             target,
                             methodHookParam.method,
                             methodHookParam.thisObject,
@@ -222,7 +264,80 @@ public class BroadcastFix extends XposedModule {
                     printLog("Send Forced Start Broadcast: " + target, true);
                 }
                 OplusProxyFix.unfreeze(target);
-                broadcastFcmEvent(target, intent);
+            }
+        });
+    }
+
+    private static boolean deferUntilIceBoxEnabled(
+            String packageName, Member method, Object receiver, Object[] args) {
+        DeferredBroadcastQueue state = DEFERRED_BROADCASTS.computeIfAbsent(
+                packageName, ignored -> new DeferredBroadcastQueue());
+        int queued = state.size.incrementAndGet();
+        if (queued > MAX_DEFERRED_BROADCASTS_PER_PACKAGE) {
+            state.size.decrementAndGet();
+            // Do not cancel this delivery when the queue is full. Let the original framework path
+            // run synchronously rather than trading bounded memory for a guaranteed message loss.
+            printLog("IceBox deferred queue full, sending directly: " + packageName, true);
+            return false;
+        }
+        state.broadcasts.offer(new DeferredBroadcast(method, receiver, args));
+        startIceBoxWorker(packageName, state);
+        return true;
+    }
+
+    private static void startIceBoxWorker(String packageName, DeferredBroadcastQueue state) {
+        if (!state.workerRunning.compareAndSet(false, true)) {
+            return;
+        }
+        ICEBOX_EXEC.execute(() -> {
+            try {
+                if (!IceboxUtils.isAppEnabled(context, packageName)) {
+                    IceboxUtils.activeApp(context, packageName);
+                    long startedAt = SystemClock.elapsedRealtime();
+                    long deadline = startedAt + 30_000L;
+                    while (!IceboxUtils.isAppEnabled(context, packageName)) {
+                        long now = SystemClock.elapsedRealtime();
+                        if (now >= deadline) {
+                            break;
+                        }
+                        long elapsed = now - startedAt;
+                        long pollInterval = elapsed < 2_000L
+                                ? 100L
+                                : elapsed < 10_000L ? 250L : 500L;
+                        try {
+                            Thread.sleep(Math.min(pollInterval, deadline - now));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+
+                if (IceboxUtils.isAppEnabled(context, packageName)) {
+                    printLog("Send deferred forced-start broadcasts: " + packageName, true);
+                } else {
+                    printLog("Waiting for IceBox to activate the app timed out: "
+                            + packageName, true);
+                }
+
+                DeferredBroadcast deferred;
+                while ((deferred = state.broadcasts.poll()) != null) {
+                    state.size.decrementAndGet();
+                    try {
+                        XposedBridge.invokeOriginalMethod(
+                                deferred.method, deferred.receiver, deferred.args);
+                    } catch (Throwable e) {
+                        printLog("Send Forced Start Broadcast Error: " + packageName + " "
+                                + e.getMessage(), true);
+                    }
+                }
+            } finally {
+                state.workerRunning.set(false);
+                // Close the enqueue-vs-drain race: a delivery may arrive after poll() returned null
+                // but before workerRunning was cleared.
+                if (!state.broadcasts.isEmpty()) {
+                    startIceBoxWorker(packageName, state);
+                }
             }
         });
     }
@@ -460,27 +575,6 @@ public class BroadcastFix extends XposedModule {
             }
         } catch (Throwable e) {
             return null;
-        }
-    }
-
-    /**
-     * Broadcasts a loggable FCM event back to the fcmself app process, so the
-     * in-app FCM Log screen can display it in real time.
-     */
-    private static void broadcastFcmEvent(String packageName, Intent intent) {
-        if (context == null || packageName == null || intent == null) {
-            return;
-        }
-        try {
-            Intent event = new Intent(Contract.FCM_EVENT_ACTION);
-            event.setPackage(Contract.PACKAGE_SELF);
-            event.putExtra(Contract.EXTRA_FCM_PACKAGE, packageName);
-            event.putExtra(Contract.EXTRA_FCM_ACTION, intent.getAction());
-            event.putExtra(Contract.EXTRA_FCM_FIX, "broadcastIntentLocked");
-            event.putExtra(Contract.EXTRA_FCM_TIMESTAMP, System.currentTimeMillis());
-            context.sendBroadcast(event);
-        } catch (Throwable ignored) {
-            // Best-effort logging; never crash the hook.
         }
     }
 }

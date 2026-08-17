@@ -61,31 +61,6 @@ public class AppFilterTest {
     }
 
     @Test
-    public void allowedModeKeepsOnlyAllowedApps() {
-        List<AppInfo> filtered = AppFilter.apply(sample(), FilterMode.ALLOWED, "");
-        assertEquals(1, filtered.size());
-        assertEquals("org.thoughtcrime.securesms", filtered.get(0).packageName);
-    }
-
-    @Test
-    public void disallowedModeKeepsOnlyDisallowedApps() {
-        List<AppInfo> filtered = AppFilter.apply(sample(), FilterMode.DISALLOWED, "");
-        assertEquals(2, filtered.size());
-        for (AppInfo info : filtered) {
-            assertEquals(false, info.isAllow);
-        }
-    }
-
-    @Test
-    public void queryAppliesOnTopOfAllowedMode() {
-        List<AppInfo> filtered = AppFilter.apply(sample(), FilterMode.ALLOWED, "weather");
-        assertEquals(0, filtered.size());
-        List<AppInfo> hit = AppFilter.apply(sample(), FilterMode.ALLOWED, "signal");
-        assertEquals(1, hit.size());
-        assertEquals("org.thoughtcrime.securesms", hit.get(0).packageName);
-    }
-
-    @Test
     public void allowedEntriesWithoutDetectionAreHiddenByTheFcmTab() {
         // Manually allowed apps keep their check mark, but the FCM tab lists detections only.
         List<AppInfo> list = new ArrayList<>();

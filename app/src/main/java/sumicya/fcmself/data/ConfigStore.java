@@ -33,21 +33,6 @@ public final class ConfigStore {
     private boolean lastError;
     private String lastErrorMessage;
 
-    /** Immutable snapshot from a single atomic remote-preference read. */
-    public static final class Snapshot {
-        public static final Snapshot EMPTY = new Snapshot(null, false, null);
-
-        public final Set<String> allowList;  // null = not readable yet
-        public final boolean initialized;
-        public final String errorMessage;    // null = success
-
-        Snapshot(Set<String> allowList, boolean initialized, String errorMessage) {
-            this.allowList = allowList;
-            this.initialized = initialized;
-            this.errorMessage = errorMessage;
-        }
-    }
-
     public ConfigStore(Context context) {
         this.context = context.getApplicationContext();
     }
@@ -219,30 +204,6 @@ public final class ConfigStore {
     public String readDiagnosticString(String key) {
         SharedPreferences preferences = preferencesOrNull();
         return preferences == null ? null : preferences.getString(key, "");
-    }
-
-    /**
-     * Atomically reads a snapshot of the remote preferences without modifying mutable state.
-     * Returns {@link Snapshot#EMPTY} when the remote preferences are unavailable.
-     */
-    public Snapshot loadSnapshot() {
-        try {
-            SharedPreferences preferences = XposedServiceBridge.remotePreferences(Contract.PREFERENCES_NAME);
-            if (preferences == null) {
-                return Snapshot.EMPTY;
-            }
-            Set<String> remote = preferences.getStringSet(Contract.KEY_ALLOW_LIST, null);
-            boolean initialized = preferences.getBoolean(Contract.KEY_INIT, false);
-            Set<String> allowList = null;
-            if (remote != null) {
-                allowList = Collections.unmodifiableSet(new HashSet<>(remote));
-            } else if (initialized) {
-                allowList = Collections.emptySet();
-            }
-            return new Snapshot(allowList, initialized, null);
-        } catch (Throwable e) {
-            return new Snapshot(null, false, String.valueOf(e.getMessage()));
-        }
     }
 
     private static int indexOf(String key) {

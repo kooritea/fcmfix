@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fallback only; runtime builds a theme-aware multi-stop scrim -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#F2FFFFFF"
+        android:centerColor="#B3FFFFFF"
+        android:endColor="#00FFFFFF"
+        android:type="linear" />
+</shape>

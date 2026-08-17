@@ -2,7 +2,6 @@ package sumicya.fcmself.model;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /** Pure search + tab filtering, shared by the grid and by the counters in the dock. */
 public final class AppFilter {
@@ -15,25 +14,14 @@ public final class AppFilter {
      * @return a new list; the source list and its entries are never modified.
      */
     public static List<AppInfo> apply(List<AppInfo> source, FilterMode mode, String query) {
-        String normalized = query == null ? "" : query.toLowerCase(Locale.ROOT);
+        String normalized = query == null ? "" : query;
         List<AppInfo> filtered = new ArrayList<>(source.size());
         for (AppInfo info : source) {
             if (!info.matches(normalized)) {
                 continue;
             }
-            switch (mode) {
-                case FCM_ONLY:
-                    if (!info.includeFcm) continue;
-                    break;
-                case ALLOWED:
-                    if (!info.isAllow) continue;
-                    break;
-                case DISALLOWED:
-                    if (info.isAllow) continue;
-                    break;
-                case ALL:
-                default:
-                    break;
+            if (mode == FilterMode.FCM_ONLY && !info.includeFcm) {
+                continue;
             }
             filtered.add(info);
         }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 三点菜单：与 ic_search/ic_status_* 同为 20dp/24vp 白色图形 + 代码 tint，
+         实心圆点（无描边）视觉上与 2.2-2.6 的线宽保持同等重量，FAB 的
+         onSurfaceVariant / onPrimaryContainer tint 将其染为 dock 同色。 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7,12 m-1.9,0 a1.9,1.9 0,1 0 3.8,0 a1.9,1.9 0,1 0 -3.8,0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,12 m-1.9,0 a1.9,1.9 0,1 0 3.8,0 a1.9,1.9 0,1 0 -3.8,0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17,12 m-1.9,0 a1.9,1.9 0,1 0 3.8,0 a1.9,1.9 0,1 0 -3.8,0" />
+</vector>
