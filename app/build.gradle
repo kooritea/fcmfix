@@ -11,7 +11,7 @@ android {
         minSdk = 29
         targetSdk = 37
         versionCode = 55
-        versionName = "1.0.0-fcmself"
+        versionName = "1.0.0"
         // Only keep translations we actually ship; appcompat/material pull many languages.
         // AGP 9 prefers androidResources.localeFilters but resConfigs still works and is clearer
         // for Groovy. Keep en + zh variants to cover the app and its dependencies.
