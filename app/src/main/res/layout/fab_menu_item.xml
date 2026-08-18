@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/menu_row"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
+    android:layout_height="@dimen/menu_row_height"
     android:clickable="true"
     android:focusable="true"
     app:cardBackgroundColor="@android:color/transparent"
@@ -34,8 +34,8 @@
 
             <ImageView
                 android:id="@+id/menu_symbol"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="@dimen/menu_symbol_size"
+                android:layout_height="@dimen/menu_symbol_size"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
                 android:importantForAccessibility="no"
@@ -62,8 +62,8 @@
                 android:ellipsize="end"
                 android:gravity="center"
                 android:maxLines="2"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:paddingStart="@dimen/menu_label_padding_h"
+                android:paddingEnd="@dimen/menu_label_padding_h"
                 android:textAlignment="center"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
                 android:textColor="?attr/colorOnSurface" />

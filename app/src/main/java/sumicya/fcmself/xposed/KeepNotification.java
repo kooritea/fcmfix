@@ -1,6 +1,5 @@
 package sumicya.fcmself.xposed;
 
-import android.os.Build;
 import android.service.notification.NotificationListenerService;
 
 import java.lang.reflect.Method;
@@ -10,15 +9,13 @@ import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
 
 /**
- * Prevents auto-cleanup of notifications for allowed packages when the reason is package change
- * or certain OEM codes. Requires Android 13+ (minSdk 33).
+ * Prevents auto-cleanup of notifications for allowed packages. Android 16 (API 36) layouts only.
  */
 public class KeepNotification extends XposedModule {
 
     private static volatile boolean sDisableAutoClean = false;
     private static volatile boolean sConfigCached = false;
 
-    /** Called after remote preferences are refreshed. */
     public static void onConfigUpdated() {
         sConfigCached = false;
     }
@@ -52,24 +49,12 @@ public class KeepNotification extends XposedModule {
             throw new NoSuchMethodError("cancelAllNotificationsInt not found");
         }
 
-        final int sdk = Build.VERSION.SDK_INT;
-        final int paramCount = targetMethod.getParameterTypes().length;
+        // API 36+: pkg at 2, reason typically at 7 (same family as 35+).
         final int pkgIndex = 2;
-        final int reasonIndex;
-
-        // minSdk 33. API 33, 34 variants, 35+.
-        if (sdk == 33) {
-            reasonIndex = 8;
-        } else if (sdk == 34) {
-            if (paramCount == 10) {
-                reasonIndex = 8;
-            } else if (paramCount == 8) {
-                reasonIndex = 7;
-            } else {
-                throw new NoSuchMethodError("unexpected cancelAllNotificationsInt arity on API 34: " + paramCount);
-            }
-        } else { // 35+
-            reasonIndex = 7;
+        final int reasonIndex = 7;
+        if (pkgIndex >= targetMethod.getParameterTypes().length
+                || reasonIndex >= targetMethod.getParameterTypes().length) {
+            throw new NoSuchMethodError("cancelAllNotificationsInt arity too short for A16 layout");
         }
 
         XposedBridge.hookMethod(targetMethod, new XC_MethodHook() {
@@ -83,8 +68,6 @@ public class KeepNotification extends XposedModule {
                     sConfigCached = true;
                 }
                 if (!sDisableAutoClean
-                        || pkgIndex >= param.args.length
-                        || reasonIndex >= param.args.length
                         || !(param.args[pkgIndex] instanceof String)
                         || !(param.args[reasonIndex] instanceof Integer)) {
                     return;
@@ -93,7 +76,7 @@ public class KeepNotification extends XposedModule {
                 int reason = (Integer) param.args[reasonIndex];
                 if (targetIsAllow(packageName)
                         && (reason == NotificationListenerService.REASON_PACKAGE_CHANGED
-                        || reason == 10020 || reason == 10021)) { // cos15/oos15
+                        || reason == 10020 || reason == 10021)) {
                     param.setResult(null);
                 }
             }

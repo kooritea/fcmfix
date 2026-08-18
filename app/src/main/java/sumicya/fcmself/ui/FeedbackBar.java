@@ -16,8 +16,8 @@ import sumicya.fcmself.model.AppInfo;
 /**
  * The self-sizing confirmation pill above the dock.
  *
- * <p>It replaces a Snackbar so it can stay centred over the control rail, shrink to the width of
- * its message and offer a single Undo affordance without covering the grid.
+ * <p>Motion durations come from {@code R.integer.motion_*} so enter/exit stay aligned with the
+ * FAB menu animations.
  */
 public final class FeedbackBar {
 
@@ -30,6 +30,8 @@ public final class FeedbackBar {
     private final TextView text;
     private final TextView action;
     private final AppTheme theme;
+    private final int enterMs;
+    private final int exitMs;
     private final Runnable hideTask = () -> hide(false);
 
     private Runnable undoAction;
@@ -41,6 +43,8 @@ public final class FeedbackBar {
         this.icon = root.findViewById(R.id.feedback_icon);
         this.text = root.findViewById(R.id.feedback_text);
         this.action = root.findViewById(R.id.feedback_action);
+        this.enterMs = root.getResources().getInteger(R.integer.motion_enter_ms);
+        this.exitMs = root.getResources().getInteger(R.integer.motion_exit_ms);
         this.action.setOnClickListener(v -> {
             Runnable pending = undoAction;
             hide(true);
@@ -50,10 +54,6 @@ public final class FeedbackBar {
         });
     }
 
-    /**
-     * Confirms a toggle and offers to undo it. The undo re-applies the inverse persistence, so a
-     * tile that left a filtered view comes back instead of silently disappearing.
-     */
     public void showToggle(AppInfo info, Runnable undo) {
         boolean allowed = info.isAllow;
         show((allowed ? "已启用：" : "已停用：") + info.name,
@@ -96,13 +96,12 @@ public final class FeedbackBar {
         applyWidth(message);
         action.setTextColor(contentColor);
         action.setEnabled(undo != null);
-        // Keep an equal-width trailing rail even without Undo, so the message stays truly centred.
         action.setVisibility(undo != null ? View.VISIBLE : View.INVISIBLE);
 
         if (container.getVisibility() != View.VISIBLE) {
             container.setAlpha(0f);
             container.setVisibility(View.VISIBLE);
-            container.animate().alpha(1f).setDuration(140L).start();
+            container.animate().alpha(1f).setDuration(enterMs).start();
         } else {
             container.setAlpha(1f);
         }
@@ -125,7 +124,7 @@ public final class FeedbackBar {
         }
         container.animate()
                 .alpha(0f)
-                .setDuration(120L)
+                .setDuration(exitMs)
                 .withEndAction(() -> {
                     if (current == generation) {
                         container.setVisibility(View.GONE);
