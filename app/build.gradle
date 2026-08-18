@@ -8,11 +8,11 @@ android {
 
     defaultConfig {
         applicationId = "sumicya.fcmself"
-        // Personal build: drop Android 10/11 special cases. Android 12+ only.
-        minSdk = 31
+        // Personal build: Android 13+ only. Further drops API 31/32 special cases.
+        minSdk = 33
         targetSdk = 37
-        versionCode = 56
-        versionName = "1.1.0"
+        versionCode = 57
+        versionName = "1.2.0"
         // Only keep translations we actually ship; appcompat/material pull many languages.
         // AGP 9 prefers androidResources.localeFilters but resConfigs still works and is clearer
         // for Groovy. Keep en + zh variants to cover the app and its dependencies.

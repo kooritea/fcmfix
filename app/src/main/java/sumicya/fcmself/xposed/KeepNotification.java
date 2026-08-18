@@ -11,7 +11,7 @@ import sumicya.fcmself.libxposed.XposedHelpers;
 
 /**
  * Prevents auto-cleanup of notifications for allowed packages when the reason is package change
- * or certain OEM codes. Requires Android 12+ (minSdk 31).
+ * or certain OEM codes. Requires Android 13+ (minSdk 33).
  */
 public class KeepNotification extends XposedModule {
 
@@ -30,7 +30,7 @@ public class KeepNotification extends XposedModule {
             this.startHook();
             installed = true;
         } catch (Throwable e) {
-            printLog("No Such Method com.android.server.notification.NotificationManagerService.cancelAllNotificationsInt");
+            printLog("KeepNotification hook miss: " + e.getMessage());
         }
         reportHookHealth(
                 "KeepNotification", installed ? "通知保留 Hook 已安装" : "当前签名未命中");
@@ -39,9 +39,8 @@ public class KeepNotification extends XposedModule {
     private void startHook() throws NoSuchMethodError, XposedHelpers.ClassNotFoundError {
         Class<?> clazz = XposedHelpers.findClass(
                 "com.android.server.notification.NotificationManagerService", classLoader);
-        final Method[] declareMethods = clazz.getDeclaredMethods();
         Method targetMethod = null;
-        for (Method method : declareMethods) {
+        for (Method method : clazz.getDeclaredMethods()) {
             if ("cancelAllNotificationsInt".equals(method.getName())) {
                 if (targetMethod == null
                         || targetMethod.getParameterTypes().length < method.getParameterTypes().length) {
@@ -50,35 +49,29 @@ public class KeepNotification extends XposedModule {
             }
         }
         if (targetMethod == null) {
-            throw new NoSuchMethodError();
+            throw new NoSuchMethodError("cancelAllNotificationsInt not found");
         }
 
         final int sdk = Build.VERSION.SDK_INT;
         final int paramCount = targetMethod.getParameterTypes().length;
-        int pkg_args_index;
-        int reason_args_index;
+        final int pkgIndex = 2;
+        final int reasonIndex;
 
-        // minSdk 31. Layouts for API 31–33, 34 variants, and 35+.
-        if (sdk <= 33) {
-            pkg_args_index = 2;
-            reason_args_index = 8;
+        // minSdk 33. API 33, 34 variants, 35+.
+        if (sdk == 33) {
+            reasonIndex = 8;
         } else if (sdk == 34) {
             if (paramCount == 10) {
-                pkg_args_index = 2;
-                reason_args_index = 8;
+                reasonIndex = 8;
             } else if (paramCount == 8) {
-                pkg_args_index = 2;
-                reason_args_index = 7;
+                reasonIndex = 7;
             } else {
                 throw new NoSuchMethodError("unexpected cancelAllNotificationsInt arity on API 34: " + paramCount);
             }
         } else { // 35+
-            pkg_args_index = 2;
-            reason_args_index = 7;
+            reasonIndex = 7;
         }
 
-        final int finalPkg_args_index = pkg_args_index;
-        final int finalReason_args_index = reason_args_index;
         XposedBridge.hookMethod(targetMethod, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
@@ -90,14 +83,14 @@ public class KeepNotification extends XposedModule {
                     sConfigCached = true;
                 }
                 if (!sDisableAutoClean
-                        || finalPkg_args_index >= param.args.length
-                        || finalReason_args_index >= param.args.length
-                        || !(param.args[finalPkg_args_index] instanceof String)
-                        || !(param.args[finalReason_args_index] instanceof Integer)) {
+                        || pkgIndex >= param.args.length
+                        || reasonIndex >= param.args.length
+                        || !(param.args[pkgIndex] instanceof String)
+                        || !(param.args[reasonIndex] instanceof Integer)) {
                     return;
                 }
-                String packageName = (String) param.args[finalPkg_args_index];
-                int reason = (Integer) param.args[finalReason_args_index];
+                String packageName = (String) param.args[pkgIndex];
+                int reason = (Integer) param.args[reasonIndex];
                 if (targetIsAllow(packageName)
                         && (reason == NotificationListenerService.REASON_PACKAGE_CHANGED
                         || reason == 10020 || reason == 10021)) { // cos15/oos15
