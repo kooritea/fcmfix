@@ -2,7 +2,6 @@ package sumicya.fcmself.xposed;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -33,7 +32,6 @@ public class ReconnectManagerFix extends XposedModule {
     private boolean hooksInstalled = false;
     private boolean logReceiverRegistered = false;
 
-    // Cached from SharedPreferences after successful resolution
     private String cachedAlarmTypePath;
     private volatile String[] cachedAlarmTypePathParts;
     private volatile long cachedHbInterval;
@@ -146,7 +144,6 @@ public class ReconnectManagerFix extends XposedModule {
                 protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
                     if (!logReceiverRegistered) {
                         IntentFilter intentFilter = new IntentFilter("sumicya.fcmself.log");
-                        // minSdk 36: always use the Tiramisu+ overload.
                         context.registerReceiver(
                                 logBroadcastReceive,
                                 intentFilter,
@@ -186,7 +183,6 @@ public class ReconnectManagerFix extends XposedModule {
         PackageInfo pi = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
         String versionName = pi.versionName != null ? pi.versionName : "";
         long versionCode = pi.getLongVersionCode();
-        // Very old GMS builds are no longer supported (personal build policy).
         if (versionCode < 213916046) {
             printLog("当前为过旧 GMS，已禁用重连修复功能");
             reportHookHealth("ReconnectManagerFix", "GMS 过旧，已禁用");
@@ -194,7 +190,7 @@ public class ReconnectManagerFix extends XposedModule {
         }
         if (!sharedPreferences.getBoolean("isInit", false)
                 || !configVersion.equals(sharedPreferences.getString("config_version", ""))) {
-            printLog("fcmfix_config init", true);
+            printLog("reconnect config init", true);
             sharedPreferences.edit()
                     .putBoolean("isInit", true)
                     .putBoolean("enable", false)
@@ -226,7 +222,7 @@ public class ReconnectManagerFix extends XposedModule {
             return;
         }
         if (!sharedPreferences.getBoolean("enable", false)) {
-            printLog("当前配置文件enable标识为false，FCMFIX退出", true);
+            printLog("当前配置文件 enable=false，重连修复退出", true);
             reportHookHealth("ReconnectManagerFix", "探测未成功，功能关闭");
             return;
         }
@@ -235,7 +231,6 @@ public class ReconnectManagerFix extends XposedModule {
 
     protected void startHook() {
         if (hooksInstalled) {
-            // Refresh cached intervals only
             SharedPreferences prefs = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
             cachedHbInterval = prefs.getLong("heartbeatInterval", 0L);
             cachedConnInterval = prefs.getLong("reconnInterval", 0L);
@@ -280,7 +275,7 @@ public class ReconnectManagerFix extends XposedModule {
                 }
                 String alarmType = getCachedAlarmType(param.thisObject);
                 if ("GCM_HB_ALARM".equals(alarmType) || "GCM_CONN_ALARM".equals(alarmType)) {
-                    param.setResult(param.getResult() + "[fcmfix locked]");
+                    param.setResult(param.getResult() + "[fcmself locked]");
                 }
             }
         });
@@ -362,15 +357,15 @@ public class ReconnectManagerFix extends XposedModule {
                 return;
             }
             if (GcmChimeraServiceLogMethodName == null) {
-                XposedBridge.log("[fcmfix] " + intent.getStringExtra("text"));
+                XposedBridge.log("[fcmself] " + intent.getStringExtra("text"));
                 return;
             }
             try {
                 XposedHelpers.callStaticMethod(GcmChimeraService, GcmChimeraServiceLogMethodName,
                         new Class<?>[]{String.class, Object[].class},
-                        "[fcmfix] " + intent.getStringExtra("text"), null);
+                        "[fcmself] " + intent.getStringExtra("text"), null);
             } catch (Throwable e) {
-                XposedBridge.log("输出日志到fcm失败： [fcmfix] " + intent.getStringExtra("text"));
+                XposedBridge.log("输出日志到 GMS 失败: [fcmself] " + intent.getStringExtra("text"));
             }
         }
     };
