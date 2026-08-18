@@ -35,6 +35,20 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
+      - name: Cache Android SDK platforms
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/lib/android/sdk/platforms
+            /usr/local/lib/android/sdk/build-tools
+            ${{ env.ANDROID_HOME }}/platforms
+            ${{ env.ANDROID_HOME }}/build-tools
+            ${{ env.ANDROID_SDK_ROOT }}/platforms
+            ${{ env.ANDROID_SDK_ROOT }}/build-tools
+          key: android-sdk-api37-v1-${{ runner.os }}
+          restore-keys: |
+            android-sdk-api37-v1-
+
       - name: Install Android platform and build-tools
         run: |
           set -euo pipefail
