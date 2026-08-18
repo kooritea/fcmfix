@@ -4,6 +4,8 @@
 
 ### Changed
 - Motion: `integers.xml` tokens (`enter/exit/scale/fast`); BottomDock uses them (no hard-coded ms).
+- Spacing: expand dock_* / space_md/lg tokens; wire activity_main hard-coded dp.
+- ReconnectManagerFix: log branding fcmself (prefs key `fcmfix_config` kept for migration).
 - CI: `actions/cache@v5` (native Node 24); rename-package `checkout@v5`.
 - Drop BroadcastFix high-level fallback (A16 locked path only).
 - ReconnectManagerFix: remove GMS settings inject buttons; always use Tiramisu+ receiver API.
@@ -13,6 +15,7 @@
 
 ### Fixed
 - ObsoleteSdkInt branches under minSdk 36 cleared (lint disable removed).
+- BottomDock: restore full API (`bindCounts`/`fab`/`release`/`updateFab`) after truncated push.
 
 ---
 
