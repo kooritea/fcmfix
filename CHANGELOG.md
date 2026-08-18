@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.2 (2026-08-18)
+
+### Changed
+- Drop BroadcastFix high-level fallback (A16 locked path only).
+- ReconnectManagerFix: remove GMS settings inject buttons; always use Tiramisu+ receiver API.
+- XposedMain: load MIUI/Oplus hooks only on matching OEM families.
+- Health panel: long-press status text to copy.
+- CI: force Node 24, setup-android@v4, cache SDK platforms.
+
+### Fixed
+- ObsoleteSdkInt branches under minSdk 36 cleared (lint disable removed).
+
+---
+
 ## 1.3.1 (2026-08-18)
 
 ### Fixed

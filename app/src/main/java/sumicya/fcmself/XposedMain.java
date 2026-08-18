@@ -1,5 +1,7 @@
 package sumicya.fcmself;
 
+import android.os.Build;
+
 import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.xposed.AutoStartFix;
 import sumicya.fcmself.xposed.BroadcastFix;
@@ -12,6 +14,7 @@ import sumicya.fcmself.xposed.XposedModule;
 
 import io.github.libxposed.api.XposedModuleInterface;
 
+import java.util.Locale;
 import java.util.function.Supplier;
 
 public class XposedMain extends io.github.libxposed.api.XposedModule {
@@ -28,6 +31,21 @@ public class XposedMain extends io.github.libxposed.api.XposedModule {
         }
     }
 
+    private static boolean isXiaomiFamily() {
+        String m = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase(Locale.US);
+        String b = Build.BRAND == null ? "" : Build.BRAND.toLowerCase(Locale.US);
+        return m.contains("xiaomi") || m.contains("redmi") || b.contains("xiaomi")
+                || b.contains("redmi") || b.contains("poco") || m.contains("blackshark");
+    }
+
+    private static boolean isOplusFamily() {
+        String m = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase(Locale.US);
+        String b = Build.BRAND == null ? "" : Build.BRAND.toLowerCase(Locale.US);
+        return m.contains("oppo") || m.contains("oneplus") || m.contains("realme")
+                || b.contains("oppo") || b.contains("oneplus") || b.contains("realme")
+                || m.contains("oplus");
+    }
+
     @Override
     public void onSystemServerStarting(SystemServerStartingParam param) {
         XposedBridge.init(this);
@@ -36,10 +54,14 @@ public class XposedMain extends io.github.libxposed.api.XposedModule {
         ClassLoader classLoader = param.getClassLoader();
 
         safeHook("BroadcastFix", () -> new BroadcastFix(classLoader));
-        safeHook("MiuiLocalNotificationFix", () -> new MiuiLocalNotificationFix(classLoader));
+        if (isXiaomiFamily()) {
+            safeHook("MiuiLocalNotificationFix", () -> new MiuiLocalNotificationFix(classLoader));
+        }
         safeHook("AutoStartFix", () -> new AutoStartFix(classLoader));
         safeHook("KeepNotification", () -> new KeepNotification(classLoader));
-        safeHook("OplusProxyFix", () -> new OplusProxyFix(classLoader));
+        if (isOplusFamily()) {
+            safeHook("OplusProxyFix", () -> new OplusProxyFix(classLoader));
+        }
     }
 
     @Override
@@ -51,6 +73,7 @@ public class XposedMain extends io.github.libxposed.api.XposedModule {
             safeHook("ReconnectManagerFix", () -> new ReconnectManagerFix(param.getClassLoader()));
         }
 
+        // PowerKeeper only exists on Xiaomi; scope is optional.
         if ("com.miui.powerkeeper".equals(param.getPackageName()) && param.isFirstPackage()) {
             XposedModule.setSelfPackageName("com.miui.powerkeeper");
             safeHook("PowerkeeperFix", () -> new PowerkeeperFix(param.getClassLoader()));

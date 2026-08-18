@@ -1,4 +1,4 @@
-# R8 / minify configuration for the View-based 15 baseline.
+# R8 / minify for personal A16 build (minSdk 36).
 # Keep apk small without breaking Xposed discovery or Material theming.
 
 # libxposed modern API (API 102+)
@@ -9,10 +9,12 @@
 -keep,allowoptimization public class * extends io.github.libxposed.api.XposedModule {
     public <init>();
 }
--keep class sumicya.fcmself.XposedMain { *; }
-# Manifest components are kept via manifest merging; only keep the two we actually declare.
--keep class sumicya.fcmself.MainActivity { *; }
--keep class sumicya.fcmself.BootCompletedReceiver { *; }
+-keep class sumicya.fcmself.XposedMain { *;
+}
+-keep class sumicya.fcmself.MainActivity { *;
+}
+-keep class sumicya.fcmself.BootCompletedReceiver { *;
+}
 
 # Preserve annotations used by framework discovery.
 -keepattributes RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations,AnnotationDefault
