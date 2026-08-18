@@ -4,6 +4,8 @@
     <dimen name="space_xxs">2dp</dimen>
     <dimen name="space_xs">4dp</dimen>
     <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">12dp</dimen>
+    <dimen name="space_lg">16dp</dimen>
     <dimen name="space_xl">24dp</dimen>
 
     <dimen name="grid_edge_padding">4dp</dimen>
@@ -13,6 +15,13 @@
     <dimen name="dock_bottom_margin">28dp</dimen>
     <dimen name="dock_control_height">48dp</dimen>
     <dimen name="dock_gap">8dp</dimen>
+    <dimen name="dock_search_min_height">52dp</dimen>
+    <dimen name="dock_filter_segment_width">56dp</dimen>
+    <dimen name="dock_filter_group_width">208dp</dimen>
+    <dimen name="dock_search_max_width">280dp</dimen>
+    <dimen name="dock_search_collapsed_width">144dp</dimen>
+    <dimen name="dock_search_pad_h">14dp</dimen>
+    <dimen name="dock_icon_inset">13dp</dimen>
 
     <dimen name="app_card_height">112dp</dimen>
     <dimen name="app_icon_size">44dp</dimen>
@@ -21,4 +30,5 @@
     <dimen name="menu_row_height">48dp</dimen>
     <dimen name="menu_symbol_size">22dp</dimen>
     <dimen name="menu_label_padding_h">10dp</dimen>
+    <dimen name="menu_popup_max_width">280dp</dimen>
 </resources>
