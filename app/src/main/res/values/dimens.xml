@@ -4,8 +4,6 @@
     <dimen name="space_xxs">2dp</dimen>
     <dimen name="space_xs">4dp</dimen>
     <dimen name="space_sm">8dp</dimen>
-    <dimen name="space_md">12dp</dimen>
-    <dimen name="space_lg">16dp</dimen>
     <dimen name="space_xl">24dp</dimen>
 
     <dimen name="grid_edge_padding">4dp</dimen>
@@ -30,5 +28,4 @@
     <dimen name="menu_row_height">48dp</dimen>
     <dimen name="menu_symbol_size">22dp</dimen>
     <dimen name="menu_label_padding_h">10dp</dimen>
-    <dimen name="menu_popup_max_width">280dp</dimen>
 </resources>
