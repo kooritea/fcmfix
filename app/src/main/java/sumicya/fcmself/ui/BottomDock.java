@@ -103,10 +103,6 @@ public final class BottomDock {
         return fab;
     }
 
-    public boolean isSearchExpanded() {
-        return searchExpanded;
-    }
-
     /** Updates both segment counters and repaints the segmented control. */
     public void bindCounts(int allCount, int fcmCount) {
         filterCounts[0].setText(activity.getString(R.string.compact_count, allCount));
@@ -238,7 +234,6 @@ public final class BottomDock {
                     filterLabels[i].getText() + "，" + filterCounts[i].getText()
                             + (selected ? "，当前筛选" : ""));
         }
-        // Search toggle always independent rounded corners (scheme A: no merge).
         searchToggleContainer.setShapeAppearanceModel(
                 searchToggleContainer.getShapeAppearanceModel()
                         .toBuilder()

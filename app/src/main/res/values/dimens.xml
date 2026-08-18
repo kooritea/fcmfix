@@ -18,6 +18,7 @@
     <dimen name="dock_filter_segment_width">56dp</dimen>
     <dimen name="dock_filter_group_width">208dp</dimen>
     <dimen name="dock_search_max_width">280dp</dimen>
+    <dimen name="dock_search_fixed_width">200dp</dimen>
     <dimen name="dock_search_pad_h">14dp</dimen>
     <dimen name="dock_icon_inset">13dp</dimen>
 
