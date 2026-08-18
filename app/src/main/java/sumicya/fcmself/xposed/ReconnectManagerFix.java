@@ -1,24 +1,15 @@
 package sumicya.fcmself.xposed;
 
-import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
-import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.Window;
-import android.widget.Button;
-import android.widget.LinearLayout;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -96,7 +87,6 @@ public class ReconnectManagerFix extends XposedModule {
 
     public ReconnectManagerFix(ClassLoader classLoader) {
         super(classLoader);
-        this.addButton();
         this.startHookGcmServiceStart();
         reportHookHealth("ReconnectManagerFix", "等待 GMS 计时器配置");
     }
@@ -152,19 +142,15 @@ public class ReconnectManagerFix extends XposedModule {
                 }
             }
             XposedHelpers.findAndHookMethod(this.GcmChimeraService, "onCreate", new XC_MethodHook() {
-                @SuppressLint("UnspecifiedRegisterReceiverFlag")
                 @Override
                 protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
                     if (!logReceiverRegistered) {
                         IntentFilter intentFilter = new IntentFilter("sumicya.fcmself.log");
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            context.registerReceiver(
-                                    logBroadcastReceive,
-                                    intentFilter,
-                                    Context.RECEIVER_EXPORTED);
-                        } else {
-                            context.registerReceiver(logBroadcastReceive, intentFilter);
-                        }
+                        // minSdk 36: always use the Tiramisu+ overload.
+                        context.registerReceiver(
+                                logBroadcastReceive,
+                                intentFilter,
+                                Context.RECEIVER_EXPORTED);
                         logReceiverRegistered = true;
                     }
                     if (startHookFlag) {
@@ -472,58 +458,4 @@ public class ReconnectManagerFix extends XposedModule {
         editor.apply();
     }
 
-    private void addButton() {
-        XposedHelpers.findAndHookMethod(
-                "com.google.android.gms.gcm.GcmChimeraDiagnostics",
-                classLoader, "onCreate", Bundle.class, new XC_MethodHook() {
-                    @SuppressLint("SetTextI18n")
-                    @Override
-                    protected void afterHookedMethod(final MethodHookParam param) {
-                        if (!(param.thisObject instanceof ContextWrapper)) {
-                            return;
-                        }
-                        Object windowValue = XposedHelpers.callMethod(param.thisObject, "getWindow");
-                        if (!(windowValue instanceof Window)) {
-                            return;
-                        }
-                        View content = ((Window) windowValue).getDecorView()
-                                .findViewById(android.R.id.content);
-                        if (!(content instanceof ViewGroup) || ((ViewGroup) content).getChildCount() == 0) {
-                            return;
-                        }
-                        View firstChild = ((ViewGroup) content).getChildAt(0);
-                        if (!(firstChild instanceof LinearLayout)
-                                || ((LinearLayout) firstChild).getChildCount() == 0) {
-                            return;
-                        }
-                        View buttonContainer = ((LinearLayout) firstChild).getChildAt(0);
-                        if (!(buttonContainer instanceof LinearLayout)) {
-                            return;
-                        }
-                        LinearLayout linearLayout = (LinearLayout) buttonContainer;
-                        ContextWrapper activity = (ContextWrapper) param.thisObject;
-
-                        Button reConnectButton = new Button(activity);
-                        reConnectButton.setText("RECONNECT");
-                        reConnectButton.setOnClickListener(view -> {
-                            context.sendBroadcast(new Intent(
-                                    "com.google.android.intent.action.GCM_RECONNECT"));
-                            printLog("Send broadcast GCM_RECONNECT", true);
-                        });
-                        linearLayout.addView(reConnectButton);
-
-                        Button openFcmFixButton = new Button(activity);
-                        openFcmFixButton.setText("打开FCMFIX");
-                        openFcmFixButton.setOnClickListener(view -> {
-                            Intent intent = new Intent(Intent.ACTION_VIEW);
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            intent.setPackage("sumicya.fcmself");
-                            intent.setComponent(new ComponentName(
-                                    "sumicya.fcmself", "sumicya.fcmself.MainActivity"));
-                            context.startActivity(intent);
-                        });
-                        linearLayout.addView(openFcmFixButton);
-                    }
-                });
-    }
 }
