@@ -21,6 +21,8 @@ import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
@@ -44,14 +46,18 @@ public class BroadcastFix extends XposedModule {
     private static volatile boolean sPemResolved;
     private static final long TEMP_ALLOWLIST_DURATION_MS = 5_000L;
     private static final long TEMP_ALLOWLIST_REAPPLY_MS = 2_500L;
-    /** Small delay so AMS critical section is likely released before DeviceIdle work. */
+    /** Entries older than this are dropped from the dedup map. */
+    private static final long TEMP_ALLOWLIST_STALE_MS = TEMP_ALLOWLIST_REAPPLY_MS * 20L;
+    private static final int TEMP_ALLOWLIST_MAX_ENTRIES = 512;
+    /** Small delay so AMS critical section is likely released before DeviceIdle / OEM power work. */
     private static final long TEMP_ALLOWLIST_POST_DELAY_MS = 50L;
     /** Suppress redundant reflection/binder work during a same-package FCM burst. */
     private static final ConcurrentHashMap<String, Long> LAST_TEMP_ALLOWLIST =
             new ConcurrentHashMap<>();
+    private static final AtomicInteger sAllowlistScheduleCount = new AtomicInteger();
 
     /**
-     * Dedicated thread for PowerExemptionManager / DeviceIdleController work.
+     * Dedicated thread for PowerExemptionManager / DeviceIdleController / Oplus unfreeze work.
      * Must never run while a broadcast hook still holds AMS locks (AB/BA deadlock).
      */
     private static final HandlerThread TEMP_ALLOWLIST_THREAD;
@@ -62,6 +68,17 @@ public class BroadcastFix extends XposedModule {
                 "fcmself-temp-allowlist", Process.THREAD_PRIORITY_BACKGROUND);
         TEMP_ALLOWLIST_THREAD.start();
         TEMP_ALLOWLIST_HANDLER = new Handler(TEMP_ALLOWLIST_THREAD.getLooper());
+    }
+
+    /**
+     * Post work that must not run under AMS/broadcast locks (PEM, DeviceIdle, OEM unfreeze).
+     * Package-visible so OplusProxyFix can share the same queue.
+     */
+    static void postOffAmsCriticalPath(Runnable work) {
+        if (work == null) {
+            return;
+        }
+        TEMP_ALLOWLIST_HANDLER.postDelayed(work, TEMP_ALLOWLIST_POST_DELAY_MS);
     }
 
     /** Two bounded workers prevent one 30s IceBox timeout from blocking every other package. */
@@ -260,8 +277,9 @@ public class BroadcastFix extends XposedModule {
                 }
                 intent.addFlags(newFlags);
 
-                // Never call PowerExemptionManager while AMS locks may still be held.
+                // Never call PowerExemptionManager / OEM unfreeze while AMS locks may still be held.
                 scheduleTemporaryAllowList(target);
+                OplusProxyFix.unfreeze(target);
 
                 if (!sIceBoxConfigCached) {
                     sIncludeIceBox = getBooleanConfig("includeIceBoxDisableApp", false);
@@ -282,7 +300,6 @@ public class BroadcastFix extends XposedModule {
                 } else {
                     printLog("Send Forced Start Broadcast: " + target, true);
                 }
-                OplusProxyFix.unfreeze(target);
             }
         });
     }
@@ -338,6 +355,10 @@ public class BroadcastFix extends XposedModule {
                     printLog("Waiting for IceBox to activate the app timed out: "
                             + packageName, true);
                 }
+
+                // Renew exemptions: IceBox wait can exceed the original 5s allowlist window.
+                scheduleTemporaryAllowList(packageName);
+                OplusProxyFix.unfreeze(packageName);
 
                 DeferredBroadcast deferred;
                 while ((deferred = state.broadcasts.poll()) != null) {
@@ -438,6 +459,7 @@ public class BroadcastFix extends XposedModule {
                         }
                         intent.addFlags(nf);
                         scheduleTemporaryAllowList(target);
+                        OplusProxyFix.unfreeze(target);
                     }
                 });
                 hookCount++;
@@ -461,6 +483,7 @@ public class BroadcastFix extends XposedModule {
             return;
         }
         LAST_TEMP_ALLOWLIST.put(packageName, now);
+        maybePruneAllowlistMap(now);
         final long markedAt = now;
         TEMP_ALLOWLIST_HANDLER.postDelayed(() -> {
             try {
@@ -470,6 +493,39 @@ public class BroadcastFix extends XposedModule {
                 printLog("PowerExemptionManager async failed: " + t.getMessage(), true);
             }
         }, TEMP_ALLOWLIST_POST_DELAY_MS);
+    }
+
+    /** Drop stale dedup entries; occasionally trim if the map grows past the soft cap. */
+    private static void maybePruneAllowlistMap(long now) {
+        // Avoid walking the map on every FCM; every 64 schedules is enough.
+        if ((sAllowlistScheduleCount.incrementAndGet() & 63) != 0
+                && LAST_TEMP_ALLOWLIST.size() < TEMP_ALLOWLIST_MAX_ENTRIES) {
+            return;
+        }
+        try {
+            Iterator<Map.Entry<String, Long>> it = LAST_TEMP_ALLOWLIST.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<String, Long> e = it.next();
+                Long ts = e.getValue();
+                if (ts == null || now - ts > TEMP_ALLOWLIST_STALE_MS) {
+                    it.remove();
+                }
+            }
+            // Soft cap: if still too large after stale prune, drop oldest half by timestamp.
+            if (LAST_TEMP_ALLOWLIST.size() > TEMP_ALLOWLIST_MAX_ENTRIES) {
+                long cutoff = now - TEMP_ALLOWLIST_REAPPLY_MS;
+                Iterator<Map.Entry<String, Long>> it2 = LAST_TEMP_ALLOWLIST.entrySet().iterator();
+                while (it2.hasNext()) {
+                    Map.Entry<String, Long> e = it2.next();
+                    Long ts = e.getValue();
+                    if (ts == null || ts < cutoff) {
+                        it2.remove();
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+            // Pruning must never affect the FCM path.
+        }
     }
 
     @SuppressLint("PrivateApi")
@@ -520,7 +576,7 @@ public class BroadcastFix extends XposedModule {
                     "GOOGLE_C2DM", TEMP_ALLOWLIST_DURATION_MS);
         } catch (Throwable t) {
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
-            throw t instanceof RuntimeException ? (RuntimeException) t : new RuntimeException(t);
+            // Do not rethrow: callers on the HandlerThread only need a log + optional dedup rollback.
         }
     }
 
