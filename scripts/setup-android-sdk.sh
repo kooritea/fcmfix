@@ -5,6 +5,8 @@
 set -euo pipefail
 
 readonly COMPILE_SDK=37
+# Google currently ships the platform as platforms;android-37.0 (folder android-37.0).
+readonly PLATFORM_PACKAGE="platforms;android-37.0"
 readonly BUILD_TOOLS_VERSION=37.0.0
 readonly CMDLINE_TOOLS_REVISION=13114758
 
@@ -69,11 +71,14 @@ yes | "$sdkmanager" --sdk_root="$sdk_root" --licenses >/dev/null || true
 printf 'Installing SDK packages for API %s...\n' "$COMPILE_SDK"
 "$sdkmanager" --sdk_root="$sdk_root" \
     'platform-tools' \
-    "platforms;android-${COMPILE_SDK}" \
+    "$PLATFORM_PACKAGE" \
     "build-tools;${BUILD_TOOLS_VERSION}"
 
-# Gradle reads this file without requiring permanent environment variables.
-# Escape backslashes for the Java properties format (mainly useful under Git Bash).
+# AGP looks for platforms/android-37; the package installs as android-37.0.
+if [[ -d "$sdk_root/platforms/android-37.0" && ! -e "$sdk_root/platforms/android-37" ]]; then
+    ln -sfn android-37.0 "$sdk_root/platforms/android-37"
+fi
+
 sdk_dir_property="${sdk_root//\\/\\\\}"
 printf 'sdk.dir=%s\n' "$sdk_dir_property" > local.properties
 

@@ -24,10 +24,18 @@ if [[ -z "$sdk_root" && -f local.properties ]]; then
     sdk_root="${sdk_root//\\\\/\\}"
 fi
 
+has_api37=0
+if [[ -n "$sdk_root" ]]; then
+    if [[ -f "$sdk_root/platforms/android-37/android.jar" \
+       || -f "$sdk_root/platforms/android-37.0/android.jar" ]]; then
+        has_api37=1
+    fi
+fi
+
 if [[ -z "$sdk_root" ]]; then
     error 'Android SDK is not configured (set ANDROID_SDK_ROOT or run scripts/setup-android-sdk.sh)'
-elif [[ ! -f "$sdk_root/platforms/android-37/android.jar" ]]; then
-    error "Android API 37 is missing from $sdk_root"
+elif [[ "$has_api37" -ne 1 ]]; then
+    error "Android API 37 is missing from $sdk_root (need platforms/android-37 or android-37.0)"
 else
     ok "Android SDK API 37 ($sdk_root)"
 fi
