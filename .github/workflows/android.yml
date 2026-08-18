@@ -1,1 +1,123 @@
-PLACEHOLDER2
+name: Android CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master", "merge-fcmfuck", "arena/**" ]
+  pull_request:
+    branches: [ "master" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Prefer native node24 actions (cache@v5, checkout@v5+, upload-artifact@v6).
+    # FORCE remains a safety net for any transitive node20 action still in the graph.
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Cache Android SDK platforms
+        uses: actions/cache@v5
+        with:
+          path: |
+            /usr/local/lib/android/sdk/platforms
+            /usr/local/lib/android/sdk/build-tools
+            ${{ env.ANDROID_HOME }}/platforms
+            ${{ env.ANDROID_HOME }}/build-tools
+            ${{ env.ANDROID_SDK_ROOT }}/platforms
+            ${{ env.ANDROID_SDK_ROOT }}/build-tools
+          key: android-sdk-api37-v1-${{ runner.os }}
+          restore-keys: |
+            android-sdk-api37-v1-
+
+      - name: Install Android platform and build-tools
+        run: |
+          set -euo pipefail
+          # Google ships API 37 as platforms;android-37.0 (folder android-37.0).
+          # AGP compileSdk=37 expects platforms/android-37.
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+          if [[ -d "$SDK_ROOT/platforms/android-37.0" ]]; then
+            if [[ -L "$SDK_ROOT/platforms/android-37" ]]; then
+              rm -f "$SDK_ROOT/platforms/android-37"
+            fi
+            if [[ ! -d "$SDK_ROOT/platforms/android-37" ]]; then
+              mv "$SDK_ROOT/platforms/android-37.0" "$SDK_ROOT/platforms/android-37"
+            fi
+          fi
+          test -f "$SDK_ROOT/platforms/android-37/android.jar"
+          test -x "$SDK_ROOT/build-tools/37.0.0/aapt2"
+          echo "sdk.dir=$SDK_ROOT" > local.properties
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace --no-daemon
+
+      - name: Build release
+        run: ./gradlew assembleRelease --stacktrace --warning-mode all --no-daemon
+
+      - name: Run lint
+        run: ./gradlew lint --no-daemon
+
+      - name: Annotate unit test failures
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+          def escape(text):
+              return (text or '').replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          for path in glob.glob('app/build/test-results/**/*.xml', recursive=True):
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError:
+                  continue
+              for case in root.iter('testcase'):
+                  for problem in list(case.findall('failure')) + list(case.findall('error')):
+                      title = f"{case.get('classname')}.{case.get('name')}"
+                      message = escape(problem.get('message') or problem.text)
+                      print(f"::error title=Unit test {title}::{message}")
+          PY
+
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-reports
+          path: |
+            app/build/reports/**
+            app/build/test-results/**
+          if-no-files-found: ignore
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
