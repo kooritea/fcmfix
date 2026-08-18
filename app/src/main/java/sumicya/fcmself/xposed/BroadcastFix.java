@@ -9,6 +9,8 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Process;
 import android.os.SystemClock;
 
@@ -42,9 +44,25 @@ public class BroadcastFix extends XposedModule {
     private static volatile boolean sPemResolved;
     private static final long TEMP_ALLOWLIST_DURATION_MS = 5_000L;
     private static final long TEMP_ALLOWLIST_REAPPLY_MS = 2_500L;
+    /** Small delay so AMS critical section is likely released before DeviceIdle work. */
+    private static final long TEMP_ALLOWLIST_POST_DELAY_MS = 50L;
     /** Suppress redundant reflection/binder work during a same-package FCM burst. */
     private static final ConcurrentHashMap<String, Long> LAST_TEMP_ALLOWLIST =
             new ConcurrentHashMap<>();
+
+    /**
+     * Dedicated thread for PowerExemptionManager / DeviceIdleController work.
+     * Must never run while a broadcast hook still holds AMS locks (AB/BA deadlock).
+     */
+    private static final HandlerThread TEMP_ALLOWLIST_THREAD;
+    private static final Handler TEMP_ALLOWLIST_HANDLER;
+
+    static {
+        TEMP_ALLOWLIST_THREAD = new HandlerThread(
+                "fcmself-temp-allowlist", Process.THREAD_PRIORITY_BACKGROUND);
+        TEMP_ALLOWLIST_THREAD.start();
+        TEMP_ALLOWLIST_HANDLER = new Handler(TEMP_ALLOWLIST_THREAD.getLooper());
+    }
 
     /** Two bounded workers prevent one 30s IceBox timeout from blocking every other package. */
     private static final ExecutorService ICEBOX_EXEC = Executors.newFixedThreadPool(2, r -> {
@@ -131,7 +149,7 @@ public class BroadcastFix extends XposedModule {
                 "BroadcastFix",
                 core
                         + (resultHookInstalled ? "；结果回调已安装" : "；结果回调不适用")
-                        + "；临时豁免 5 秒");
+                        + "；临时豁免 5 秒（异步）");
     }
 
     /** @return true when a usable broadcastIntentLocked hook was installed. */
@@ -242,7 +260,8 @@ public class BroadcastFix extends XposedModule {
                 }
                 intent.addFlags(newFlags);
 
-                applyTemporaryAllowList(target);
+                // Never call PowerExemptionManager while AMS locks may still be held.
+                scheduleTemporaryAllowList(target);
 
                 if (!sIceBoxConfigCached) {
                     sIncludeIceBox = getBooleanConfig("includeIceBoxDisableApp", false);
@@ -418,7 +437,7 @@ public class BroadcastFix extends XposedModule {
                             nf |= Intent.FLAG_RECEIVER_FOREGROUND;
                         }
                         intent.addFlags(nf);
-                        applyTemporaryAllowList(target);
+                        scheduleTemporaryAllowList(target);
                     }
                 });
                 hookCount++;
@@ -428,8 +447,11 @@ public class BroadcastFix extends XposedModule {
         return hookCount;
     }
 
-    @SuppressLint("PrivateApi")
-    private static void applyTemporaryAllowList(String packageName) {
+    /**
+     * Schedule temporary allow-list work off the AMS/broadcast hook thread.
+     * Dedup happens here so we never post redundant DeviceIdle binder calls.
+     */
+    private static void scheduleTemporaryAllowList(String packageName) {
         if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
             return;
         }
@@ -438,7 +460,23 @@ public class BroadcastFix extends XposedModule {
         if (previous != null && now - previous < TEMP_ALLOWLIST_REAPPLY_MS) {
             return;
         }
-        boolean marked = false;
+        LAST_TEMP_ALLOWLIST.put(packageName, now);
+        final long markedAt = now;
+        TEMP_ALLOWLIST_HANDLER.postDelayed(() -> {
+            try {
+                applyTemporaryAllowListInternal(packageName);
+            } catch (Throwable t) {
+                LAST_TEMP_ALLOWLIST.remove(packageName, markedAt);
+                printLog("PowerExemptionManager async failed: " + t.getMessage(), true);
+            }
+        }, TEMP_ALLOWLIST_POST_DELAY_MS);
+    }
+
+    @SuppressLint("PrivateApi")
+    private static void applyTemporaryAllowListInternal(String packageName) {
+        if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
+            return;
+        }
         try {
             if (!sPemResolved) {
                 synchronized (BroadcastFix.class) {
@@ -478,15 +516,11 @@ public class BroadcastFix extends XposedModule {
             // does not exist on single-user devices, silently making the temporary allow list a
             // no-op. Process.myUserHandle().hashCode() is the public-API equivalent of the hidden
             // Context.getUserId() on recent SDKs (the latter fails to compile on compileSdk 37).
-            LAST_TEMP_ALLOWLIST.put(packageName, now);
-            marked = true;
             sPemAddMethod.invoke(service, packageName, Process.myUserHandle().hashCode(),
                     "GOOGLE_C2DM", TEMP_ALLOWLIST_DURATION_MS);
         } catch (Throwable t) {
-            if (marked) {
-                LAST_TEMP_ALLOWLIST.remove(packageName, now);
-            }
             printLog("PowerExemptionManager failed: " + t.getMessage(), true);
+            throw t instanceof RuntimeException ? (RuntimeException) t : new RuntimeException(t);
         }
     }
 
