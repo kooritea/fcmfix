@@ -22,6 +22,7 @@
         android:paddingEnd="12dp"
         android:paddingBottom="12dp"
         android:text="@string/hook_health_querying"
+        android:textIsSelectable="true"
         android:textAppearance="?attr/textAppearanceBodySmall"
         android:textColor="?attr/colorOnPrimaryContainer" />
 
