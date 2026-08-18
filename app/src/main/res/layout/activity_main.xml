@@ -159,7 +159,7 @@
         <!-- Scheme A: fixed width, fade only -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/search_container"
-            android:layout_width="200dp"
+            android:layout_width="@dimen/dock_search_fixed_width"
             android:layout_height="@dimen/dock_control_height"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="@dimen/dock_gap"
