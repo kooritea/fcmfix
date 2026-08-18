@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Spacing: outer margins can breathe; dense grids stay tight. -->
+    <!-- Spacing -->
     <dimen name="space_xxs">2dp</dimen>
     <dimen name="space_xs">4dp</dimen>
     <dimen name="space_sm">8dp</dimen>
@@ -10,6 +10,7 @@
     <dimen name="grid_item_gap">2dp</dimen>
     <dimen name="grid_bottom_padding">112dp</dimen>
 
+    <!-- Bottom dock (scheme A simplified) -->
     <dimen name="dock_bottom_margin">28dp</dimen>
     <dimen name="dock_control_height">48dp</dimen>
     <dimen name="dock_gap">8dp</dimen>
@@ -17,7 +18,6 @@
     <dimen name="dock_filter_segment_width">56dp</dimen>
     <dimen name="dock_filter_group_width">208dp</dimen>
     <dimen name="dock_search_max_width">280dp</dimen>
-    <dimen name="dock_search_collapsed_width">144dp</dimen>
     <dimen name="dock_search_pad_h">14dp</dimen>
     <dimen name="dock_icon_inset">13dp</dimen>
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (branch radical-simplify)
+
+### Changed
+- **UI scheme A**: BottomDock simplified — no search-width ValueAnimator, no segment corner merging, fixed 200dp search bar with fade only.
+- Keep Xiaomi (MiuiLocalNotificationFix / PowerkeeperFix) and OnePlus/Oplus (OplusProxyFix) hooks.
+- Further radical cleanup in progress on this branch.
+
+---
+
 ## 1.3.2 (2026-08-18)
 
 ### Changed

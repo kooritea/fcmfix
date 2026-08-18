@@ -156,9 +156,10 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Scheme A: fixed width, fade only -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/search_container"
-            android:layout_width="@dimen/dock_search_collapsed_width"
+            android:layout_width="200dp"
             android:layout_height="@dimen/dock_control_height"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="@dimen/dock_gap"
@@ -257,7 +258,7 @@
                     android:stateListAnimator="@null"
                     android:translationZ="0dp"
                     app:cardElevation="0dp"
-                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.Control"
                     app:strokeWidth="0dp">
 
                     <LinearLayout
@@ -293,7 +294,7 @@
                     android:translationZ="0dp"
                     app:cardBackgroundColor="@android:color/transparent"
                     app:cardElevation="0dp"
-                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.FilterMiddle"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Fcmself.Control"
                     app:strokeWidth="0dp">
 
                     <ImageButton
