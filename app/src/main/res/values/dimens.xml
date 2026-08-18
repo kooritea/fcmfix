@@ -4,8 +4,6 @@
     <dimen name="space_xxs">2dp</dimen>
     <dimen name="space_xs">4dp</dimen>
     <dimen name="space_sm">8dp</dimen>
-    <dimen name="space_md">12dp</dimen>
-    <dimen name="space_lg">16dp</dimen>
     <dimen name="space_xl">24dp</dimen>
 
     <dimen name="grid_edge_padding">4dp</dimen>

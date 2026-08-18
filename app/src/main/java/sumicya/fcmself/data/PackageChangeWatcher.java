@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.Build;
 import android.util.Log;
 
 /**
@@ -43,11 +42,8 @@ public final class PackageChangeWatcher extends BroadcastReceiver {
         filter.addAction(Intent.ACTION_PACKAGE_REPLACED);
         filter.addDataScheme("package");
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(this, filter, Context.RECEIVER_NOT_EXPORTED);
-            } else {
-                context.registerReceiver(this, filter);
-            }
+            // minSdk 36: always use the Tiramisu+ overload.
+            context.registerReceiver(this, filter, Context.RECEIVER_NOT_EXPORTED);
             registered = true;
         } catch (Throwable e) {
             Log.w(TAG, "register: " + e);
