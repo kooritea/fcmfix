@@ -30,7 +30,7 @@
                 android:id="@+id/progress_hint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="@dimen/space_sm"
                 android:text="@string/scanning_apps"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
                 android:textColor="?attr/colorOnSurfaceVariant" />
@@ -42,10 +42,10 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:overScrollMode="ifContentScrolls"
-            android:paddingStart="2dp"
+            android:paddingStart="@dimen/grid_edge_padding"
             android:paddingTop="0dp"
-            android:paddingEnd="2dp"
-            android:paddingBottom="104dp"
+            android:paddingEnd="@dimen/grid_edge_padding"
+            android:paddingBottom="@dimen/grid_bottom_padding"
             android:scrollbars="none"
             android:visibility="gone" />
 
@@ -55,6 +55,8 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:gravity="center"
+            android:paddingStart="@dimen/space_xl"
+            android:paddingEnd="@dimen/space_xl"
             android:text="@string/empty_hint"
             android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurfaceVariant"
@@ -70,7 +72,7 @@
         android:elevation="0dp"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingBottom="8dp">
+        android:paddingBottom="@dimen/space_sm">
 
         <TextView
             android:id="@+id/app_title"
@@ -90,7 +92,7 @@
         android:layout_width="280dp"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="24dp"
+        android:layout_marginBottom="@dimen/dock_bottom_margin"
         android:gravity="center_horizontal"
         android:orientation="vertical">
 
@@ -99,7 +101,7 @@
             android:layout_width="160dp"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="@dimen/dock_gap"
             android:elevation="0dp"
             android:minHeight="52dp"
             android:stateListAnimator="@null"
@@ -135,8 +137,8 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:maxLines="2"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="8dp"
+                    android:paddingTop="@dimen/space_sm"
+                    android:paddingBottom="@dimen/space_sm"
                     android:textAlignment="center"
                     android:textAppearance="?attr/textAppearanceBodyMedium" />
 
@@ -157,9 +159,9 @@
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/search_container"
             android:layout_width="144dp"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/dock_control_height"
             android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="@dimen/dock_gap"
             android:visibility="gone"
             app:cardBackgroundColor="?attr/colorPrimaryContainer"
             android:elevation="0dp"
@@ -191,7 +193,7 @@
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/bottom_dock"
             android:layout_width="208dp"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/dock_control_height"
             app:cardBackgroundColor="@android:color/transparent"
             android:elevation="0dp"
             android:stateListAnimator="@null"
@@ -209,7 +211,7 @@
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/filter_all"
                     android:layout_width="56dp"
-                    android:layout_height="48dp"
+                    android:layout_height="@dimen/dock_control_height"
                     android:clickable="true"
                     android:focusable="true"
                     app:cardBackgroundColor="?attr/colorPrimaryContainer"
@@ -247,7 +249,7 @@
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/filter_fcm"
                     android:layout_width="56dp"
-                    android:layout_height="48dp"
+                    android:layout_height="@dimen/dock_control_height"
                     android:clickable="true"
                     android:focusable="true"
                     app:cardBackgroundColor="@android:color/transparent"
@@ -285,7 +287,7 @@
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/search_toggle_container"
                     android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_height="@dimen/dock_control_height"
                     android:elevation="0dp"
                     android:stateListAnimator="@null"
                     android:translationZ="0dp"
@@ -307,8 +309,8 @@
 
                 <com.google.android.material.floatingactionbutton.FloatingActionButton
                     android:id="@+id/main_fab"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_width="@dimen/dock_control_height"
+                    android:layout_height="@dimen/dock_control_height"
                     android:contentDescription="@string/fab_content_description"
                     android:elevation="0dp"
                     android:stateListAnimator="@null"

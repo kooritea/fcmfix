@@ -8,14 +8,11 @@ android {
 
     defaultConfig {
         applicationId = "sumicya.fcmself"
-        // Personal build: Android 13+ only. Further drops API 31/32 special cases.
-        minSdk = 33
+        // Personal build on Android 16 only.
+        minSdk = 36
         targetSdk = 37
-        versionCode = 57
-        versionName = "1.2.0"
-        // Only keep translations we actually ship; appcompat/material pull many languages.
-        // AGP 9 prefers androidResources.localeFilters but resConfigs still works and is clearer
-        // for Groovy. Keep en + zh variants to cover the app and its dependencies.
+        versionCode = 58
+        versionName = "1.3.0"
         resConfigs "en", "zh", "zh-rCN"
         vectorDrawables {
             useSupportLibrary = true
@@ -26,7 +23,6 @@ android {
         release {
             minifyEnabled = true
             shrinkResources = true
-            // Re-compress PNGs after shrinking; marginal but free for release.
             crunchPngs = true
             proguardFiles(getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro')
         }
@@ -61,12 +57,9 @@ android {
 }
 
 tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
-    // Android/JUnit annotations are runtime-consumed; AGP also owns compiler paths/options.
-    // Keep all actionable source diagnostics visible while excluding toolchain-only notices.
     options.compilerArgs += ['-Xlint:all,-processing,-options,-path']
 }
 
-// Surface lint findings as GitHub annotations even when warningsAsErrors fails the lint task.
 def lintBuildPath = layout.buildDirectory.get().asFile.absolutePath
 tasks.register('annotateLintReports') {
     doLast {

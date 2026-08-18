@@ -3,19 +3,19 @@
     android:interpolator="@android:interpolator/fast_out_slow_in"
     android:shareInterpolator="true">
     <alpha
-        android:duration="140"
+        android:duration="@integer/motion_exit_ms"
         android:fromAlpha="1"
         android:toAlpha="0" />
     <scale
-        android:duration="160"
+        android:duration="@integer/motion_exit_ms"
         android:fromXScale="1"
         android:fromYScale="1"
         android:pivotX="100%"
         android:pivotY="100%"
-        android:toXScale="0.86"
-        android:toYScale="0.86" />
+        android:toXScale="0.90"
+        android:toYScale="0.90" />
     <translate
-        android:duration="160"
+        android:duration="@integer/motion_exit_ms"
         android:fromYDelta="0"
-        android:toYDelta="8%" />
+        android:toYDelta="6%" />
 </set>
