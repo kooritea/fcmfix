@@ -20,8 +20,6 @@ import android.view.Window;
 import android.widget.Button;
 import android.widget.LinearLayout;
 
-import sumicya.fcmself.util.XposedUtils;
-
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -31,10 +29,12 @@ import sumicya.fcmself.libxposed.XC_MethodHook;
 import sumicya.fcmself.libxposed.XposedBridge;
 import sumicya.fcmself.libxposed.XposedHelpers;
 
+/**
+ * GMS heartbeat / reconnect interval fix. Uses reflective detection of GMS timer internals and
+ * persists the discovered paths in a local SharedPreferences file. Detection re-runs when GMS
+ * version changes. This remains the most fragile subsystem; failures degrade gracefully.
+ */
 public class ReconnectManagerFix extends XposedModule {
-    // TODO(experimental): 这是整套代码里最复杂的自配置 hook（反射探测 GMS 内部、写本地
-    //   fcmfix_config、动态找 hook 点）。已做防御性加固，但整体结构仍可考虑更彻底的重构。
-    //   需真机验证：GMS 升级后的重新探测、heartbeat/reconn 间隔语义、以及 across 版本差异。
 
     private Class<?> GcmChimeraService;
     private String GcmChimeraServiceLogMethodName;
@@ -140,7 +140,8 @@ public class ReconnectManagerFix extends XposedModule {
     }
 
     private void startHookGcmServiceStart() {
-        this.GcmChimeraService = XposedHelpers.findClass("com.google.android.gms.gcm.GcmChimeraService", classLoader);
+        this.GcmChimeraService = XposedHelpers.findClass(
+                "com.google.android.gms.gcm.GcmChimeraService", classLoader);
         try {
             for (Method method : this.GcmChimeraService.getMethods()) {
                 if (method.getParameterTypes().length == 2
@@ -194,15 +195,19 @@ public class ReconnectManagerFix extends XposedModule {
     public static final String configVersion = "v3";
 
     private void checkVersion() throws Throwable {
-        final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
+        final SharedPreferences sharedPreferences =
+                context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         PackageInfo pi = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
         String versionName = pi.versionName != null ? pi.versionName : "";
         long versionCode = pi.getLongVersionCode();
+        // Very old GMS builds are no longer supported (personal build policy).
         if (versionCode < 213916046) {
-            printLog("当前为旧版GMS，请使用0.4.1版本FCMFIX，禁用重连修复功能");
+            printLog("当前为过旧 GMS，已禁用重连修复功能");
+            reportHookHealth("ReconnectManagerFix", "GMS 过旧，已禁用");
             return;
         }
-        if (!sharedPreferences.getBoolean("isInit", false) || !configVersion.equals(sharedPreferences.getString("config_version", ""))) {
+        if (!sharedPreferences.getBoolean("isInit", false)
+                || !configVersion.equals(sharedPreferences.getString("config_version", ""))) {
             printLog("fcmfix_config init", true);
             sharedPreferences.edit()
                     .putBoolean("isInit", true)
@@ -236,14 +241,13 @@ public class ReconnectManagerFix extends XposedModule {
         }
         if (!sharedPreferences.getBoolean("enable", false)) {
             printLog("当前配置文件enable标识为false，FCMFIX退出", true);
+            reportHookHealth("ReconnectManagerFix", "探测未成功，功能关闭");
             return;
         }
         startHook();
     }
 
     protected void startHook() {
-        // TODO(experimental): cachedHbInterval / cachedConnInterval（来自 heartbeatInterval /
-        //   reconnInterval 配置）的语义与默认值可实验性调参，需真机观察心跳/重连实际效果。
         if (hooksInstalled) {
             // Refresh cached intervals only
             SharedPreferences prefs = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
@@ -253,7 +257,8 @@ public class ReconnectManagerFix extends XposedModule {
             return;
         }
 
-        final SharedPreferences sharedPreferences = context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
+        final SharedPreferences sharedPreferences =
+                context.getSharedPreferences("fcmfix_config", Context.MODE_PRIVATE);
         updateCachedAlarmTypePath(sharedPreferences.getString("timer_alarm_type_property", ""));
         cachedHbInterval = sharedPreferences.getLong("heartbeatInterval", 0L);
         cachedConnInterval = sharedPreferences.getLong("reconnInterval", 0L);
@@ -264,8 +269,6 @@ public class ReconnectManagerFix extends XposedModule {
         printLog("timer_alarm_type_property: " + cachedAlarmTypePath, true);
         printLog("timer_settimeout_method: " + setTimeoutMethod, true);
 
-        // Defensive: a stale/blank target (e.g. GMS updated, or detection never ran) must degrade
-        // gracefully instead of throwing. The next GMS restart re-runs detection and re-hooks.
         if (timerClassName.isEmpty() || setTimeoutMethod.isEmpty()) {
             printLog("reconnect fix skipped: missing timer_class/timer_settimeout_method in config", true);
             return;
@@ -276,8 +279,6 @@ public class ReconnectManagerFix extends XposedModule {
             return;
         }
         try {
-            // Verify the target method still exists before hooking so a signature change surfaces
-            // as a clear message rather than a raw NoSuchMethodError mid-start.
             timerClazz.getDeclaredMethod(setTimeoutMethod, long.class);
         } catch (NoSuchMethodException e) {
             printLog("reconnect fix skipped: no long.setTimeout method " + setTimeoutMethod
@@ -319,13 +320,13 @@ public class ReconnectManagerFix extends XposedModule {
                 if (!"GCM_HB_ALARM".equals(alarmType) && !"GCM_CONN_ALARM".equals(alarmType)) {
                     return;
                 }
-                // Resolve the max-long field once and cache
                 Field maxField = cachedMaxLongField;
                 if (maxField == null) {
                     long maxFieldValue = 0L;
                     for (Field field : timerClazz.getDeclaredFields()) {
                         if (field.getType() == long.class) {
-                            long fieldValue = (long) XposedHelpers.getObjectField(param.thisObject, field.getName());
+                            long fieldValue = (long) XposedHelpers.getObjectField(
+                                    param.thisObject, field.getName());
                             if (maxField == null || fieldValue > maxFieldValue) {
                                 maxField = field;
                                 maxFieldValue = fieldValue;
@@ -340,8 +341,7 @@ public class ReconnectManagerFix extends XposedModule {
                     return;
                 }
                 long delay = (long) param.args[0] + 5_000L;
-                scheduleReconnectCheck(
-                        alarmType, param.thisObject, maxField, delay);
+                scheduleReconnectCheck(alarmType, param.thisObject, maxField, delay);
             }
         });
 
@@ -376,8 +376,6 @@ public class ReconnectManagerFix extends XposedModule {
                 return;
             }
             if (GcmChimeraServiceLogMethodName == null) {
-                // The (String, Object[]) log method was never resolved on this GMS build; skip the
-                // reflective call instead of throwing an NPE for every diagnostic broadcast.
                 XposedBridge.log("[fcmfix] " + intent.getStringExtra("text"));
                 return;
             }
@@ -394,7 +392,8 @@ public class ReconnectManagerFix extends XposedModule {
     private void findAndUpdateHookTarget(final SharedPreferences sharedPreferences) {
         final SharedPreferences.Editor editor = sharedPreferences.edit();
         try {
-            Class<?> heartbeatChimeraAlarm = XposedHelpers.findClass("com.google.android.gms.gcm.connection.HeartbeatChimeraAlarm", classLoader);
+            Class<?> heartbeatChimeraAlarm = XposedHelpers.findClass(
+                    "com.google.android.gms.gcm.connection.HeartbeatChimeraAlarm", classLoader);
             Class<?> timerClass = heartbeatChimeraAlarm.getConstructors()[0].getParameterTypes()[3];
             if (timerClass.getDeclaredMethods().length == 0) {
                 timerClass = timerClass.getSuperclass();
@@ -410,20 +409,26 @@ public class ReconnectManagerFix extends XposedModule {
                 }
             }
             for (final Field timerClassField : timerClass.getDeclaredFields()) {
-                if (Modifier.isFinal(timerClassField.getModifiers()) && Modifier.isPublic(timerClassField.getModifiers())) {
+                if (Modifier.isFinal(timerClassField.getModifiers())
+                        && Modifier.isPublic(timerClassField.getModifiers())) {
                     final Class<?> alarmClass = timerClassField.getType();
                     final boolean[] isFinish = {false};
                     Constructor<?> alarmClassConstructor = null;
                     for (Constructor<?> constructor : alarmClass.getConstructors()) {
                         Class<?>[] pts = constructor.getParameterTypes();
                         if (pts.length >= 3
-                                && pts[0] == Context.class && pts[1] == int.class && pts[2] == String.class) {
-                            if (alarmClassConstructor == null || pts.length > alarmClassConstructor.getParameterCount()) {
+                                && pts[0] == Context.class
+                                && pts[1] == int.class
+                                && pts[2] == String.class) {
+                            if (alarmClassConstructor == null
+                                    || pts.length > alarmClassConstructor.getParameterCount()) {
                                 alarmClassConstructor = constructor;
                             }
                         }
                     }
-                    if (alarmClassConstructor == null) throw new Throwable("未找到构造函数");
+                    if (alarmClassConstructor == null) {
+                        throw new Throwable("未找到构造函数");
+                    }
                     XposedBridge.hookMethod(alarmClassConstructor, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(final MethodHookParam param) {
@@ -435,7 +440,8 @@ public class ReconnectManagerFix extends XposedModule {
                                         && Modifier.isFinal(field.getModifiers())
                                         && Modifier.isPrivate(field.getModifiers())) {
                                     if (param.args[2] != null
-                                            && XposedHelpers.getObjectField(param.thisObject, field.getName()) == param.args[2]) {
+                                            && XposedHelpers.getObjectField(
+                                            param.thisObject, field.getName()) == param.args[2]) {
                                         String path = timerClassField.getName() + "." + field.getName();
                                         sharedPreferences.edit()
                                                 .putString("timer_alarm_type_property", path)
@@ -459,59 +465,65 @@ public class ReconnectManagerFix extends XposedModule {
         } catch (Throwable e) {
             editor.putBoolean("enable", false);
             printLog("自动寻找hook点失败: " + e, true);
-            this.sendNotification("自动更新配置文件失败", "未能找到hook点，已禁用重连修复和固定心跳功能。");
+            this.sendNotification("自动更新配置文件失败",
+                    "未能找到hook点，已禁用重连修复和固定心跳功能。");
+            reportHookHealth("ReconnectManagerFix", "探测失败，已禁用");
         }
         editor.apply();
     }
 
     private void addButton() {
-        XposedHelpers.findAndHookMethod("com.google.android.gms.gcm.GcmChimeraDiagnostics", classLoader, "onCreate", Bundle.class, new XC_MethodHook() {
-            @SuppressLint("SetTextI18n")
-            @Override
-            protected void afterHookedMethod(final MethodHookParam param) {
-                if (!(param.thisObject instanceof ContextWrapper)) {
-                    return;
-                }
-                Object windowValue = XposedHelpers.callMethod(param.thisObject, "getWindow");
-                if (!(windowValue instanceof Window)) {
-                    return;
-                }
-                View content = ((Window) windowValue).getDecorView()
-                        .findViewById(android.R.id.content);
-                if (!(content instanceof ViewGroup) || ((ViewGroup) content).getChildCount() == 0) {
-                    return;
-                }
-                View firstChild = ((ViewGroup) content).getChildAt(0);
-                if (!(firstChild instanceof LinearLayout)
-                        || ((LinearLayout) firstChild).getChildCount() == 0) {
-                    return;
-                }
-                View buttonContainer = ((LinearLayout) firstChild).getChildAt(0);
-                if (!(buttonContainer instanceof LinearLayout)) {
-                    return;
-                }
-                LinearLayout linearLayout = (LinearLayout) buttonContainer;
-                ContextWrapper activity = (ContextWrapper) param.thisObject;
+        XposedHelpers.findAndHookMethod(
+                "com.google.android.gms.gcm.GcmChimeraDiagnostics",
+                classLoader, "onCreate", Bundle.class, new XC_MethodHook() {
+                    @SuppressLint("SetTextI18n")
+                    @Override
+                    protected void afterHookedMethod(final MethodHookParam param) {
+                        if (!(param.thisObject instanceof ContextWrapper)) {
+                            return;
+                        }
+                        Object windowValue = XposedHelpers.callMethod(param.thisObject, "getWindow");
+                        if (!(windowValue instanceof Window)) {
+                            return;
+                        }
+                        View content = ((Window) windowValue).getDecorView()
+                                .findViewById(android.R.id.content);
+                        if (!(content instanceof ViewGroup) || ((ViewGroup) content).getChildCount() == 0) {
+                            return;
+                        }
+                        View firstChild = ((ViewGroup) content).getChildAt(0);
+                        if (!(firstChild instanceof LinearLayout)
+                                || ((LinearLayout) firstChild).getChildCount() == 0) {
+                            return;
+                        }
+                        View buttonContainer = ((LinearLayout) firstChild).getChildAt(0);
+                        if (!(buttonContainer instanceof LinearLayout)) {
+                            return;
+                        }
+                        LinearLayout linearLayout = (LinearLayout) buttonContainer;
+                        ContextWrapper activity = (ContextWrapper) param.thisObject;
 
-                Button reConnectButton = new Button(activity);
-                reConnectButton.setText("RECONNECT");
-                reConnectButton.setOnClickListener(view -> {
-                    context.sendBroadcast(new Intent("com.google.android.intent.action.GCM_RECONNECT"));
-                    printLog("Send broadcast GCM_RECONNECT", true);
-                });
-                linearLayout.addView(reConnectButton);
+                        Button reConnectButton = new Button(activity);
+                        reConnectButton.setText("RECONNECT");
+                        reConnectButton.setOnClickListener(view -> {
+                            context.sendBroadcast(new Intent(
+                                    "com.google.android.intent.action.GCM_RECONNECT"));
+                            printLog("Send broadcast GCM_RECONNECT", true);
+                        });
+                        linearLayout.addView(reConnectButton);
 
-                Button openFcmFixButton = new Button(activity);
-                openFcmFixButton.setText("打开FCMFIX");
-                openFcmFixButton.setOnClickListener(view -> {
-                    Intent intent = new Intent(Intent.ACTION_VIEW);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    intent.setPackage("sumicya.fcmself");
-                    intent.setComponent(new ComponentName("sumicya.fcmself", "sumicya.fcmself.MainActivity"));
-                    context.startActivity(intent);
+                        Button openFcmFixButton = new Button(activity);
+                        openFcmFixButton.setText("打开FCMFIX");
+                        openFcmFixButton.setOnClickListener(view -> {
+                            Intent intent = new Intent(Intent.ACTION_VIEW);
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            intent.setPackage("sumicya.fcmself");
+                            intent.setComponent(new ComponentName(
+                                    "sumicya.fcmself", "sumicya.fcmself.MainActivity"));
+                            context.startActivity(intent);
+                        });
+                        linearLayout.addView(openFcmFixButton);
+                    }
                 });
-                linearLayout.addView(openFcmFixButton);
-            }
-        });
     }
 }
