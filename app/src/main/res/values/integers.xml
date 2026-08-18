@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Unified motion (scheme A: only enter/exit remain in use). -->
     <integer name="motion_enter_ms">180</integer>
     <integer name="motion_exit_ms">140</integer>
 </resources>
