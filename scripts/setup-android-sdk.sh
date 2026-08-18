@@ -5,7 +5,8 @@
 set -euo pipefail
 
 readonly COMPILE_SDK=37
-# Google currently ships the platform as platforms;android-37.0 (folder android-37.0).
+# Google ships the platform package as platforms;android-37.0 (folder android-37.0).
+# AGP compileSdk=37 expects platforms/android-37 — we rename after install.
 readonly PLATFORM_PACKAGE="platforms;android-37.0"
 readonly BUILD_TOOLS_VERSION=37.0.0
 readonly CMDLINE_TOOLS_REVISION=13114758
@@ -74,9 +75,15 @@ printf 'Installing SDK packages for API %s...\n' "$COMPILE_SDK"
     "$PLATFORM_PACKAGE" \
     "build-tools;${BUILD_TOOLS_VERSION}"
 
-# AGP looks for platforms/android-37; the package installs as android-37.0.
-if [[ -d "$sdk_root/platforms/android-37.0" && ! -e "$sdk_root/platforms/android-37" ]]; then
-    ln -sfn android-37.0 "$sdk_root/platforms/android-37"
+# AGP looks for platforms/android-37. Symlinks confuse sdkmanager ("inconsistent location").
+# Prefer a real rename when only the .0 folder exists.
+if [[ -d "$sdk_root/platforms/android-37.0" ]]; then
+    if [[ -L "$sdk_root/platforms/android-37" ]]; then
+        rm -f "$sdk_root/platforms/android-37"
+    fi
+    if [[ ! -d "$sdk_root/platforms/android-37" ]]; then
+        mv "$sdk_root/platforms/android-37.0" "$sdk_root/platforms/android-37"
+    fi
 fi
 
 sdk_dir_property="${sdk_root//\\/\\\\}"
