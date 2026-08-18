@@ -60,7 +60,7 @@ public class OplusProxyFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error isGmsApp:" + e.getMessage());
         }
-        reportHookHealth("OplusProxyFix", "ColorOS Hook 已安装 " + installed + "/6");
+        reportHookHealth("OplusProxyFix", "ColorOS Hook 已安装 " + installed + "/6；unfreeze 异步");
     }
 
     private void startHookOplusProxyBroadcast() throws Exception {
@@ -131,7 +131,18 @@ public class OplusProxyFix extends XposedModule {
         }
     }
 
+    /**
+     * Schedule an unfreeze off the AMS/broadcast hook thread.
+     * Safe to call from BroadcastFix before-hooks; the binder/OEM power work runs later.
+     */
     public static void unfreeze(String target) {
+        if (target == null || s_oplusProxyWakeLock == null) {
+            return;
+        }
+        BroadcastFix.postOffAmsCriticalPath(() -> unfreezeInternal(target));
+    }
+
+    private static void unfreezeInternal(String target) {
         if (s_oplusProxyWakeLock == null) {
             return;
         }
