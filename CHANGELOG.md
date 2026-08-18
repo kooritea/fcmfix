@@ -1,1 +1,44 @@
-PLACEHOLDER4
+# Changelog
+
+## 1.3.2 (2026-08-18)
+
+### Changed
+- Motion: `integers.xml` tokens (`enter/exit/scale/fast`); BottomDock uses them (no hard-coded ms).
+- CI: `actions/cache@v5` (native Node 24); rename-package `checkout@v5`.
+- Drop BroadcastFix high-level fallback (A16 locked path only).
+- ReconnectManagerFix: remove GMS settings inject buttons; always use Tiramisu+ receiver API.
+- XposedMain: load MIUI/Oplus hooks only on matching OEM families.
+- Health panel: long-press status text to copy.
+- CI: force Node 24, setup-android@v4, cache SDK platforms.
+
+### Fixed
+- ObsoleteSdkInt branches under minSdk 36 cleared (lint disable removed).
+
+---
+
+## 1.3.1 (2026-08-18)
+
+### Fixed
+- SDK bootstrap: install `platforms;android-37.0` then **rename** to `android-37` (no symlink — symlink caused AGP/sdkmanager "inconsistent location" and flaky builds).
+- `gradle.properties`: lower heap default, suppress AGP generic warnings.
+
+### Changed
+- `BroadcastFix`: A16-first resolution (BroadcastController → AMS, name/type based indices).
+- Version 1.3.1 / versionCode 59.
+
+---
+
+## 1.3.0 (2026-08-18)
+
+### Breaking
+- minSdk **36** (Android 16 only).
+
+### Changed
+- Unified motion + spacing tokens.
+- KeepNotification A16-only layout.
+
+---
+
+## 1.2.0 / 1.1.0 / 1.0.0
+
+See git history for earlier personal refactors.
