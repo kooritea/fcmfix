@@ -33,6 +33,10 @@ import sumicya.fcmself.libxposed.XposedHelpers;
 import sumicya.fcmself.util.IceboxUtils;
 import sumicya.fcmself.util.XposedUtils;
 
+/**
+ * Core FCM wake-up fix. Targets broadcastIntentLocked (primary) and falls back to high-level
+ * broadcastIntent* only when the locked entry is missing. Requires Android 12+ (minSdk 31).
+ */
 public class BroadcastFix extends XposedModule {
 
     // Cached reflection for PowerExemptionManager (hot path on Android 12+)
@@ -99,10 +103,7 @@ public class BroadcastFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error broadcastIntentLocked:" + e.getMessage());
         }
-        // The locked hook is the innermost entry point every high-level broadcast passes through,
-        // so on devices where it installed successfully the high-level broadcastIntent hook would
-        // only double-intercept each broadcast (an extra allocation + callback per send). Install it
-        // only as a fallback for OEM/older builds that lack the locked hook.
+        // Locked is the innermost path. High-level hooks only as fallback to avoid double work.
         int fallbackHookCount = 0;
         if (!lockedInstalled) {
             try {
@@ -111,15 +112,12 @@ public class BroadcastFix extends XposedModule {
                 printLog("hook error high-level broadcastIntent:" + e.getMessage());
             }
         }
-        // TODO(experimental): 目前策略是「锁定钩子为主，高层钩子仅在锁定钩子装不上时兜底」。
-        //   若想保留双保险（两者都装，以韧性优先于省一次拦截开销），可改为无条件都装并观察。
         boolean resultHookInstalled = false;
         try {
             this.startHookScheduleResultTo();
             resultHookInstalled = true;
         } catch (Throwable e) {
-            // Only modern broadcast queues expose this hook point. Keep the core FCM fix active
-            // when an OEM or older Android release does not provide it.
+            // Only modern broadcast queues expose this hook point.
             printLog("hook error scheduleResultTo:" + e.getMessage());
         }
         String core = lockedInstalled
@@ -139,56 +137,42 @@ public class BroadcastFix extends XposedModule {
         Method targetMethod = null;
         int intent_args_index = 0;
         int appOp_args_index = 0;
+
+        // Prefer BroadcastController on API 35+; otherwise ActivityManagerService.
         if (Build.VERSION.SDK_INT >= 35) {
-            targetMethod = XposedUtils.tryFindMethodMostParam(classLoader, "com.android.server.am.BroadcastController", "broadcastIntentLocked");
+            targetMethod = XposedUtils.tryFindMethodMostParam(
+                    classLoader, "com.android.server.am.BroadcastController", "broadcastIntentLocked");
             if (targetMethod != null) {
                 intent_args_index = 3;
                 appOp_args_index = 13;
             }
         }
         if (targetMethod == null) {
-            targetMethod = XposedUtils.tryFindMethodMostParam(classLoader, "com.android.server.am.ActivityManagerService", "broadcastIntentLocked");
+            targetMethod = XposedUtils.tryFindMethodMostParam(
+                    classLoader, "com.android.server.am.ActivityManagerService", "broadcastIntentLocked");
             if (targetMethod != null) {
                 Parameter[] parameters = targetMethod.getParameters();
-                if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
-                    intent_args_index = 2;
-                    appOp_args_index = 9;
-                } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.R) {
-                    intent_args_index = 3;
-                    appOp_args_index = 10;
-                } else if (Build.VERSION.SDK_INT == 31 || Build.VERSION.SDK_INT == 32) {
-                    intent_args_index = 3;
-                    if (parameters.length > 12 && parameters[12].getType() == int.class) {
-                        appOp_args_index = 12;
-                    } else if (parameters.length > 11 && parameters[11].getType() == int.class) {
-                        appOp_args_index = 11;
-                    }
-                } else if (Build.VERSION.SDK_INT == 33) {
-                    intent_args_index = 3;
+                // minSdk 31+: modern layouts. Prefer name lookup; fall back to length heuristics.
+                intent_args_index = 3;
+                if (parameters.length > 13 && parameters[13].getType() == int.class) {
+                    appOp_args_index = 13;
+                } else if (parameters.length > 12 && parameters[12].getType() == int.class) {
                     appOp_args_index = 12;
-                } else {
-                    // All remaining supported releases are Android 14+ (minSdk is Android 10).
-                    intent_args_index = 3;
-                    if (parameters.length > 13 && parameters[13].getType() == int.class) {
-                        appOp_args_index = 13;
-                    } else if (parameters.length > 12 && parameters[12].getType() == int.class) {
-                        appOp_args_index = 12;
-                    }
+                } else if (parameters.length > 11 && parameters[11].getType() == int.class) {
+                    appOp_args_index = 11;
                 }
-                if (intent_args_index == 0 || appOp_args_index == 0) {
-                    intent_args_index = 0;
-                    appOp_args_index = 0;
-                    for (int i = 0; i < parameters.length; i++) {
-                        if ("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class) {
-                            appOp_args_index = i;
-                        }
-                        if ("intent".equals(parameters[i].getName()) && parameters[i].getType() == Intent.class) {
-                            intent_args_index = i;
-                        }
+                // Name-based refinement (more robust across OEM patches).
+                for (int i = 0; i < parameters.length; i++) {
+                    if ("intent".equals(parameters[i].getName()) && parameters[i].getType() == Intent.class) {
+                        intent_args_index = i;
+                    }
+                    if ("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class) {
+                        appOp_args_index = i;
                     }
                 }
             }
         }
+
         if (targetMethod != null && intent_args_index != 0 && appOp_args_index != 0
                 && targetMethod.getParameters()[intent_args_index].getType() == Intent.class
                 && targetMethod.getParameters()[appOp_args_index].getType() == int.class) {
@@ -250,9 +234,6 @@ public class BroadcastFix extends XposedModule {
                 }
                 if (sIncludeIceBox && !IceboxUtils.isAppEnabled(context, target)) {
                     printLog("Waiting for IceBox to activate the app: " + target, true);
-                    // Every intercepted delivery must be replayed. The old in-flight Set retained
-                    // only the first broadcast and silently dropped later messages for the same
-                    // package while IceBox was still enabling it.
                     if (deferUntilIceBoxEnabled(
                             target,
                             methodHookParam.method,
@@ -275,8 +256,7 @@ public class BroadcastFix extends XposedModule {
         int queued = state.size.incrementAndGet();
         if (queued > MAX_DEFERRED_BROADCASTS_PER_PACKAGE) {
             state.size.decrementAndGet();
-            // Do not cancel this delivery when the queue is full. Let the original framework path
-            // run synchronously rather than trading bounded memory for a guaranteed message loss.
+            // Do not cancel this delivery when the queue is full.
             printLog("IceBox deferred queue full, sending directly: " + packageName, true);
             return false;
         }
@@ -333,8 +313,6 @@ public class BroadcastFix extends XposedModule {
                 }
             } finally {
                 state.workerRunning.set(false);
-                // Close the enqueue-vs-drain race: a delivery may arrive after poll() returned null
-                // but before workerRunning was cleared.
                 if (!state.broadcasts.isEmpty()) {
                     startIceBoxWorker(packageName, state);
                 }
@@ -400,7 +378,6 @@ public class BroadcastFix extends XposedModule {
                         }
                         Intent intent = (Intent) arg;
                         final int flags = intent.getFlags();
-                        // broadcastIntentLocked marks handled FCM intents; do not repeat the expensive work here.
                         if ((flags & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) != 0) {
                             return;
                         }
@@ -430,7 +407,7 @@ public class BroadcastFix extends XposedModule {
 
     @SuppressLint("PrivateApi")
     private static void applyTemporaryAllowList(String packageName) {
-        if (packageName == null || context == null || Build.VERSION.SDK_INT < 31) {
+        if (packageName == null || context == null) {
             return;
         }
         long now = SystemClock.elapsedRealtime();
@@ -459,8 +436,6 @@ public class BroadcastFix extends XposedModule {
             if (sPemAddMethod == null || sPemClass == null) {
                 return;
             }
-            // Service publication can lag class resolution during boot. Retry only this cheap
-            // lookup when it was temporarily null instead of permanently disabling exemptions.
             Object service = sPemService;
             if (service == null) {
                 synchronized (BroadcastFix.class) {
@@ -474,10 +449,6 @@ public class BroadcastFix extends XposedModule {
             if (service == null) {
                 return;
             }
-            // User id of the system process (USER_SYSTEM = 0). A hardcoded 102 names a user that
-            // does not exist on single-user devices, silently making the temporary allow list a
-            // no-op. Process.myUserHandle().hashCode() is the public-API equivalent of the hidden
-            // Context.getUserId() on recent SDKs (the latter fails to compile on compileSdk 37).
             LAST_TEMP_ALLOWLIST.put(packageName, now);
             marked = true;
             sPemAddMethod.invoke(service, packageName, Process.myUserHandle().hashCode(),
@@ -492,9 +463,6 @@ public class BroadcastFix extends XposedModule {
 
     @SuppressLint({"MissingPermission", "NotificationPermission"})
     private void startHookScheduleResultTo() {
-        // This code is injected into system_server, so notification permission is determined by
-        // that host process rather than this module APK. Keep the runtime SecurityException guard
-        // below for OEM implementations that apply additional notification restrictions.
         Method method = XposedUtils.findMethod(
                 XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernImpl", classLoader),
                 "scheduleResultTo", 1);
