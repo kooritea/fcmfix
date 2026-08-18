@@ -9,12 +9,10 @@
 -keep,allowoptimization public class * extends io.github.libxposed.api.XposedModule {
     public <init>();
 }
--keep class sumicya.fcmself.XposedMain { *;
-}
--keep class sumicya.fcmself.MainActivity { *;
-}
--keep class sumicya.fcmself.BootCompletedReceiver { *;
-}
+-keep class sumicya.fcmself.XposedMain { *; }
+# Manifest components are kept via manifest merging; only keep the two we actually declare.
+-keep class sumicya.fcmself.MainActivity { *; }
+-keep class sumicya.fcmself.BootCompletedReceiver { *; }
 
 # Preserve annotations used by framework discovery.
 -keepattributes RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations,AnnotationDefault
