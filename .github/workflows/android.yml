@@ -1,14 +1,12 @@
 name: Android CI
 
 on:
-  # 手动触发：可以在任意分支上跑完整校验，不必先开 PR。
   workflow_dispatch:
   push:
     branches: [ "master", "merge-fcmfuck", "arena/**" ]
   pull_request:
     branches: [ "master" ]
 
-# 同一分支上新的推送会取消尚未结束的旧任务，避免排队浪费额度。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -31,19 +29,43 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform and build-tools
+        run: |
+          set -euo pipefail
+          # Google ships API 37 as platforms;android-37.0 (folder android-37.0).
+          # AGP compileSdk=37 expects platforms/android-37.
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+          if [[ -d "$SDK_ROOT/platforms/android-37.0" ]]; then
+            if [[ -L "$SDK_ROOT/platforms/android-37" ]]; then
+              rm -f "$SDK_ROOT/platforms/android-37"
+            fi
+            if [[ ! -d "$SDK_ROOT/platforms/android-37" ]]; then
+              mv "$SDK_ROOT/platforms/android-37.0" "$SDK_ROOT/platforms/android-37"
+            fi
+          fi
+          test -f "$SDK_ROOT/platforms/android-37/android.jar"
+          test -x "$SDK_ROOT/build-tools/37.0.0/aapt2"
+          echo "sdk.dir=$SDK_ROOT" > local.properties
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+
       - name: Grant execute permission
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew testDebugUnitTest --stacktrace --no-daemon
 
       - name: Build release
-        run: ./gradlew assembleRelease --stacktrace --warning-mode all
+        run: ./gradlew assembleRelease --stacktrace --warning-mode all --no-daemon
 
       - name: Run lint
-        run: ./gradlew lint
+        run: ./gradlew lint --no-daemon
 
-      # 把失败的单元测试变成 GitHub 注解，不用下载日志压缩包就能看到原因。
       - name: Annotate unit test failures
         if: failure()
         run: |
@@ -64,7 +86,6 @@ jobs:
                       print(f"::error title=Unit test {title}::{message}")
           PY
 
-      # 测试与 lint 的 HTML/XML 报告，失败时排查用。
       - name: Upload reports
         if: failure()
         uses: actions/upload-artifact@v6
@@ -76,7 +97,9 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v6
         with:
           name: release-apk
           path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
