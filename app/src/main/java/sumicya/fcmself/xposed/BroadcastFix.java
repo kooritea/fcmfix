@@ -34,29 +34,25 @@ import sumicya.fcmself.util.IceboxUtils;
 import sumicya.fcmself.util.XposedUtils;
 
 /**
- * Core FCM wake-up fix. Targets broadcastIntentLocked (primary) and falls back to high-level
- * broadcastIntent* only when the locked entry is missing. Requires Android 12+ (minSdk 31).
+ * Core FCM wake-up fix for Android 16. Prefers BroadcastController#broadcastIntentLocked,
+ * falls back to high-level broadcastIntent* only when locked is missing.
  */
 public class BroadcastFix extends XposedModule {
 
-    // Cached reflection for PowerExemptionManager (hot path on Android 12+)
     private static volatile Class<?> sPemClass;
     private static volatile Method sPemAddMethod;
     private static volatile Object sPemService;
     private static volatile boolean sPemResolved;
     private static final long TEMP_ALLOWLIST_DURATION_MS = 5_000L;
     private static final long TEMP_ALLOWLIST_REAPPLY_MS = 2_500L;
-    /** Suppress redundant reflection/binder work during a same-package FCM burst. */
     private static final ConcurrentHashMap<String, Long> LAST_TEMP_ALLOWLIST =
             new ConcurrentHashMap<>();
 
-    /** Two bounded workers prevent one 30s IceBox timeout from blocking every other package. */
     private static final ExecutorService ICEBOX_EXEC = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "fcmself-icebox");
         t.setDaemon(true);
         return t;
     });
-    /** Bound retained hook arguments if a frozen app receives a burst before IceBox enables it. */
     private static final int MAX_DEFERRED_BROADCASTS_PER_PACKAGE = 64;
     private static final ConcurrentHashMap<String, DeferredBroadcastQueue> DEFERRED_BROADCASTS =
             new ConcurrentHashMap<>();
@@ -69,8 +65,6 @@ public class BroadcastFix extends XposedModule {
         DeferredBroadcast(Member method, Object receiver, Object[] args) {
             this.method = method;
             this.receiver = receiver;
-            // Hook args are mutable. Keep a private snapshot until the asynchronous replay, and
-            // copy Intent values so a caller reusing its instance cannot change the queued message.
             this.args = args.clone();
             for (int i = 0; i < this.args.length; i++) {
                 if (this.args[i] instanceof Intent) {
@@ -86,11 +80,9 @@ public class BroadcastFix extends XposedModule {
         final AtomicBoolean workerRunning = new AtomicBoolean();
     }
 
-    // Cached boolean config keys read once into volatiles for the absolute hottest path
     private static volatile boolean sIncludeIceBox = false;
     private static volatile boolean sIceBoxConfigCached = false;
 
-    /** Call when remote config is refreshed so IceBox flag is re-read. */
     public static void onConfigUpdated() {
         sIceBoxConfigCached = false;
     }
@@ -103,7 +95,6 @@ public class BroadcastFix extends XposedModule {
         } catch (Throwable e) {
             printLog("hook error broadcastIntentLocked:" + e.getMessage());
         }
-        // Locked is the innermost path. High-level hooks only as fallback to avoid double work.
         int fallbackHookCount = 0;
         if (!lockedInstalled) {
             try {
@@ -117,7 +108,6 @@ public class BroadcastFix extends XposedModule {
             this.startHookScheduleResultTo();
             resultHookInstalled = true;
         } catch (Throwable e) {
-            // Only modern broadcast queues expose this hook point.
             printLog("hook error scheduleResultTo:" + e.getMessage());
         }
         String core = lockedInstalled
@@ -132,55 +122,69 @@ public class BroadcastFix extends XposedModule {
                         + "；临时豁免 5 秒");
     }
 
-    /** @return true when a usable broadcastIntentLocked hook was installed. */
+    /** Resolve locked entry for A16: BroadcastController first, then AMS; name-based indices. */
     private boolean startHookBroadcastIntentLocked() {
-        Method targetMethod = null;
-        int intent_args_index = 0;
-        int appOp_args_index = 0;
-
-        // Prefer BroadcastController on API 35+; otherwise ActivityManagerService.
-        if (Build.VERSION.SDK_INT >= 35) {
-            targetMethod = XposedUtils.tryFindMethodMostParam(
-                    classLoader, "com.android.server.am.BroadcastController", "broadcastIntentLocked");
-            if (targetMethod != null) {
-                intent_args_index = 3;
-                appOp_args_index = 13;
-            }
-        }
+        Method targetMethod = XposedUtils.tryFindMethodMostParam(
+                classLoader, "com.android.server.am.BroadcastController", "broadcastIntentLocked");
         if (targetMethod == null) {
             targetMethod = XposedUtils.tryFindMethodMostParam(
                     classLoader, "com.android.server.am.ActivityManagerService", "broadcastIntentLocked");
-            if (targetMethod != null) {
-                Parameter[] parameters = targetMethod.getParameters();
-                // minSdk 31+: modern layouts. Prefer name lookup; fall back to length heuristics.
-                intent_args_index = 3;
-                if (parameters.length > 13 && parameters[13].getType() == int.class) {
-                    appOp_args_index = 13;
-                } else if (parameters.length > 12 && parameters[12].getType() == int.class) {
-                    appOp_args_index = 12;
-                } else if (parameters.length > 11 && parameters[11].getType() == int.class) {
-                    appOp_args_index = 11;
+        }
+        if (targetMethod == null) {
+            printLog("broadcastIntentLocked not found");
+            return false;
+        }
+
+        Parameter[] parameters = targetMethod.getParameters();
+        int intentIndex = -1;
+        int appOpIndex = -1;
+        for (int i = 0; i < parameters.length; i++) {
+            if (intentIndex < 0
+                    && Intent.class.equals(parameters[i].getType())
+                    && ("intent".equals(parameters[i].getName()) || parameters[i].getName().isEmpty())) {
+                // Prefer explicit name; otherwise first Intent param is the payload.
+                if ("intent".equals(parameters[i].getName()) || intentIndex < 0) {
+                    intentIndex = i;
                 }
-                // Name-based refinement (more robust across OEM patches).
-                for (int i = 0; i < parameters.length; i++) {
-                    if ("intent".equals(parameters[i].getName()) && parameters[i].getType() == Intent.class) {
-                        intent_args_index = i;
-                    }
-                    if ("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class) {
-                        appOp_args_index = i;
+            }
+            if ("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class) {
+                appOpIndex = i;
+            }
+        }
+        // A16 defaults when parameter names are stripped.
+        if (intentIndex < 0) {
+            for (int i = 0; i < parameters.length; i++) {
+                if (Intent.class.equals(parameters[i].getType())) {
+                    intentIndex = i;
+                    break;
+                }
+            }
+        }
+        if (appOpIndex < 0) {
+            // Common modern layout: appOp near the end as int.
+            for (int i = parameters.length - 1; i >= 0; i--) {
+                if (parameters[i].getType() == int.class) {
+                    // Heuristic: last int that is not userId-like early slots — prefer index >= 11.
+                    if (i >= 11) {
+                        appOpIndex = i;
+                        break;
                     }
                 }
             }
         }
-
-        if (targetMethod != null && intent_args_index != 0 && appOp_args_index != 0
-                && targetMethod.getParameters()[intent_args_index].getType() == Intent.class
-                && targetMethod.getParameters()[appOp_args_index].getType() == int.class) {
-            createBroadcastIntentLockedHooker(intent_args_index, appOp_args_index, targetMethod);
-            return true;
+        if (intentIndex < 0 || appOpIndex < 0) {
+            printLog("broadcastIntentLocked indices unresolved intent=" + intentIndex
+                    + " appOp=" + appOpIndex);
+            return false;
         }
-        printLog("broadcastIntentLocked hook 位置查找失败，fcmself将不会工作。");
-        return false;
+        if (parameters[intentIndex].getType() != Intent.class
+                || parameters[appOpIndex].getType() != int.class) {
+            printLog("broadcastIntentLocked type mismatch");
+            return false;
+        }
+
+        createBroadcastIntentLockedHooker(intentIndex, appOpIndex, targetMethod);
+        return true;
     }
 
     private void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method) {
@@ -256,7 +260,6 @@ public class BroadcastFix extends XposedModule {
         int queued = state.size.incrementAndGet();
         if (queued > MAX_DEFERRED_BROADCASTS_PER_PACKAGE) {
             state.size.decrementAndGet();
-            // Do not cancel this delivery when the queue is full.
             printLog("IceBox deferred queue full, sending directly: " + packageName, true);
             return false;
         }
@@ -320,7 +323,6 @@ public class BroadcastFix extends XposedModule {
         });
     }
 
-    /** Return a type-correct placeholder while an intercepted method is replayed asynchronously. */
     private static Object defaultReturnValue(Member member) {
         if (!(member instanceof Method)) {
             return null;
@@ -341,8 +343,8 @@ public class BroadcastFix extends XposedModule {
     private int startHookBroadcastIntentHighLevel() {
         int hookCount = 0;
         String[] classNames = {
-                "com.android.server.am.ActivityManagerService",
-                "com.android.server.am.BroadcastController"
+                "com.android.server.am.BroadcastController",
+                "com.android.server.am.ActivityManagerService"
         };
         for (String className : classNames) {
             Class<?> clazz = XposedHelpers.findClassIfExists(className, classLoader);
@@ -466,6 +468,9 @@ public class BroadcastFix extends XposedModule {
         Method method = XposedUtils.findMethod(
                 XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernImpl", classLoader),
                 "scheduleResultTo", 1);
+        if (method == null) {
+            throw new NoSuchMethodError("scheduleResultTo");
+        }
         XposedBridge.hookMethod(method, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam methodHookParam) {
@@ -489,20 +494,24 @@ public class BroadcastFix extends XposedModule {
                 String packageName = intent.getComponent() != null
                         ? intent.getComponent().getPackageName()
                         : intent.getPackage();
-                if (resultCode != -1 && getBooleanConfig("noResponseNotification", false) && targetIsAllow(packageName)) {
+                if (resultCode != -1 && getBooleanConfig("noResponseNotification", false)
+                        && targetIsAllow(packageName)) {
                     try {
-                        Intent notifyIntent = context.getPackageManager().getLaunchIntentForPackage(packageName);
+                        Intent notifyIntent =
+                                context.getPackageManager().getLaunchIntentForPackage(packageName);
                         if (notifyIntent != null) {
                             notifyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             PendingIntent pendingIntent = PendingIntent.getActivity(
                                     context, 0, notifyIntent,
                                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
+                            NotificationManagerCompat notificationManager =
+                                    NotificationManagerCompat.from(context);
                             createFcmselfChannel(notificationManager);
-                            NotificationCompat.Builder notification = new NotificationCompat.Builder(context, "fcmself")
-                                    .setSmallIcon(android.R.drawable.ic_dialog_info)
-                                    .setContentTitle("FCM Message")
-                                    .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+                            NotificationCompat.Builder notification =
+                                    new NotificationCompat.Builder(context, "fcmself")
+                                            .setSmallIcon(android.R.drawable.ic_dialog_info)
+                                            .setContentTitle("FCM Message")
+                                            .setPriority(NotificationCompat.PRIORITY_DEFAULT);
                             Bitmap icon = getAppIcon(packageName);
                             if (icon != null) {
                                 notification.setLargeIcon(icon);
@@ -510,7 +519,8 @@ public class BroadcastFix extends XposedModule {
                             notification.setContentIntent(pendingIntent).setAutoCancel(true);
                             try {
                                 notificationManager.notify(nextNotificationId(), notification.build());
-                            } catch (SecurityException ignored) {}
+                            } catch (SecurityException ignored) {
+                            }
                         } else {
                             printLog("无法获取目标应用active: " + packageName, false);
                         }
@@ -529,18 +539,17 @@ public class BroadcastFix extends XposedModule {
             Drawable drawable = pm.getApplicationIcon(appInfo);
             if (drawable instanceof BitmapDrawable) {
                 return ((BitmapDrawable) drawable).getBitmap();
-            } else {
-                if (drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
-                    return null;
-                }
-                Bitmap bitmap = Bitmap.createBitmap(
-                        drawable.getIntrinsicWidth(),
-                        drawable.getIntrinsicHeight(),
-                        Bitmap.Config.ARGB_8888);
-                drawable.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
-                drawable.draw(new android.graphics.Canvas(bitmap));
-                return bitmap;
             }
+            if (drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
+                return null;
+            }
+            Bitmap bitmap = Bitmap.createBitmap(
+                    drawable.getIntrinsicWidth(),
+                    drawable.getIntrinsicHeight(),
+                    Bitmap.Config.ARGB_8888);
+            drawable.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
+            drawable.draw(new android.graphics.Canvas(bitmap));
+            return bitmap;
         } catch (Throwable e) {
             return null;
         }
