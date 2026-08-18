@@ -52,16 +52,42 @@ public class BroadcastFix extends XposedModule {
         t.setDaemon(true);
         return t;
     });
+    private static final int MAX_DEFERRED_BROADCASTS_PER_PACKAGE = 64;
+    private static final ConcurrentHashMap<String, DeferredBroadcastQueue> DEFERRED_BROADCASTS =
+            new ConcurrentHashMap<>();
 
-    private static final ConcurrentLinkedQueue<String> pendingIcebox = new ConcurrentLinkedQueue<>();
-    private static final AtomicBoolean iceboxWorkerRunning = new AtomicBoolean(false);
+    private static final class DeferredBroadcast {
+        final Member method;
+        final Object receiver;
+        final Object[] args;
+
+        DeferredBroadcast(Member method, Object receiver, Object[] args) {
+            this.method = method;
+            this.receiver = receiver;
+            this.args = args.clone();
+            for (int i = 0; i < this.args.length; i++) {
+                if (this.args[i] instanceof Intent) {
+                    this.args[i] = new Intent((Intent) this.args[i]);
+                }
+            }
+        }
+    }
+
+    private static final class DeferredBroadcastQueue {
+        final ConcurrentLinkedQueue<DeferredBroadcast> broadcasts = new ConcurrentLinkedQueue<>();
+        final AtomicInteger size = new AtomicInteger();
+        final AtomicBoolean workerRunning = new AtomicBoolean();
+    }
+
+    private static volatile boolean sIncludeIceBox = false;
+    private static volatile boolean sIceBoxConfigCached = false;
+
+    public static void onConfigUpdated() {
+        sIceBoxConfigCached = false;
+    }
 
     public BroadcastFix(ClassLoader classLoader) {
         super(classLoader);
-        this.startHook();
-    }
-
-    private void startHook() {
         boolean lockedInstalled = false;
         try {
             lockedInstalled = this.startHookBroadcastIntentLocked();
@@ -83,5 +109,369 @@ public class BroadcastFix extends XposedModule {
                         + "；临时豁免 5 秒");
     }
 
-    // NOTE: Full simplified source continues — truncated in this call for length; will follow with complete file if needed.
+    /** Resolve locked entry for A16: BroadcastController first, then AMS; name-based indices. */
+    private boolean startHookBroadcastIntentLocked() {
+        Method targetMethod = XposedUtils.tryFindMethodMostParam(
+                classLoader, "com.android.server.am.BroadcastController", "broadcastIntentLocked");
+        if (targetMethod == null) {
+            targetMethod = XposedUtils.tryFindMethodMostParam(
+                    classLoader, "com.android.server.am.ActivityManagerService", "broadcastIntentLocked");
+        }
+        if (targetMethod == null) {
+            printLog("broadcastIntentLocked not found");
+            return false;
+        }
+
+        Parameter[] parameters = targetMethod.getParameters();
+        int intentIndex = -1;
+        int appOpIndex = -1;
+        for (int i = 0; i < parameters.length; i++) {
+            if (intentIndex < 0
+                    && Intent.class.equals(parameters[i].getType())
+                    && ("intent".equals(parameters[i].getName()) || parameters[i].getName().isEmpty())) {
+                // Prefer explicit name; otherwise first Intent param is the payload.
+                if ("intent".equals(parameters[i].getName()) || intentIndex < 0) {
+                    intentIndex = i;
+                }
+            }
+            if ("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class) {
+                appOpIndex = i;
+            }
+        }
+        // A16 defaults when parameter names are stripped.
+        if (intentIndex < 0) {
+            for (int i = 0; i < parameters.length; i++) {
+                if (Intent.class.equals(parameters[i].getType())) {
+                    intentIndex = i;
+                    break;
+                }
+            }
+        }
+        if (appOpIndex < 0) {
+            // Common modern layout: appOp near the end as int.
+            for (int i = parameters.length - 1; i >= 0; i--) {
+                if (parameters[i].getType() == int.class) {
+                    // Heuristic: last int that is not userId-like early slots — prefer index >= 11.
+                    if (i >= 11) {
+                        appOpIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+        if (intentIndex < 0 || appOpIndex < 0) {
+            printLog("broadcastIntentLocked indices unresolved intent=" + intentIndex
+                    + " appOp=" + appOpIndex);
+            return false;
+        }
+        if (parameters[intentIndex].getType() != Intent.class
+                || parameters[appOpIndex].getType() != int.class) {
+            printLog("broadcastIntentLocked type mismatch");
+            return false;
+        }
+
+        createBroadcastIntentLockedHooker(intentIndex, appOpIndex, targetMethod);
+        return true;
+    }
+
+    private void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method) {
+        printLog("Android API: " + Build.VERSION.SDK_INT);
+        printLog("appOp_args_index: " + appOp_args_index);
+        printLog("intent_args_index: " + intent_args_index);
+        printLog("hook target: " + method.getDeclaringClass().getName());
+        final int finalIntent_args_index = intent_args_index;
+        final int finalAppOp_args_index = appOp_args_index;
+
+        XposedBridge.hookMethod(method, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                if (!isBootComplete) {
+                    return;
+                }
+                Object intentArg = methodHookParam.args[finalIntent_args_index];
+                if (!(intentArg instanceof Intent)) {
+                    return;
+                }
+                Intent intent = (Intent) intentArg;
+                final int flags = intent.getFlags();
+                if ((flags & Intent.FLAG_INCLUDE_STOPPED_PACKAGES) != 0) {
+                    return;
+                }
+                if (!isFCMIntent(intent)) {
+                    return;
+                }
+                String target = intent.getComponent() != null
+                        ? intent.getComponent().getPackageName()
+                        : intent.getPackage();
+                if (target == null || !targetIsAllow(target)) {
+                    return;
+                }
+
+                Object appOpArg = methodHookParam.args[finalAppOp_args_index];
+                if (appOpArg instanceof Integer && ((Integer) appOpArg) == -1) {
+                    methodHookParam.args[finalAppOp_args_index] = 11;
+                }
+                int newFlags = Intent.FLAG_INCLUDE_STOPPED_PACKAGES;
+                if ((flags & Intent.FLAG_RECEIVER_FOREGROUND) == 0) {
+                    newFlags |= Intent.FLAG_RECEIVER_FOREGROUND;
+                }
+                intent.addFlags(newFlags);
+
+                applyTemporaryAllowList(target);
+
+                if (!sIceBoxConfigCached) {
+                    sIncludeIceBox = getBooleanConfig("includeIceBoxDisableApp", false);
+                    sIceBoxConfigCached = true;
+                }
+                if (sIncludeIceBox && !IceboxUtils.isAppEnabled(context, target)) {
+                    printLog("Waiting for IceBox to activate the app: " + target, true);
+                    if (deferUntilIceBoxEnabled(
+                            target,
+                            methodHookParam.method,
+                            methodHookParam.thisObject,
+                            methodHookParam.args)) {
+                        methodHookParam.setResult(defaultReturnValue(methodHookParam.method));
+                    }
+                } else {
+                    printLog("Send Forced Start Broadcast: " + target, true);
+                }
+                OplusProxyFix.unfreeze(target);
+            }
+        });
+    }
+
+    private static boolean deferUntilIceBoxEnabled(
+            String packageName, Member method, Object receiver, Object[] args) {
+        DeferredBroadcastQueue state = DEFERRED_BROADCASTS.computeIfAbsent(
+                packageName, ignored -> new DeferredBroadcastQueue());
+        int queued = state.size.incrementAndGet();
+        if (queued > MAX_DEFERRED_BROADCASTS_PER_PACKAGE) {
+            state.size.decrementAndGet();
+            printLog("IceBox deferred queue full, sending directly: " + packageName, true);
+            return false;
+        }
+        state.broadcasts.offer(new DeferredBroadcast(method, receiver, args));
+        startIceBoxWorker(packageName, state);
+        return true;
+    }
+
+    private static void startIceBoxWorker(String packageName, DeferredBroadcastQueue state) {
+        if (!state.workerRunning.compareAndSet(false, true)) {
+            return;
+        }
+        ICEBOX_EXEC.execute(() -> {
+            try {
+                if (!IceboxUtils.isAppEnabled(context, packageName)) {
+                    IceboxUtils.activeApp(context, packageName);
+                    long startedAt = SystemClock.elapsedRealtime();
+                    long deadline = startedAt + 30_000L;
+                    while (!IceboxUtils.isAppEnabled(context, packageName)) {
+                        long now = SystemClock.elapsedRealtime();
+                        if (now >= deadline) {
+                            break;
+                        }
+                        long elapsed = now - startedAt;
+                        long pollInterval = elapsed < 2_000L
+                                ? 100L
+                                : elapsed < 10_000L ? 250L : 500L;
+                        try {
+                            Thread.sleep(Math.min(pollInterval, deadline - now));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+
+                if (IceboxUtils.isAppEnabled(context, packageName)) {
+                    printLog("Send deferred forced-start broadcasts: " + packageName, true);
+                } else {
+                    printLog("Waiting for IceBox to activate the app timed out: "
+                            + packageName, true);
+                }
+
+                DeferredBroadcast deferred;
+                while ((deferred = state.broadcasts.poll()) != null) {
+                    state.size.decrementAndGet();
+                    try {
+                        XposedBridge.invokeOriginalMethod(
+                                deferred.method, deferred.receiver, deferred.args);
+                    } catch (Throwable e) {
+                        printLog("Send Forced Start Broadcast Error: " + packageName + " "
+                                + e.getMessage(), true);
+                    }
+                }
+            } finally {
+                state.workerRunning.set(false);
+                if (!state.broadcasts.isEmpty()) {
+                    startIceBoxWorker(packageName, state);
+                }
+            }
+        });
+    }
+
+    private static Object defaultReturnValue(Member member) {
+        if (!(member instanceof Method)) {
+            return null;
+        }
+        Class<?> type = ((Method) member).getReturnType();
+        if (!type.isPrimitive() || type == void.class) return null;
+        if (type == boolean.class) return false;
+        if (type == char.class) return '\0';
+        if (type == byte.class) return (byte) 0;
+        if (type == short.class) return (short) 0;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == float.class) return 0F;
+        if (type == double.class) return 0D;
+        return null;
+    }
+
+    @SuppressLint("PrivateApi")
+    private static void applyTemporaryAllowList(String packageName) {
+        if (packageName == null || context == null) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        Long previous = LAST_TEMP_ALLOWLIST.get(packageName);
+        if (previous != null && now - previous < TEMP_ALLOWLIST_REAPPLY_MS) {
+            return;
+        }
+        boolean marked = false;
+        try {
+            if (!sPemResolved) {
+                synchronized (BroadcastFix.class) {
+                    if (!sPemResolved) {
+                        try {
+                            sPemClass = Class.forName("android.os.PowerExemptionManager");
+                            sPemAddMethod = sPemClass.getMethod(
+                                    "addToTemporaryAllowList",
+                                    String.class, int.class, String.class, long.class);
+                        } catch (Throwable ignored) {
+                            sPemClass = null;
+                            sPemAddMethod = null;
+                        }
+                        sPemResolved = true;
+                    }
+                }
+            }
+            if (sPemAddMethod == null || sPemClass == null) {
+                return;
+            }
+            Object service = sPemService;
+            if (service == null) {
+                synchronized (BroadcastFix.class) {
+                    service = sPemService;
+                    if (service == null) {
+                        service = context.getSystemService(sPemClass);
+                        sPemService = service;
+                    }
+                }
+            }
+            if (service == null) {
+                return;
+            }
+            LAST_TEMP_ALLOWLIST.put(packageName, now);
+            marked = true;
+            sPemAddMethod.invoke(service, packageName, Process.myUserHandle().hashCode(),
+                    "GOOGLE_C2DM", TEMP_ALLOWLIST_DURATION_MS);
+        } catch (Throwable t) {
+            if (marked) {
+                LAST_TEMP_ALLOWLIST.remove(packageName, now);
+            }
+            printLog("PowerExemptionManager failed: " + t.getMessage(), true);
+        }
+    }
+
+    @SuppressLint({"MissingPermission", "NotificationPermission"})
+    private void startHookScheduleResultTo() {
+        Method method = XposedUtils.findMethod(
+                XposedHelpers.findClass("com.android.server.am.BroadcastQueueModernImpl", classLoader),
+                "scheduleResultTo", 1);
+        if (method == null) {
+            throw new NoSuchMethodError("scheduleResultTo");
+        }
+        XposedBridge.hookMethod(method, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam methodHookParam) {
+                if (!isBootComplete) {
+                    return;
+                }
+                if (methodHookParam.args.length == 0 || methodHookParam.args[0] == null) {
+                    return;
+                }
+                Object broadcastRecord = methodHookParam.args[0];
+                Object resultTo = XposedHelpers.getObjectField(broadcastRecord, "resultTo");
+                Object intentValue = XposedHelpers.getObjectField(broadcastRecord, "intent");
+                Object resultCodeValue = XposedHelpers.getObjectField(broadcastRecord, "resultCode");
+                if (resultTo == null
+                        || !(intentValue instanceof Intent)
+                        || !(resultCodeValue instanceof Integer)) {
+                    return;
+                }
+                Intent intent = (Intent) intentValue;
+                int resultCode = (Integer) resultCodeValue;
+                String packageName = intent.getComponent() != null
+                        ? intent.getComponent().getPackageName()
+                        : intent.getPackage();
+                if (resultCode != -1 && getBooleanConfig("noResponseNotification", false)
+                        && targetIsAllow(packageName)) {
+                    try {
+                        Intent notifyIntent =
+                                context.getPackageManager().getLaunchIntentForPackage(packageName);
+                        if (notifyIntent != null) {
+                            notifyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            PendingIntent pendingIntent = PendingIntent.getActivity(
+                                    context, 0, notifyIntent,
+                                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                            NotificationManagerCompat notificationManager =
+                                    NotificationManagerCompat.from(context);
+                            createFcmselfChannel(notificationManager);
+                            NotificationCompat.Builder notification =
+                                    new NotificationCompat.Builder(context, "fcmself")
+                                            .setSmallIcon(android.R.drawable.ic_dialog_info)
+                                            .setContentTitle("FCM Message")
+                                            .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+                            Bitmap icon = getAppIcon(packageName);
+                            if (icon != null) {
+                                notification.setLargeIcon(icon);
+                            }
+                            notification.setContentIntent(pendingIntent).setAutoCancel(true);
+                            try {
+                                notificationManager.notify(nextNotificationId(), notification.build());
+                            } catch (SecurityException ignored) {
+                            }
+                        } else {
+                            printLog("无法获取目标应用active: " + packageName, false);
+                        }
+                    } catch (Throwable e) {
+                        printLog(e.getMessage(), false);
+                    }
+                }
+            }
+        });
+    }
+
+    private static Bitmap getAppIcon(String packageName) {
+        try {
+            PackageManager pm = context.getPackageManager();
+            ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
+            Drawable drawable = pm.getApplicationIcon(appInfo);
+            if (drawable instanceof BitmapDrawable) {
+                return ((BitmapDrawable) drawable).getBitmap();
+            }
+            if (drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
+                return null;
+            }
+            Bitmap bitmap = Bitmap.createBitmap(
+                    drawable.getIntrinsicWidth(),
+                    drawable.getIntrinsicHeight(),
+                    Bitmap.Config.ARGB_8888);
+            drawable.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
+            drawable.draw(new android.graphics.Canvas(bitmap));
+            return bitmap;
+        } catch (Throwable e) {
+            return null;
+        }
+    }
 }
