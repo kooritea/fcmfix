@@ -22,8 +22,8 @@
 
             <ProgressBar
                 android:id="@+id/progress_bar"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="@dimen/dock_control_height"
+                android:layout_height="@dimen/dock_control_height"
                 android:indeterminate="true" />
 
             <TextView
@@ -89,7 +89,7 @@
 
     <LinearLayout
         android:id="@+id/bottom_controls"
-        android:layout_width="280dp"
+        android:layout_width="@dimen/dock_search_max_width"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="@dimen/dock_bottom_margin"
@@ -103,7 +103,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="@dimen/dock_gap"
             android:elevation="0dp"
-            android:minHeight="52dp"
+            android:minHeight="@dimen/dock_search_min_height"
             android:stateListAnimator="@null"
             android:translationZ="0dp"
             android:visibility="gone"
@@ -116,16 +116,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
-                android:minHeight="52dp"
+                android:minHeight="@dimen/dock_search_min_height"
                 android:orientation="horizontal">
 
                 <ImageView
                     android:id="@+id/feedback_icon"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_width="@dimen/dock_control_height"
+                    android:layout_height="@dimen/dock_control_height"
                     android:contentDescription="@null"
                     android:importantForAccessibility="no"
-                    android:padding="13dp"
+                    android:padding="@dimen/dock_icon_inset"
                     android:scaleType="fitCenter" />
 
                 <TextView
@@ -144,8 +144,8 @@
 
                 <TextView
                     android:id="@+id/feedback_action"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_width="@dimen/dock_control_height"
+                    android:layout_height="@dimen/dock_control_height"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:focusable="true"
@@ -158,7 +158,7 @@
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/search_container"
-            android:layout_width="144dp"
+            android:layout_width="@dimen/dock_search_collapsed_width"
             android:layout_height="@dimen/dock_control_height"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="@dimen/dock_gap"
@@ -181,9 +181,9 @@
                 android:imeOptions="actionDone"
                 android:inputType="text|textNoSuggestions"
                 android:maxLines="1"
-                android:paddingStart="14dp"
+                android:paddingStart="@dimen/dock_search_pad_h"
                 android:paddingTop="0dp"
-                android:paddingEnd="14dp"
+                android:paddingEnd="@dimen/dock_search_pad_h"
                 android:paddingBottom="0dp"
                 android:singleLine="true"
                 android:textAlignment="center"
@@ -192,7 +192,7 @@
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/bottom_dock"
-            android:layout_width="208dp"
+            android:layout_width="@dimen/dock_filter_group_width"
             android:layout_height="@dimen/dock_control_height"
             app:cardBackgroundColor="@android:color/transparent"
             android:elevation="0dp"
@@ -210,7 +210,7 @@
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/filter_all"
-                    android:layout_width="56dp"
+                    android:layout_width="@dimen/dock_filter_segment_width"
                     android:layout_height="@dimen/dock_control_height"
                     android:clickable="true"
                     android:focusable="true"
@@ -248,7 +248,7 @@
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/filter_fcm"
-                    android:layout_width="56dp"
+                    android:layout_width="@dimen/dock_filter_segment_width"
                     android:layout_height="@dimen/dock_control_height"
                     android:clickable="true"
                     android:focusable="true"
@@ -286,7 +286,7 @@
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/search_toggle_container"
-                    android:layout_width="48dp"
+                    android:layout_width="@dimen/dock_control_height"
                     android:layout_height="@dimen/dock_control_height"
                     android:elevation="0dp"
                     android:stateListAnimator="@null"
@@ -302,7 +302,7 @@
                         android:layout_height="match_parent"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@string/search_apps"
-                        android:padding="14dp"
+                        android:padding="@dimen/dock_search_pad_h"
                         android:src="@drawable/ic_search"
                         app:tint="?attr/colorOnSurfaceVariant" />
                 </com.google.android.material.card.MaterialCardView>
