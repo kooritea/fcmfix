@@ -1,9 +1,20 @@
 # fcmself
 
-Package: `sumicya.fcmself`
+Package: `sumicya.fcmself`  
+Version: **1.1.0** (personal build)
 
 让 FCM/GCM 能唤醒未启动的应用并发送通知。基于 fcmfix，合并 FcmFuck、
 `FLAG_RECEIVER_FOREGROUND` 和 `PowerExemptionManager` 兼容逻辑，使用 libxposed API 102。
+
+## 1.1.0 变更（自用激进重构）
+
+- **minSdk 提升到 31（Android 12+）**，彻底放弃 Android 10/11 特殊分支。
+- `BroadcastFix`：移除 Q/R 详细参数表，优先现代默认位置 + 参数名回退；锁定钩子为主、高层钩子仅作兜底。
+- `KeepNotification`：仅保留 API 31+ 布局逻辑。
+- `ReconnectManagerFix`：清理 experimental TODO，探测失败时健康面板状态更明确，过旧 GMS 直接禁用。
+- 版本号 → 1.1.0 / versionCode 56。
+
+> 本分支按「自用」策略维护：可接受破坏性变更，优先简化与稳定性，不再保证旧系统兼容。
 
 ## 作用域
 
