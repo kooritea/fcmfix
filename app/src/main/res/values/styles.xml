@@ -11,11 +11,6 @@
         <item name="cornerSize">16dp</item>
     </style>
 
-    <style name="ShapeAppearance.Fcmself.FilterMiddle" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">0dp</item>
-    </style>
-
     <style name="ShapeAppearance.Fcmself.AppCard" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">0dp</item>
