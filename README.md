@@ -1,20 +1,22 @@
 # fcmself
 
 Package: `sumicya.fcmself`  
-Version: **1.1.0** (personal build)
+Version: **1.2.0** (personal build)
 
 让 FCM/GCM 能唤醒未启动的应用并发送通知。基于 fcmfix，合并 FcmFuck、
 `FLAG_RECEIVER_FOREGROUND` 和 `PowerExemptionManager` 兼容逻辑，使用 libxposed API 102。
 
-## 1.1.0 变更（自用激进重构）
+## 版本策略（自用）
 
-- **minSdk 提升到 31（Android 12+）**，彻底放弃 Android 10/11 特殊分支。
-- `BroadcastFix`：移除 Q/R 详细参数表，优先现代默认位置 + 参数名回退；锁定钩子为主、高层钩子仅作兜底。
-- `KeepNotification`：仅保留 API 31+ 布局逻辑。
-- `ReconnectManagerFix`：清理 experimental TODO，探测失败时健康面板状态更明确，过旧 GMS 直接禁用。
-- 版本号 → 1.1.0 / versionCode 56。
+本分支按「自用」维护：可接受破坏性变更，优先简化与稳定性，**不再保证旧系统兼容**。
 
-> 本分支按「自用」策略维护：可接受破坏性变更，优先简化与稳定性，不再保证旧系统兼容。
+| 版本 | minSdk | 说明 |
+|------|--------|------|
+| 1.2.0 | **33** (Android 13+) | AutoStartFix 分项探测 + 健康上报；KeepNotification 再简化 |
+| 1.1.0 | 31 (Android 12+) | 去掉 10/11 分支；Broadcast / Keep / Reconnect 清理 |
+| 1.0.0 | 29 | 初始基线 |
+
+详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 作用域
 
@@ -59,57 +61,29 @@ System Server 和其他已启用作用域。灰色状态表示服务或配置尚
 
 ### Linux / macOS 命令行
 
-先安装 JDK 21 并确保 `java -version` 显示 21。若系统中有多个 JDK，需要先选择
-正确版本，例如：
-
 ```bash
 export JAVA_HOME=/path/to/jdk-21
 export PATH="$JAVA_HOME/bin:$PATH"
-```
-
-然后在项目根目录执行：
-
-```bash
 ./scripts/setup-android-sdk.sh
 ./scripts/check-build-environment.sh
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
-初始化脚本会将 Android 命令行工具和所需 SDK 组件安装到标准用户目录（Linux 为
-`~/Android/Sdk`，macOS 为 `~/Library/Android/sdk`），接受 Android SDK 许可证，并生成
-不纳入版本控制的 `local.properties`。也可以提前通过 `ANDROID_SDK_ROOT` 指定已有 SDK：
-
-```bash
-ANDROID_SDK_ROOT=/path/to/android-sdk ./scripts/setup-android-sdk.sh
-```
-
-完整执行与 CI 相同的检查和 release 构建：
+完整检查与 release：
 
 ```bash
 ./gradlew testDebugUnitTest assembleRelease lint --stacktrace
 ```
 
-常用产物位置：
+产物：
 
 - Debug APK：`app/build/outputs/apk/debug/app-debug.apk`
 - Release APK：`app/build/outputs/apk/release/app-release.apk`
-- Lint 报告：`app/build/reports/lint-results-*.html`
 
-Release 构建默认未配置发布签名。如需直接安装或分发，请使用自己的密钥签名，且不要将
-密钥或密码提交到仓库。
+Release 默认未配置签名，请用自己的密钥，勿把密钥提交进仓库。
 
-### Android Studio / Windows
+### Android Studio
 
-1. 使用支持 AGP 9.3 的新版 Android Studio 打开项目根目录。
-2. 在 **Settings > Build, Execution, Deployment > Build Tools > Gradle** 中将 Gradle JDK
-   设为 JDK 21。
-3. 在 **SDK Manager** 中安装 Android API 37、Build Tools 37.0.0 和 Platform Tools，并
-   接受许可证。
-4. 等待 Gradle Sync 完成后选择 **Build > Build APK(s)**；也可在 PowerShell 中执行：
-
-```powershell
-.\gradlew.bat testDebugUnitTest assembleDebug
-```
-
-若首次同步失败，先检查代理是否允许访问 `google()`、Maven Central、
-`https://api.xposed.info/` 和 `https://services.gradle.org/`。
+1. 用支持 AGP 9.3 的 Android Studio 打开根目录。
+2. Gradle JDK 设为 21；SDK Manager 安装 API 37、Build Tools 37.0.0。
+3. Sync 后 Build APK，或 `./gradlew assembleDebug`。
