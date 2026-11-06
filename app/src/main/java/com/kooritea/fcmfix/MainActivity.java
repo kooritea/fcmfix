@@ -38,6 +38,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -115,6 +120,7 @@ public class MainActivity extends AppCompatActivity {
         ensureDefaultConfigValues();
         SharedPreferences pref = getRemotePreferencesOrNull();
         if (pref == null) {
+            loadConfigFromLocalJson();
             return;
         }
         this.allowList.clear();
@@ -126,6 +132,37 @@ public class MainActivity extends AppCompatActivity {
             this.config.put("noResponseNotification", pref.getBoolean("noResponseNotification", false));
         } catch (JSONException e) {
             Log.e("loadRemoteConfig", e.toString());
+        }
+    }
+
+    /**
+     * XposedService 不可用时从本地 config.json 恢复界面状态，
+     * 保证 system_server 侧通过 ConfigProvider 读取到的列表与界面一致。
+     */
+    private void loadConfigFromLocalJson() {
+        ensureDefaultConfigValues();
+        try {
+            FileInputStream fis = openFileInput("config.json");
+            BufferedReader reader = new BufferedReader(new InputStreamReader(fis, StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            String line = reader.readLine();
+            while (line != null) {
+                sb.append(line).append('\n');
+                line = reader.readLine();
+            }
+            reader.close();
+            JSONObject json = new JSONObject(sb.toString());
+            JSONArray list = json.getJSONArray("allowList");
+            this.allowList.clear();
+            for (int i = 0; i < list.length(); i++) {
+                this.allowList.add(list.getString(i));
+            }
+            this.config.put("allowList", new JSONArray(this.allowList));
+            this.config.put("disableAutoCleanNotification", json.getBoolean("disableAutoCleanNotification"));
+            this.config.put("includeIceBoxDisableApp", json.getBoolean("includeIceBoxDisableApp"));
+            this.config.put("noResponseNotification", json.getBoolean("noResponseNotification"));
+        } catch (Throwable e) {
+            Log.e("loadLocalConfig", e.toString());
         }
     }
 
@@ -216,7 +253,7 @@ public class MainActivity extends AppCompatActivity {
             _allowList.addAll(_notAllowList);
             _allowList.addAll(_notFoundFcm);
             this.mAppList = _allowList;
-            if(_allowList.size() == 0 || _allowList.isEmpty() ||(_allowList.size() == 1 && "com.kooritea.fcmfix".equals(_allowList.get(0).packageName))){
+            if(_allowList.size() == 0 || _allowList.isEmpty() ||(_allowList.size() == 1 && getPackageName().equals(_allowList.get(0).packageName))){
                 new AlertDialog.Builder(MainActivity.this)
                         .setTitle("请在系统设置中授予读取应用列表权限")
                         .setMessage("或直接编辑" + getApplicationContext().getFilesDir().getAbsolutePath() + "/config.json(需重启生效)")
@@ -305,24 +342,45 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateConfig(){
         try {
-            SharedPreferences pref = getRemotePreferencesOrNull();
-            if (pref == null) {
-                throw new IllegalStateException("XposedService 未连接，无法写入远程配置");
-            }
             this.config.put("allowList", new JSONArray(this.allowList));
-            boolean saved = pref.edit()
-                    .putBoolean("init", true)
-                    .putStringSet("allowList", new HashSet<>(this.allowList))
-                    .putBoolean("disableAutoCleanNotification", this.config.getBoolean("disableAutoCleanNotification"))
-                    .putBoolean("includeIceBoxDisableApp", this.config.getBoolean("includeIceBoxDisableApp"))
-                    .putBoolean("noResponseNotification", this.config.getBoolean("noResponseNotification"))
-                    .commit();
-            if (!saved) {
-                throw new IllegalStateException("配置写入失败");
+        } catch (JSONException e) {
+            Log.e("updateConfig", e.toString());
+            new AlertDialog.Builder(this).setTitle("更新配置文件失败").setMessage(e.getMessage()).show();
+            return;
+        }
+        // 1) 始终写入本地 config.json：system_server 侧可通过 ConfigProvider 兜底读取
+        writeLocalConfigJson();
+        // 2) 尝试同步到框架远程 SharedPreferences（现代 Xposed API 主通道）
+        boolean remoteSaved = false;
+        try {
+            SharedPreferences pref = getRemotePreferencesOrNull();
+            if (pref != null) {
+                remoteSaved = pref.edit()
+                        .putBoolean("init", true)
+                        .putStringSet("allowList", new HashSet<>(this.allowList))
+                        .putBoolean("disableAutoCleanNotification", this.config.getBoolean("disableAutoCleanNotification"))
+                        .putBoolean("includeIceBoxDisableApp", this.config.getBoolean("includeIceBoxDisableApp"))
+                        .putBoolean("noResponseNotification", this.config.getBoolean("noResponseNotification"))
+                        .commit();
             }
-            this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
         } catch (Throwable e) {
-            Log.e("updateConfig",e.toString());
+            Log.e("updateConfig", "写入远程配置失败: " + e);
+        }
+        // 3) 通知已注入的进程重新加载配置
+        this.sendBroadcast(new Intent("com.kooritea.fcmfix.update.config"));
+        if (!remoteSaved) {
+            Log.i("updateConfig", "XposedService 未连接，已写入本地 config.json（通过 ContentProvider 兜底生效）");
+        }
+    }
+
+    private void writeLocalConfigJson() {
+        try {
+            FileOutputStream fos = openFileOutput("config.json", MODE_PRIVATE);
+            fos.write(this.config.toString().getBytes(StandardCharsets.UTF_8));
+            fos.flush();
+            fos.close();
+        } catch (Throwable e) {
+            Log.e("updateConfig", e.toString());
             new AlertDialog.Builder(this).setTitle("更新配置文件失败").setMessage(e.getMessage()).show();
         }
     }

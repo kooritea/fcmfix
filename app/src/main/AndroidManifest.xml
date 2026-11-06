@@ -32,6 +32,10 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+        <provider
+            android:name=".ConfigProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="true" />
     </application>
 
 </manifest>

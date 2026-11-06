@@ -9,6 +9,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.UserManager;
@@ -30,6 +32,10 @@ import static android.content.Context.NOTIFICATION_SERVICE;
 
 public abstract class XposedModule {
     private static String selfPackageName = "UNKNOWN";
+    /**
+     * 模块应用自身的包名。改动包名时请同步修改这里与 app/build.gradle 的 applicationId。
+     */
+    public static final String SELF_PACKAGE_NAME = "com.kooritea.fcmfix";
 
     protected final ClassLoader classLoader;
     public static Set<String> allowList = null;
@@ -42,15 +48,20 @@ public abstract class XposedModule {
     private static Boolean isInitReceiver = false;
     public static Boolean isBootComplete = false;
     private static Thread loadConfigThread = null;
+    private static volatile boolean bootInitThreadStarted = false;
+    private static volatile boolean bootInitInvoked = false;
 
     protected XposedModule(final ClassLoader classLoader) {
         this.classLoader = classLoader;
         instances.add(this);
         if (instances.size() == 1) {
             initContext(classLoader);
-        } else if (context != null && context.getSystemService(UserManager.class).isUserUnlocked()) {
+        } else if (context != null) {
             try {
-                onCanReadConfig();
+                UserManager userManager = context.getSystemService(UserManager.class);
+                if (userManager != null && userManager.isUserUnlocked()) {
+                    onCanReadConfig();
+                }
             } catch (Throwable e) {
                 printLog(e.getMessage());
             }
@@ -62,24 +73,83 @@ public abstract class XposedModule {
     }
 
     private static void initContext(final ClassLoader classLoader) {
-        XposedHelpers.findAndHookMethod("android.content.ContextWrapper", classLoader, "attachBaseContext", Context.class, new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam methodHookParam) {
-                if (context == null) {
-                    context = (Context) methodHookParam.thisObject;
-                    if (context.getSystemService(UserManager.class).isUserUnlocked()) {
+        try {
+            XposedHelpers.findAndHookMethod("android.content.ContextWrapper", classLoader, "attachBaseContext", Context.class, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam methodHookParam) {
+                    if (context == null) {
+                        context = (Context) methodHookParam.thisObject;
+                        startBootInitThread();
+                    }
+                }
+            });
+        } catch (Throwable e) {
+            printLog("hook ContextWrapper.attachBaseContext 失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * system_server 专用：主动获取系统上下文。
+     * <p>
+     * 现代 Xposed API 的 onSystemServerStarting 在 SystemServer.startBootstrapServices 时回调，
+     * 此时系统 Application 的 attachBaseContext 早已执行完毕，initContext 里的 hook
+     * 在 system_server 中可能永远不会触发，导致 isBootComplete/config 永远无法初始化。
+     * 因此这里直接通过 ActivityThread 反射拿到系统上下文。
+     */
+    public static void initSystemServerContext(Context systemContext) {
+        if (context != null || systemContext == null) {
+            return;
+        }
+        context = systemContext;
+        startBootInitThread();
+    }
+
+    /**
+     * 等待用户解锁后执行模块初始化。启动早期 AMS/UserManager 可能尚未注册，
+     * 因此带重试；同时尽早注册 ACTION_USER_UNLOCKED 接收器作为兜底。
+     */
+    private static void startBootInitThread() {
+        if (bootInitThreadStarted) {
+            return;
+        }
+        bootInitThreadStarted = true;
+        new Thread(() -> {
+            boolean receiverRegistered = false;
+            while (true) {
+                if (bootInitInvoked) {
+                    return;
+                }
+                try {
+                    UserManager userManager = context.getSystemService(UserManager.class);
+                    if (userManager != null && userManager.isUserUnlocked()) {
                         callAllOnCanReadConfig();
-                    } else {
+                        return;
+                    }
+                } catch (Throwable ignored) {
+                }
+                if (!receiverRegistered) {
+                    try {
                         IntentFilter userUnlockIntentFilter = new IntentFilter();
                         userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
                         context.registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
+                        receiverRegistered = true;
+                    } catch (Throwable ignored) {
                     }
                 }
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    return;
+                }
             }
-        });
+        }, "fcmfix-boot-init").start();
     }
 
-    private static void callAllOnCanReadConfig() {
+    private static synchronized void callAllOnCanReadConfig() {
+        if (bootInitInvoked) {
+            return;
+        }
+        bootInitInvoked = true;
         initReceiver();
         if ("android".equals(getSelfPackageName())) {
             new Thread(() -> {
@@ -94,6 +164,8 @@ public abstract class XposedModule {
         } else {
             isBootComplete = true;
         }
+        // 开机/解锁时立即加载一次配置，避免第一条 FCM 推送因配置未加载而被丢弃
+        onUpdateConfig();
         for (XposedModule instance : instances) {
             try {
                 instance.onCanReadConfig();
@@ -127,12 +199,16 @@ public abstract class XposedModule {
     }
 
     protected void checkUserDeviceUnlockAndUpdateConfig() {
-        if (context != null && context.getSystemService(UserManager.class).isUserUnlocked()) {
-            try {
+        if (context == null) {
+            return;
+        }
+        try {
+            UserManager userManager = context.getSystemService(UserManager.class);
+            if (userManager != null && userManager.isUserUnlocked()) {
                 onUpdateConfig();
-            } catch (Throwable e) {
-                printLog("更新配置文件失败: " + e.getMessage());
             }
+        } catch (Throwable e) {
+            printLog("更新配置文件失败: " + e.getMessage());
         }
     }
 
@@ -153,7 +229,7 @@ public abstract class XposedModule {
         if (config.get("init") == null) {
             this.checkUserDeviceUnlockAndUpdateConfig();
         }
-        if ("com.kooritea.fcmfix".equals(packageName)) {
+        if (SELF_PACKAGE_NAME.equals(packageName)) {
             return true;
         }
         if (allowList != null) {
@@ -180,25 +256,90 @@ public abstract class XposedModule {
                 public void run() {
                     super.run();
                     try {
-                        SharedPreferences remotePreferences = XposedBridge.getRemotePreferences("config");
-                        if (remotePreferences == null) {
-                            throw new IllegalStateException("remotePreferences 不可用");
-                        }
-                        allowList = remotePreferences.getStringSet("allowList", allowList == null ? new HashSet<>() : allowList);
-                        if (allowList != null && "android".equals(getSelfPackageName())) {
-                            printLog("[Modern Xposed API]onUpdateConfig allowList size: " + allowList.size());
-                        }
-                        config.put("disableAutoCleanNotification", remotePreferences.getBoolean("disableAutoCleanNotification", false));
-                        config.put("includeIceBoxDisableApp", remotePreferences.getBoolean("includeIceBoxDisableApp", false));
-                        config.put("noResponseNotification", remotePreferences.getBoolean("noResponseNotification", false));
-                        config.put("init", true);
+                        loadConfigFromRemotePreferences();
                     } catch (Throwable e) {
                         printLog("通过现代Xposed API读取配置失败: " + e.getMessage());
+                        try {
+                            loadConfigFromContentProvider();
+                        } catch (Throwable e2) {
+                            printLog("通过ContentProvider读取配置失败: " + e2.getMessage());
+                        }
                     }
                     loadConfigThread = null;
                 }
             };
             loadConfigThread.start();
+        }
+    }
+
+    private static void loadConfigFromRemotePreferences() {
+        SharedPreferences remotePreferences = XposedBridge.getRemotePreferences("config");
+        if (remotePreferences == null) {
+            throw new IllegalStateException("remotePreferences 不可用");
+        }
+        if (!remotePreferences.getBoolean("init", false)) {
+            // 远端配置尚未写入过，回退到 ContentProvider 直接读取模块应用
+            throw new IllegalStateException("remotePreferences 未初始化");
+        }
+        allowList = remotePreferences.getStringSet("allowList", new HashSet<>());
+        config.put("disableAutoCleanNotification", remotePreferences.getBoolean("disableAutoCleanNotification", false));
+        config.put("includeIceBoxDisableApp", remotePreferences.getBoolean("includeIceBoxDisableApp", false));
+        config.put("noResponseNotification", remotePreferences.getBoolean("noResponseNotification", false));
+        config.put("init", true);
+        if ("android".equals(getSelfPackageName())) {
+            printLog("[RemotePreferences]onUpdateConfig allowList size: " + allowList.size());
+        }
+    }
+
+    @SuppressLint("Range")
+    private static void loadConfigFromContentProvider() throws Throwable {
+        if (context == null) {
+            throw new IllegalStateException("context 不可用");
+        }
+        Cursor cursor = null;
+        try {
+            cursor = context.getContentResolver().query(
+                    Uri.parse("content://" + SELF_PACKAGE_NAME + ".provider/config"),
+                    null, "all", null, null);
+            if (cursor == null || cursor.getCount() == 0) {
+                throw new IllegalStateException("provider 无数据");
+            }
+            Set<String> allowListTmp = new HashSet<>();
+            boolean init = false;
+            boolean disableAutoCleanNotification = false;
+            boolean includeIceBoxDisableApp = false;
+            boolean noResponseNotification = false;
+            cursor.moveToFirst();
+            do {
+                String key = cursor.getString(cursor.getColumnIndex("key"));
+                String value = cursor.getString(cursor.getColumnIndex("value"));
+                if ("allowList".equals(key)) {
+                    allowListTmp.add(value);
+                } else if ("init".equals(key)) {
+                    init = "1".equals(value);
+                } else if ("disableAutoCleanNotification".equals(key)) {
+                    disableAutoCleanNotification = "1".equals(value);
+                } else if ("includeIceBoxDisableApp".equals(key)) {
+                    includeIceBoxDisableApp = "1".equals(value);
+                } else if ("noResponseNotification".equals(key)) {
+                    noResponseNotification = "1".equals(value);
+                }
+            } while (cursor.moveToNext());
+            if (!init) {
+                throw new IllegalStateException("provider 未初始化");
+            }
+            allowList = allowListTmp;
+            config.put("disableAutoCleanNotification", disableAutoCleanNotification);
+            config.put("includeIceBoxDisableApp", includeIceBoxDisableApp);
+            config.put("noResponseNotification", noResponseNotification);
+            config.put("init", true);
+            if ("android".equals(getSelfPackageName())) {
+                printLog("[ContentProvider]onUpdateConfig allowList size: " + allowList.size());
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
         }
     }
 
@@ -223,6 +364,8 @@ public abstract class XposedModule {
                         String action = intent.getAction();
                         if ("com.kooritea.fcmfix.update.config".equals(action)) {
                             onUpdateConfig();
+                            // 輸出 hook 安裝狀態，便於通過 adb 廣播實時檢查
+                            printLog("BroadcastFix " + BroadcastFix.getHookStatus(), true);
                         }
                     }
                 }, updateConfigIntentFilter, Context.RECEIVER_EXPORTED);
@@ -232,6 +375,7 @@ public abstract class XposedModule {
                         String action = intent.getAction();
                         if ("com.kooritea.fcmfix.update.config".equals(action)) {
                             onUpdateConfig();
+                            printLog("BroadcastFix " + BroadcastFix.getHookStatus(), true);
                         }
                     }
                 }, updateConfigIntentFilter);
@@ -243,7 +387,7 @@ public abstract class XposedModule {
             context.registerReceiver(new BroadcastReceiver() {
                 public void onReceive(Context context, Intent intent) {
                     String action = intent.getAction();
-                    if (Intent.ACTION_PACKAGE_REMOVED.equals(action) && "com.kooritea.fcmfix".equals(intent.getData().getSchemeSpecificPart())) {
+                    if (Intent.ACTION_PACKAGE_REMOVED.equals(action) && SELF_PACKAGE_NAME.equals(intent.getData().getSchemeSpecificPart())) {
                         Bundle extras = intent.getExtras();
                         if (extras.containsKey(Intent.EXTRA_REPLACING) && extras.getBoolean(Intent.EXTRA_REPLACING)) {
                             return;

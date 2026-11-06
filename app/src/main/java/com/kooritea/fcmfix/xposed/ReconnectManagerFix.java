@@ -317,8 +317,8 @@ public class ReconnectManagerFix extends XposedModule {
                 openFcmFixButton.setOnClickListener(view -> {
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    intent.setPackage("com.kooritea.fcmfix");
-                    intent.setComponent(new ComponentName("com.kooritea.fcmfix","com.kooritea.fcmfix.MainActivity"));
+                    intent.setPackage(XposedModule.SELF_PACKAGE_NAME);
+                    intent.setComponent(new ComponentName(XposedModule.SELF_PACKAGE_NAME,"com.kooritea.fcmfix.MainActivity"));
                     context.startActivity(intent);
                 });
                 linearLayout2.addView(openFcmFixButton);

@@ -8,12 +8,14 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Bundle;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.ArrayList;
 import com.kooritea.fcmfix.libxposed.XC_MethodHook;
 import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
@@ -22,6 +24,14 @@ import com.kooritea.fcmfix.util.IceboxUtils;
 import com.kooritea.fcmfix.util.XposedUtils;
 
 public class BroadcastFix extends XposedModule {
+
+    private static final ArrayList<String> hookedMethodNames = new ArrayList<>();
+
+    public static String getHookStatus() {
+        synchronized (hookedMethodNames) {
+            return "hooks=" + hookedMethodNames.size() + " [" + String.join(",", hookedMethodNames) + "]";
+        }
+    }
 
     public BroadcastFix(ClassLoader classLoader) {
         super(classLoader);
@@ -38,84 +48,132 @@ public class BroadcastFix extends XposedModule {
     }
 
     protected void startHookBroadcastIntentLocked(){
-        Method targetMethod = null;
-        int intent_args_index = 0;
-        int appOp_args_index = 0;
-        if(Build.VERSION.SDK_INT >= 35){
-            targetMethod = XposedUtils.tryFindMethodMostParam(classLoader,"com.android.server.am.BroadcastController","broadcastIntentLocked");
-            if(targetMethod != null){
-                if(Build.VERSION.SDK_INT >= 35){
-                    intent_args_index = 3;
-                    appOp_args_index = 13;
-                }
+        Class<?> broadcastController = XposedHelpers.findClassIfExists("com.android.server.am.BroadcastController", classLoader);
+        Class<?> ams = XposedHelpers.findClassIfExists("com.android.server.am.ActivityManagerService", classLoader);
+        if (broadcastController != null) {
+            // ColorOS 16 / AOSP 16：實際邏輯在 broadcastIntentLockedTraced（葉子方法，不會被內聯）
+            Method traced = XposedUtils.tryFindMethodMostParam(broadcastController, "broadcastIntentLockedTraced");
+            if (traced != null) {
+                tryInstallHook(traced);
+            }
+            Method locked = XposedUtils.tryFindMethodMostParam(broadcastController, "broadcastIntentLocked");
+            if (locked != null) {
+                tryInstallHook(locked);
             }
         }
-        if(targetMethod == null){
-            targetMethod = XposedUtils.tryFindMethodMostParam(classLoader,"com.android.server.am.ActivityManagerService","broadcastIntentLocked");
-            if(targetMethod != null){
-                Parameter[] parameters = targetMethod.getParameters();
-                if(Build.VERSION.SDK_INT == Build.VERSION_CODES.Q){
-                    intent_args_index = 2;
-                    appOp_args_index = 9;
-                }else if(Build.VERSION.SDK_INT == Build.VERSION_CODES.R){
-                    intent_args_index = 3;
-                    appOp_args_index = 10;
-                }else if(Build.VERSION.SDK_INT == 31){
-                    intent_args_index = 3;
-                    if(parameters[11].getType() == int.class){
-                        appOp_args_index = 11;
-                    }
-                    if(parameters[12].getType() == int.class){
-                        appOp_args_index = 12;
-                    }
-                }else if(Build.VERSION.SDK_INT == 32){
-                    intent_args_index = 3;
-                    if(parameters[11].getType() == int.class){
-                        appOp_args_index = 11;
-                    }
-                    if(parameters[12].getType() == int.class){
-                        appOp_args_index = 12;
-                    }
-                }else if(Build.VERSION.SDK_INT == 33){
-                    intent_args_index = 3;
-                    appOp_args_index = 12;
-                } else if(Build.VERSION.SDK_INT == 34){
-                    intent_args_index = 3;
-                    if(parameters[12].getType() == int.class){
-                        appOp_args_index = 12;
-                    }
-                    if(parameters[13].getType() == int.class){
-                        appOp_args_index = 13;
-                    }
-                } else if(Build.VERSION.SDK_INT >= 35){
-                    intent_args_index = 3;
-                    if(parameters[12].getType() == int.class){
-                        appOp_args_index = 12;
-                    }
-                    if(parameters[13].getType() == int.class){
-                        appOp_args_index = 13;
-                    }
-                }
-                if(intent_args_index == 0 || appOp_args_index == 0){
-                    intent_args_index = 0;
-                    appOp_args_index = 0;
-                    // 根据参数名称查找，部分经过混淆的系统无效
-                    for(int i = 0; i < parameters.length; i++){
-                        if("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class){
-                            appOp_args_index = i;
-                        }
-                        if("intent".equals(parameters[i].getName()) && parameters[i].getType() == Intent.class){
-                            intent_args_index = i;
-                        }
-                    }
-                }
+        if (ams != null) {
+            // 兼容舊版 Android / 兜底：ActivityManagerService.broadcastIntentLocked
+            Method locked = XposedUtils.tryFindMethodMostParam(ams, "broadcastIntentLocked");
+            if (locked != null) {
+                tryInstallHook(locked);
             }
+            // AOSP 15 上 BroadcastController 不存在，AMS 的實際邏輯在 broadcastIntentLockedTraced（葉子方法，不會被內聯）
+            Method traced = XposedUtils.tryFindMethodMostParam(ams, "broadcastIntentLockedTraced");
+            if (traced != null) {
+                tryInstallHook(traced);
+            }
+            // 反內聯：這些入口方法可能把 broadcastIntentLocked 內聯進自己的方法體
+            deoptMethodsByName(ams, "broadcastIntentWithFeature");
+            deoptMethodsByName(ams, "broadcastIntentWithFeatureWithCallback");
+            deoptMethodsByName(ams, "broadcastIntent");
+            deoptMethodsByName(ams, "broadcastIntentInPackage");
+            deoptMethodsByName(ams, "broadcastIntentLocked");
         }
-        if(targetMethod != null && intent_args_index != 0 & appOp_args_index != 0 && targetMethod.getParameters()[intent_args_index].getType() == Intent.class && targetMethod.getParameters()[appOp_args_index].getType() == int.class){
-            createBroadcastIntentLockedHooker(intent_args_index,appOp_args_index,targetMethod);
-        } else {
+        if (hookedMethodNames.isEmpty()) {
             printLog("broadcastIntentLocked hook 位置查找失败，fcmfix将不会工作。");
+        } else {
+            printLog("broadcastIntentLocked 挂接完成: " + getHookStatus());
         }
+    }
+
+    private void tryInstallHook(Method method) {
+        int intent_args_index = findIntentParameterIndex(method);
+        int appOp_args_index = findAppOpParameterIndex(method);
+        if(intent_args_index < 0 || appOp_args_index < 0
+                || method.getParameterTypes()[intent_args_index] != Intent.class
+                || method.getParameterTypes()[appOp_args_index] != int.class){
+            printLog("无法挂接 " + method.getDeclaringClass().getName() + "#" + method.getName() + " (参数定位失败 intentIdx=" + intent_args_index + " appOpIdx=" + appOp_args_index + ")");
+            return;
+        }
+        try {
+            // 嘗試反內聯：即使本方法被內聯，也確保其調用方回退為虛擬調用
+            XposedBridge.deoptimize(method);
+        } catch (Throwable ignored) {
+        }
+        printLog("Android API: " + Build.VERSION.SDK_INT);
+        printLog("appOp_args_index: " + appOp_args_index);
+        printLog("intent_args_index: " + intent_args_index);
+        printLog("hook target: " + method.getDeclaringClass().getName() + "#" + method.getName());
+        createBroadcastIntentLockedHooker(intent_args_index, appOp_args_index, method);
+        synchronized (hookedMethodNames) {
+            hookedMethodNames.add(method.getDeclaringClass().getSimpleName() + "#" + method.getName());
+        }
+    }
+
+    private static void deoptMethodsByName(Class<?> clazz, String name) {
+        try {
+            for (Method m : clazz.getDeclaredMethods()) {
+                if (name.equals(m.getName())) {
+                    try {
+                        XposedBridge.deoptimize(m);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * 定位 broadcastIntentLocked 中的 intent 参数：签名中唯一的 Intent 参数。
+     */
+    private static int findIntentParameterIndex(Method method){
+        Class<?>[] types = method.getParameterTypes();
+        int index = -1;
+        for(int i = 0; i < types.length; i++){
+            if(types[i] == Intent.class){
+                if(index >= 0){
+                    return -1; // 存在多个 Intent 参数，无法确定
+                }
+                index = i;
+            }
+        }
+        return index;
+    }
+
+    /**
+     * 定位 broadcastIntentLocked 中的 appOp 参数：
+     * 1) 按参数名查找（框架类保留了参数名）；
+     * 2) 查找 bOptions(Bundle) 前一个 int 参数（AOSP 各版本签名均为 ... int appOp, Bundle bOptions, ...）；
+     * 3) 按各 Android 版本的历史位置兜底。
+     */
+    private static int findAppOpParameterIndex(Method method){
+        Parameter[] parameters = method.getParameters();
+        Class<?>[] types = method.getParameterTypes();
+        for(int i = 0; i < parameters.length; i++){
+            if("appOp".equals(parameters[i].getName()) && parameters[i].getType() == int.class){
+                return i;
+            }
+        }
+        for(int i = 1; i < types.length; i++){
+            if(types[i] == Bundle.class && types[i - 1] == int.class){
+                return i - 1;
+            }
+        }
+        int candidate;
+        if(Build.VERSION.SDK_INT >= 34){
+            candidate = 13;
+        }else if(Build.VERSION.SDK_INT >= 31){
+            candidate = 12;
+        }else if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R){
+            candidate = 10;
+        }else{
+            candidate = 9;
+        }
+        if(candidate < types.length && types[candidate] == int.class){
+            return candidate;
+        }
+        return -1;
     }
 
     protected void createBroadcastIntentLockedHooker(int intent_args_index, int appOp_args_index, Method method){

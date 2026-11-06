@@ -113,6 +113,15 @@ public final class XposedBridge {
         throw new IllegalArgumentException("Unsupported member type: " + method);
     }
 
+    /**
+     * 去優化（反內聯）：當被 hook 的短方法被調用方內聯時，hook 回調不會被觸發。
+     * 對調用方調用 deoptimize 可強制其重新走虛擬調用。參見 XposedInterface#deoptimize。
+     */
+    public static boolean deoptimize(Member member) {
+        ensureInit();
+        return xposedInterface.deoptimize((java.lang.reflect.Executable) member);
+    }
+
     static final class HookHandleWrapper {
         private final Member member;
         private final XC_MethodHook callback;
