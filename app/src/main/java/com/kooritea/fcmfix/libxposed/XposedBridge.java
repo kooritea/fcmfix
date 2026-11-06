@@ -31,6 +31,13 @@ public final class XposedBridge {
 
     public static void log(String text) {
         android.util.Log.i("fcmfix", text);
+        if (xposedInterface != null) {
+            try {
+                xposedInterface.log(Log.INFO, "fcmfix", text);
+            } catch (RuntimeException e) {
+                Log.w("fcmfix", "Framework log unavailable", e);
+            }
+        }
     }
 
     public static SharedPreferences getRemotePreferences(String group) {

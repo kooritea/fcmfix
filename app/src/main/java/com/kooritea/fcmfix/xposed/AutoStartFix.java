@@ -11,8 +11,6 @@ import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 public class AutoStartFix extends XposedModule {
-    private final String FCM_RECEIVE = ".android.c2dm.intent.RECEIVE";
-
     public AutoStartFix(ClassLoader classLoader){
         super(classLoader);
         try{
@@ -73,18 +71,11 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
+                    if (!isFCMIntent(intent)) return;
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if (targetIsAllow(target)) {
-                        // 无日志，先放了
                         printLog("[" + intent.getAction() + "]checkApplicationAutoStart package_name: " + target, true);
                         methodHookParam.setResult(true);
-//                        if(isFCMIntent(intent)){
-//                            printLog("checkApplicationAutoStart package_name: " + target, true);
-//                            methodHookParam.setResult(true);
-//                        }else{
-//                            printLog("[skip][" + intent.getAction() + "]checkApplicationAutoStart package_name: " + target, true);
-//                        }
-
                     }
                 }
             });
@@ -94,6 +85,7 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
+                    if (!isFCMIntent(intent)) return;
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)){
                         if(isFCMIntent(intent)){
@@ -113,17 +105,13 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) methodHookParam.args[1];
-                    String target = intent.getComponent().getPackageName();
+                    if (intent == null) return;
+                    String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)) {
-                        // 拿不到action，先放了
+                        // Preserve service startup for selected apps: their follow-up
+                        // services may use explicit components without an FCM action.
                         printLog("[" + intent.getAction() + "]AutoStartManagerServiceStubImpl.isAllowStartService package_name: " + target, true);
                         methodHookParam.setResult(true);
-//                        if(isFCMIntent(intent)){
-//                            printLog("AutoStartManagerServiceStubImpl.isAllowStartService package_name: " + target, true);
-//                            methodHookParam.setResult(true);
-//                        }else{
-//                            printLog("[skip][" + intent.getAction() + "]AutoStartManagerServiceStubImpl.isAllowStartService package_name: " + target, true);
-//                        }
                     }
                 }
             };
@@ -146,6 +134,7 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam methodHookParam) {
                     Intent intent = (Intent) XposedHelpers.getObjectField(methodHookParam.args[1], "intent");
+                    if (!isFCMIntent(intent)) return;
                     String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                     if(targetIsAllow(target)) {
                         if(isFCMIntent(intent)){
@@ -187,7 +176,7 @@ public class AutoStartFix extends XposedModule {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     Intent intent = (Intent) param.args[0];
-                    if("com.google.firebase.MESSAGING_EVENT".equals(intent.getAction())){
+                    if(intent != null && "com.google.firebase.MESSAGING_EVENT".equals(intent.getAction())){
                         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
                         if(targetIsAllow(target)){
                             printLog("Disable MIUI Intercept: " + target, true);

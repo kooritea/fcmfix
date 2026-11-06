@@ -20,10 +20,14 @@ public class PowerkeeperFix extends XposedModule {
         try {
 
             Class<?> MilletConfig = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletConfig", classLoader);
+            if (MilletConfig == null) {
+                printLog("Legacy MilletConfig unavailable; skipping the legacy PowerKeeper hook. System GMS power policy is unchanged.");
+                return;
+            }
             XposedHelpers.setStaticBooleanField(MilletConfig, "isGlobal", true);
             printLog("Set com.miui.powerkeeper.millet.MilletConfig.isGlobal to true");
 
-            Class<?> Misc = XposedHelpers.findClassIfExists("com.miui.powerkeeper.provider.SimpleSettings.Misc", classLoader);
+            Class<?> Misc = XposedHelpers.findClass("com.miui.powerkeeper.provider.SimpleSettings.Misc", classLoader);
             printLog("[fcmfix] start hook com.miui.powerkeeper.provider.SimpleSettings.Misc.getBoolean");
             XposedUtils.findAndHookMethod(Misc, "getBoolean", 3, new XC_MethodHook() {
                 @Override
@@ -35,7 +39,7 @@ public class PowerkeeperFix extends XposedModule {
                 }
             });
 
-            Class<?> MilletPolicy = XposedHelpers.findClassIfExists("com.miui.powerkeeper.millet.MilletPolicy", classLoader);
+            Class<?> MilletPolicy = XposedHelpers.findClass("com.miui.powerkeeper.millet.MilletPolicy", classLoader);
 
             XC_MethodHook methodHook = new XC_MethodHook() {
                 protected void beforeHookedMethod(XC_MethodHook.MethodHookParam methodHookParam) throws Throwable {
@@ -85,8 +89,8 @@ public class PowerkeeperFix extends XposedModule {
             printLog("[fcmfix] start hook com.miui.powerkeeper.millet.MilletPolicy constructor");
             XposedHelpers.findAndHookConstructor(MilletPolicy, new Object[] {Context.class, methodHook});
 
-        } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError  e){
-            printLog("No Such Method com.android.server.am.ProcessMemoryCleaner.checkBackgroundAppException");
+        } catch (XposedHelpers.ClassNotFoundError | NoSuchMethodError | NoSuchFieldError e){
+            printLog("Legacy PowerKeeper hook unavailable: " + e);
         }
     }
 }
