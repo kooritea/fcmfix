@@ -77,8 +77,39 @@ public class KeepNotification extends XposedModule{
                     if(!isBootComplete){
                         return;
                     }
-                    if(getBooleanConfig("disableAutoCleanNotification",false) && targetIsAllow((String) param.args[finalPkg_args_index])){
-                        int reason = (int)param.args[finalReason_args_index];
+                    // On Android 16 (API 36) the resolved cancelAllNotificationsInt overload may not
+                    // follow the assumed layout: the pkg slot can hold an int (uid/userId) instead of a
+                    // String when the ROM reorders or reshapes the parameters. Blindly casting threw
+                    // "java.lang.ClassCastException: java.lang.Integer cannot be cast to java.lang.String"
+                    // on every single call (72 occurrences captured in LSPosed logs on an obfuscated
+                    // API 36 ROM; found via MiPushFramework issue #149 — the exception propagated up
+                    // through other modules' NMS hooks and broke every cancel/delete flow reaching
+                    // cancelAllNotificationsInt). Guard the cast and bail out instead of poisoning the
+                    // hook chain; log once so the signature drift stays diagnosable.
+                    if(finalPkg_args_index >= param.args.length){
+                        if(!signatureMismatchLogged){
+                            signatureMismatchLogged = true;
+                            printLog("cancelAllNotificationsInt has only " + param.args.length + " args, expected index " + finalPkg_args_index + "; skip");
+                        }
+                        return;
+                    }
+                    Object pkgArg = param.args[finalPkg_args_index];
+                    if(!(pkgArg instanceof String)){
+                        if(pkgArg != null && !signatureMismatchLogged){
+                            signatureMismatchLogged = true;
+                            printLog("cancelAllNotificationsInt arg[" + finalPkg_args_index + "] is " + pkgArg.getClass().getName() + ", expected String (API signature drift); skip");
+                        }
+                        return;
+                    }
+                    if(getBooleanConfig("disableAutoCleanNotification",false) && targetIsAllow((String) pkgArg)){
+                        if(finalReason_args_index >= param.args.length){
+                            return;
+                        }
+                        Object reasonArg = param.args[finalReason_args_index];
+                        if(!(reasonArg instanceof Integer)){
+                            return;
+                        }
+                        int reason = (int)reasonArg;
                         if(reason == NotificationListenerService.REASON_PACKAGE_CHANGED){
                             param.setResult(null);
                         }
@@ -92,4 +123,6 @@ public class KeepNotification extends XposedModule{
             throw new NoSuchMethodError();
         }
     }
+
+    private static volatile boolean signatureMismatchLogged = false;
 }
